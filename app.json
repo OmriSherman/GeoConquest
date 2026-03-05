@@ -1,19 +1,24 @@
 {
   "expo": {
-    "name": "GeoQuest",
-    "slug": "GeoQuest",
+    "name": "GeoConquest",
+    "slug": "geoconquest",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "updates": {
+      "enabled": false
+    },
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+    "scheme": "geoconquest",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.geoconquest.app"
     },
     "android": {
       "adaptiveIcon": {
@@ -21,10 +26,20 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.geoconquest.app"
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-web-browser",
+      "react-native-iap"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "d3051ed6-369e-429e-a145-bbcee15844cb"
+      }
     }
   }
 }
