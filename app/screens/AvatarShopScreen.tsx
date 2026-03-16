@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   StyleSheet,
   Text,
@@ -9,13 +8,15 @@ import {
   View,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+import { useAlert } from '../context/AlertContext';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 import ConfettiCannon from 'react-native-confetti-cannon';
+import { Ionicons } from '@expo/vector-icons';
 import AvatarDisplay from '../components/AvatarDisplay';
 import { playPurchase, playDing } from '../lib/audio';
 import { supabase } from '../lib/supabase';
-import { AVATAR_CHARACTERS, FLAG_OPTIONS, FlagOption } from '../lib/avatarData';
+import { AVATAR_CHARACTERS, FLAG_OPTIONS, FlagOption, CUSTOM_AVATARS } from '../lib/avatarData';
 import { ACHIEVEMENTS_DATA } from '../lib/achievementsData';
 import { fetchCountries } from '../lib/countryData';
 import { cca2ToFlagEmoji } from '../types';
@@ -25,6 +26,7 @@ type Tab = 'avatars' | 'flags' | 'crates';
 
 export default function AvatarShopScreen() {
   const { profile, setUsername, purchaseAvatarItem } = useAuth();
+  const { showAlert } = useAlert();
   const [activeTab, setActiveTab] = useState<Tab>('avatars');
   const [unlockedItems, setUnlockedItems] = useState<Set<string>>(new Set());
   const [countryFlags, setCountryFlags] = useState<FlagOption[]>([]);
@@ -74,12 +76,16 @@ export default function AvatarShopScreen() {
         const achIds = new Set(achData.map((a: any) => a.achievement_id));
         for (const ach of ACHIEVEMENTS_DATA) {
           if (ach.rewardItem && achIds.has(ach.id) && !unlockedSet.has(ach.rewardItem.itemId)) {
-            await supabase.from('user_unlocked_items').insert({
+            const { error: insertErr } = await supabase.from('user_unlocked_items').insert({
                user_id: profile.id,
                item_id: ach.rewardItem.itemId,
                item_type: ach.rewardItem.type
             });
-            unlockedSet.add(ach.rewardItem.itemId);
+            if (!insertErr || insertErr.code === '23505') {
+              unlockedSet.add(ach.rewardItem.itemId);
+            } else {
+              console.warn('[AvatarShop] Failed to retroactively unlock reward item:', insertErr.message);
+            }
           }
         }
       }
@@ -115,14 +121,14 @@ export default function AvatarShopScreen() {
         playDing();
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       } catch (err: any) {
-        Alert.alert('Error', err.message);
+        showAlert({ title: 'Error', message: err.message });
       } finally {
         setActionLoading(false);
       }
     } else {
       // Purchase flow
       if (profile.gold_balance < price) {
-        Alert.alert('Not enough gold', `You need 🪙 ${price} gold.`);
+        showAlert({ title: 'Not Enough Gold', message: `You need 🪙 ${price} gold.` });
         return;
       }
 
@@ -134,8 +140,9 @@ export default function AvatarShopScreen() {
         setShowConfetti(true);
         setTimeout(() => setShowConfetti(false), 3000);
         setUnlockedItems(prev => new Set(prev).add(emoji));
+
       } catch (err: any) {
-        Alert.alert('Purchase Failed', err.message);
+        showAlert({ title: 'Purchase Failed', message: err.message });
       } finally {
         setActionLoading(false);
       }
@@ -147,7 +154,7 @@ export default function AvatarShopScreen() {
     const symbols = FLAG_OPTIONS.filter(f => f.category !== 'country');
     return [...symbols, ...countryFlags];
   }, [countryFlags]);
-  const listData = activeTab === 'avatars' ? AVATAR_CHARACTERS : flagListData;
+  const listData = activeTab === 'avatars' ? [...AVATAR_CHARACTERS, ...CUSTOM_AVATARS] : flagListData;
   const itemType = activeTab === 'avatars' ? 'avatar' : 'flag';
 
   return (
@@ -200,46 +207,92 @@ export default function AvatarShopScreen() {
             <ActivityIndicator color="#FFD700" size="large" />
           </View>
         ) : (
-          <FlatList
-            data={listData as any[]}
-            keyExtractor={(item) => item.emoji}
-            extraData={{ profile, unlockedItems }}
-            numColumns={3}
-            contentContainerStyle={styles.listContent}
-            columnWrapperStyle={styles.row}
-            renderItem={({ item }) => {
-              const isUnlocked = !item.isPremium || unlockedItems.has(item.emoji) || (itemType === 'flag' && profile?.avatar_flag === item.emoji);
-              const isEquipped = itemType === 'avatar'
-                ? profile?.avatar_emoji === item.emoji
-                : profile?.avatar_flag === item.emoji;
+            <FlatList
+              data={listData as any[]}
+              keyExtractor={(item) => item.emoji || item.key}
+              extraData={{ profile, unlockedItems }}
+              numColumns={3}
+              contentContainerStyle={styles.listContent}
+              columnWrapperStyle={styles.row}
+              renderItem={({ item }) => {
+                const typedItem = item as typeof AVATAR_CHARACTERS[0] & { requiresId?: string; collection?: string; questOnly?: boolean };
+                const itemKey = typedItem.emoji || (typedItem as any).key;
+                const isUnlocked = !typedItem.isPremium || unlockedItems.has(itemKey) || (itemType === 'flag' && profile?.avatar_flag === itemKey);
+                const isEquipped = itemType === 'avatar'
+                  ? profile?.avatar_emoji === itemKey
+                  : profile?.avatar_flag === itemKey;
+                const isQuestOnly = !!(typedItem as any).questOnly;
+
+                // Tier check
+                let meetsRequirement = true;
+                let requirementName = '';
+                if (typedItem.requiresId && !isUnlocked) {
+                   meetsRequirement = unlockedItems.has(typedItem.requiresId);
+                   if (!meetsRequirement) {
+                      const reqAvatar = AVATAR_CHARACTERS.find(a => a.emoji === typedItem.requiresId) || (listData as any[]).find(a => a.emoji === typedItem.requiresId) || (listData as any[]).find(a => a.key === typedItem.requiresId);
+                      requirementName = reqAvatar?.label || 'Previous Tier';
+                   }
+                }
+
+                const isLockedByTier = !meetsRequirement;
 
               return (
                 <TouchableOpacity
                   style={[
                     styles.itemCard,
                     isEquipped && styles.itemCardEquipped,
-                    !isUnlocked && styles.itemCardLocked,
+                    (!isUnlocked && !isLockedByTier && !isQuestOnly) && styles.itemCardLocked,
+                    isLockedByTier && styles.itemCardTierLocked,
+                    (isQuestOnly && !isUnlocked) && styles.itemCardQuestOnly,
                   ]}
-                  onPress={() => handleItemPress(itemType, item.emoji, item.price, item.isPremium)}
+                  onPress={() => {
+                    if (isLockedByTier) {
+                        showAlert({ title: 'Locked', message: `You must own ${requirementName} before you can purchase this item.` });
+                        return;
+                    }
+                    if (isQuestOnly && !isUnlocked) {
+                        showAlert({ title: 'Quest Reward', message: 'This item can only be earned by completing quests.\n\nCheck the Trophies tab to claim it!' });
+                        return;
+                    }
+                    handleItemPress(itemType, typedItem.emoji || (typedItem as any).key, typedItem.price, typedItem.isPremium);
+                  }}
                   disabled={actionLoading}
                 >
-                  <AvatarDisplay
-                    avatarId={itemType === 'avatar' ? item.emoji : '🧑'}
-                    avatarFlag={itemType === 'flag' ? item.emoji : undefined}
-                    size={46}
-                  />
-                  {item.label && <Text style={styles.itemLabel} numberOfLines={1}>{item.label}</Text>}
+                  <View style={{ opacity: isLockedByTier ? 0.3 : 1, alignItems: 'center' }}>
+                    <AvatarDisplay
+                      avatarId={itemType === 'avatar' ? (typedItem.emoji || (typedItem as any).key) : '🧑'}
+                      avatarFlag={itemType === 'flag' ? (typedItem.emoji || (typedItem as any).key) : undefined}
+                      size={46}
+                    />
+                  </View>
+
+                  {typedItem.label && <Text style={styles.itemLabel} numberOfLines={1}>{typedItem.label}</Text>}
+                  {typedItem.collection && <Text style={styles.collectionLabel} numberOfLines={1}>{typedItem.collection}</Text>}
+
                   {isEquipped ? (
                     <View style={styles.statusBadgeEquipped}>
+                      <Ionicons name="checkmark-circle" size={12} color="#fff" />
                       <Text style={styles.statusTextEquipped}>Equipped</Text>
                     </View>
                   ) : isUnlocked ? (
                     <View style={styles.statusBadgeOwned}>
                       <Text style={styles.statusTextOwned}>Owned</Text>
                     </View>
+                  ) : isQuestOnly ? (
+                    <View style={styles.statusBadgeQuestOnly}>
+                      <Text style={styles.statusTextQuestOnly}>⚡ Quest</Text>
+                    </View>
+                  ) : isLockedByTier ? (
+                    <View style={styles.statusBadgeTierLocked}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+                        <Ionicons name="lock-closed" size={10} color="#fff" style={{ marginRight: 2 }} />
+                        <Text style={styles.statusTextTierLocked}>Requires <Text style={styles.statusTextTierName}>{requirementName}</Text></Text>
+                      </View>
+                      <Text style={styles.priceText}>🪙 {typedItem.price}</Text>
+                    </View>
                   ) : (
                     <View style={styles.priceBadge}>
-                      <Text style={styles.priceText}>💰 {item.price}</Text>
+                      <Text style={styles.priceText}>🪙 {typedItem.price}</Text>
                     </View>
                   )}
                 </TouchableOpacity>
@@ -343,6 +396,10 @@ const styles = StyleSheet.create({
   itemCardLocked: {
     opacity: 0.8,
   },
+  itemCardTierLocked: {
+    borderColor: '#3a1a1a',
+    backgroundColor: '#1a1a2e',
+  },
   emojiText: {
     fontSize: 48,
     marginBottom: 8,
@@ -377,6 +434,43 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
   },
+  itemCardQuestOnly: {
+    borderColor: '#4a3a6a',
+    backgroundColor: '#1a1a2e',
+  },
+  statusBadgeQuestOnly: {
+    backgroundColor: '#2a1a4a',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginTop: 'auto',
+    borderWidth: 1,
+    borderColor: '#9b59b6',
+  },
+  statusTextQuestOnly: {
+    color: '#c39bd3',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  statusBadgeTierLocked: {
+    backgroundColor: '#3a1a1a',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginTop: 'auto',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#ff4444',
+  },
+  statusTextTierLocked: {
+    color: '#ff4444',
+    fontSize: 9,
+    fontWeight: 'bold',
+  },
+  statusTextTierName: {
+    color: '#ffaaaa',
+    fontSize: 9,
+  },
   priceBadge: {
     backgroundColor: '#1a1a30',
     paddingHorizontal: 8,
@@ -390,6 +484,14 @@ const styles = StyleSheet.create({
     color: '#FFD700',
     fontSize: 11,
     fontWeight: 'bold',
+  },
+  collectionLabel: {
+    color: '#FFD700',
+    fontSize: 10,
+    marginBottom: 8,
+    textAlign: 'center',
+    fontWeight: '600',
+    opacity: 0.8,
   },
   overlayLoading: {
     ...StyleSheet.absoluteFillObject,

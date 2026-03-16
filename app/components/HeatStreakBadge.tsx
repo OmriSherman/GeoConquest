@@ -63,7 +63,8 @@ export default function HeatStreakBadge({ combo }: Props) {
     ? glowAnim.interpolate({ inputRange: [0, 1], outputRange: ['#3a0000', '#4a0a00'] })
     : '#3a0000';
 
-  const label = combo >= 10 ? `🔥🔥 x${combo}` : `🔥 x${combo}`;
+  const multiplier = (1 + (combo - 1) * 0.1).toFixed(1);
+  const label = combo >= 10 ? `🔥🔥 ${multiplier}x` : `🔥 ${multiplier}x`;
 
   return (
     <Animated.View

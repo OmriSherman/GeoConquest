@@ -5,6 +5,8 @@ export interface AvatarOption {
     label: string;
     price: number;
     isPremium: boolean;
+    requiresId?: string; // TIER LIST: ID (emoji or key) of the avatar you must own before buying this one
+    collection?: string; // Optional collection/tier name for display
 }
 
 // The 9 basic avatars shown during onboarding (all free)
@@ -56,19 +58,51 @@ export interface CustomAvatarOption {
     culture: string;
     price: number;
     isPremium: boolean;
+    requiresId?: string; // TIER LIST: ID of the avatar you must own before buying this one
+    collection?: string; // Optional collection/tier name for display
 }
 
 export const CUSTOM_AVATARS: CustomAvatarOption[] = [
-    // ── Gaming World Avatars ──────────────────────────────────────────────────
-    { key: 'svg_witcher', label: 'Witcher', culture: 'The Witcher', price: 7000, isPremium: true },
-    { key: 'svg_dragonborn', label: 'Dragonborn', culture: 'Skyrim', price: 7000, isPremium: true },
-    { key: 'svg_daedric', label: 'Daedric', culture: 'Skyrim', price: 8000, isPremium: true },
-    { key: 'svg_vault_dweller', label: 'Vault Dweller', culture: 'Fallout', price: 6000, isPremium: true },
+
 
     // ── Frog Collection ───────────────────────────────────────────────────────
-    { key: 'svg_froga', label: 'Froga', culture: 'Frog Collection', price: 500, isPremium: true },
-    { key: 'svg_froglord', label: 'FrogLord', culture: 'Frog Collection', price: 1500, isPremium: true },
-    { key: 'svg_lord_frog', label: 'Lord Frog', culture: 'Frog Collection', price: 3000, isPremium: true },
+    // TIER LIST EXAMPLE:
+    // Buy Froga -> unlocks FrogLord -> unlocks Lord Frog
+    { key: 'svg_froga', label: 'Froga', culture: 'Frog Collection', price: 500, isPremium: true, collection: 'Froga Tier 1' },
+    { key: 'svg_froglord', label: 'FrogLord', culture: 'Frog Collection', price: 1500, isPremium: true, requiresId: 'svg_froga', collection: 'Tier 2' },
+    { key: 'svg_lord_frog', label: 'Lord Frog', culture: 'Frog Collection', price: 3000, isPremium: true, requiresId: 'svg_froglord', collection: 'Tier 3' },
+
+    // ── Monkey Collection ─────────────────────────────────────────────────────
+    { key: 'svg_monkey', label: 'Monkey', culture: 'Monkey Collection', price: 500, isPremium: true, collection: 'Monkey Tier 1' },
+    { key: 'svg_monke', label: 'Monke', culture: 'Monkey Collection', price: 1500, isPremium: true, requiresId: 'svg_monkey', collection: 'Monkey Tier 2' },
+    { key: 'svg_monk', label: 'Monk', culture: 'Monkey Collection', price: 4000, isPremium: true, requiresId: 'svg_monke', collection: 'Monkey Tier 3' },
+
+    // ── Josh Collection ───────────────────────────────────────────────────────
+    { key: 'svg_josh', label: 'Josh', culture: 'Josh Collection', price: 500, isPremium: true, collection: 'Josh Tier 1' },
+    { key: 'svg_joosh', label: 'Joosh', culture: 'Josh Collection', price: 2000, isPremium: true, requiresId: 'svg_josh', collection: 'Josh Tier 2' },
+    { key: 'svg_oh_my_josh', label: 'Oh My Josh', culture: 'Josh Collection', price: 5000, isPremium: true, requiresId: 'svg_joosh', collection: 'Josh Tier 3' },
+
+    // ── Lady Collection ───────────────────────────────────────────────────────
+    { key: 'png_chill_lady',      label: 'Chill Lady',      culture: 'Lady Collection', price: 2000, isPremium: true, collection: 'Lady Tier 1' },
+    { key: 'png_incredible_lady', label: 'Incredible Lady', culture: 'Lady Collection', price: 3000, isPremium: true, requiresId: 'png_chill_lady',      collection: 'Lady Tier 2' },
+    { key: 'png_dayum_gurl',      label: 'Dayum Gurl',      culture: 'Lady Collection', price: 6000, isPremium: true, requiresId: 'png_incredible_lady', collection: 'Lady Tier 3' },
+
+    // ── Dir. / Hurt. / Nana. ─────────────────────────────────────────────────
+    { key: 'png_dir',  label: 'Dir',  culture: '',price: 1000, isPremium: true },
+    { key: 'png_hurt', label: 'Hurt', culture: '',price: 1800, isPremium: true },
+    { key: 'png_nana', label: 'Nana',  culture: '',price: 2500, isPremium: true },
+
+    // ── Silly Guy / Shovel Man / Threek ───────────────────────────────────────
+    { key: 'png_silly_guy',  label: 'Silly Guy',  culture: '',price: 1000, isPremium: true },
+    { key: 'png_shovel_man', label: 'Shovel Man', culture: '',price: 1800, isPremium: true },
+    { key: 'png_threek',     label: 'Threek',     culture: '',price: 2500, isPremium: true },
+
+    // ── Vorvir ────────────────────────────────────────────────────────────────
+    { key: 'png_vorvir', label: 'Vorvir', culture: '', price: 4000, isPremium: true },
+
+    // ── Shop-only originals ───────────────────────────────────────────────────
+    { key: 'png_piga',   label: 'Piga',   culture: '', price: 3500,  isPremium: true },
+    { key: 'png_cheezus', label: 'Cheezus', culture: '', price: 10000, isPremium: true },
 ];
 
 // ─── SVG Custom Flag Keys ─────────────────────────────────────────────────────
@@ -80,24 +114,31 @@ export interface CustomFlagOption {
     game: string;
     price: number;
     isPremium: boolean;
+    requiresId?: string; // TIER LIST: ID of the flag/avatar you must own before buying this one
+    collection?: string; // Optional collection/tier name for display
 }
 
 export const CUSTOM_FLAGS: CustomFlagOption[] = [
     // ── The Witcher ───────────────────────────────────────────────────────────
-    { key: 'flag_svg_nilfgaard', label: 'Nilfgaard', game: 'The Witcher', price: 6000, isPremium: true },
-    { key: 'flag_svg_temeria', label: 'Temeria', game: 'The Witcher', price: 6000, isPremium: true },
+    { key: 'flag_svg_temeria', label: 'Temeria', game: 'The Witcher', price: 4000, isPremium: true, collection: 'Witcher Flags 1' },
+    { key: 'flag_svg_nilfgaard', label: 'Nilfgaard', game: 'The Witcher', price: 8000, isPremium: true, requiresId: 'flag_svg_temeria', collection: 'Witcher Flags 2' },
+
     // ── Skyrim ────────────────────────────────────────────────────────────────
-    { key: 'flag_svg_stormcloak', label: 'Stormcloaks', game: 'Skyrim', price: 6000, isPremium: true },
-    { key: 'flag_svg_imperial', label: 'Imperial Legion', game: 'Skyrim', price: 6000, isPremium: true },
+    { key: 'flag_svg_stormcloak', label: 'Stormcloaks', game: 'Skyrim', price: 4000, isPremium: true, collection: 'Skyrim Flags 1' },
+    { key: 'flag_svg_imperial', label: 'Imperial Legion', game: 'Skyrim', price: 8000, isPremium: true, requiresId: 'flag_svg_stormcloak', collection: 'Skyrim Flags 2' },
+
     // ── Cyberpunk 2077 ────────────────────────────────────────────────────────
-    { key: 'flag_svg_arasaka', label: 'Arasaka', game: 'Cyberpunk', price: 7000, isPremium: true },
-    { key: 'flag_svg_militech', label: 'Militech', game: 'Cyberpunk', price: 6500, isPremium: true },
+    { key: 'flag_svg_militech', label: 'Militech', game: 'Cyberpunk', price: 5000, isPremium: true, collection: 'Cyberpunk Flags 1' },
+    { key: 'flag_svg_arasaka', label: 'Arasaka', game: 'Cyberpunk', price: 9000, isPremium: true, requiresId: 'flag_svg_militech', collection: 'Cyberpunk Flags 2' },
+
     // ── Red Dead Redemption 2 ─────────────────────────────────────────────────
-    { key: 'flag_svg_vanderlinde', label: 'Van der Linde', game: 'Red Dead', price: 6000, isPremium: true },
-    { key: 'flag_svg_lawman', label: 'Lawman', game: 'Red Dead', price: 5500, isPremium: true },
+    { key: 'flag_svg_lawman', label: 'Lawman', game: 'Red Dead', price: 4000, isPremium: true, collection: 'RDR2 Flags 1' },
+    { key: 'flag_svg_vanderlinde', label: 'Van der Linde', game: 'Red Dead', price: 7500, isPremium: true, requiresId: 'flag_svg_lawman', collection: 'RDR2 Flags 2' },
+
     // ── Fallout ───────────────────────────────────────────────────────────────
-    { key: 'flag_svg_vaulttec', label: 'Vault-Tec', game: 'Fallout', price: 6500, isPremium: true },
-    { key: 'flag_svg_brotherhood', label: 'Brotherhood', game: 'Fallout', price: 7000, isPremium: true },
+    { key: 'flag_svg_vaulttec', label: 'Vault-Tec', game: 'Fallout', price: 5000, isPremium: true, collection: 'Fallout Flags 1' },
+    { key: 'flag_svg_brotherhood', label: 'Brotherhood', game: 'Fallout', price: 8500, isPremium: true, requiresId: 'flag_svg_vaulttec', collection: 'Fallout Flags 2' },
+
 ];
 
 // ─── Flag / Badge options ─────────────────────────────────────────────────────
@@ -108,9 +149,13 @@ export interface FlagOption {
     category: 'fun' | 'country' | 'symbol';
     price: number;
     isPremium: boolean;
+    questOnly?: boolean; // cannot be purchased — only earned via achievements
 }
 
 export const FLAG_OPTIONS: FlagOption[] = [
+    // ── Quest Reward Flags (not purchasable — earned through achievements) ──────
+    { emoji: '🔍', label: 'Speed Detective', category: 'symbol', price: 0, isPremium: true, questOnly: true },
+
     // ── All World Country Flags (all free, shown in onboarding) ──────────
     // Africa (54)
     { emoji: '🇩🇿', label: 'Algeria', category: 'country', price: 0, isPremium: false },

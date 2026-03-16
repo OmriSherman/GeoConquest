@@ -5,6 +5,8 @@ export interface Profile {
   username: string;
   gold_balance: number;
   country: string | null;
+  email?: string;
+  has_onboarded: boolean;
   avatar_emoji: string; // character avatar emoji
   avatar_flag: string;  // flag/badge emoji
   max_quiz_turns?: number;
@@ -38,9 +40,9 @@ export function cca2ToFlagEmoji(cca2: string): string {
   return String.fromCodePoint(...codePoints);
 }
 
-/** Price to purchase a country = ceil(area / 100) gold */
+/** Price to purchase a country = max(20, ceil(area / 100)) gold */
 export function getCountryPrice(area: number): number {
-  return Math.ceil(area / 100);
+  return Math.max(20, Math.ceil(area / 100));
 }
 
 export interface OwnedCountry {
@@ -95,6 +97,7 @@ export type RootStackParamList = {
   Auth: undefined;
   ChooseUsername: undefined;
   Main: undefined;
+  Premium: undefined;
 };
 
 export type AuthStackParamList = {
@@ -123,6 +126,7 @@ export type QuizStackParamList = {
     total: number;
     goldEarned: number;
     quizType: QuizType;
+    elapsedSeconds?: number;
   };
 };
 
@@ -144,7 +148,7 @@ export interface MillionaireQuestion {
 }
 
 export const MILLIONAIRE_GOLD_LADDER: number[] = [
-  50, 100, 200, 300, 500, 750, 1000, 1500, 2000, 3000, 4000, 6000, 8000, 12000, 20000,
+  25, 50, 100, 150, 250, 375, 500, 750, 1000, 1500, 2000, 3000, 4000, 6000, 10000,
 ];
 
 // 0-indexed: safe after correctly answering question at these indices (Q5 and Q10)
@@ -155,8 +159,8 @@ export const MILLIONAIRE_SAFE_ZONES: number[] = [4, 9];
 export const GOLD_REWARDS: Record<QuizType, number> = {
   flag: 10,
   shape: 15,
-  borders: 15,
-  capitals: 15,
-  millionaire: 50, // base; scales per level
-  nightmare: 100000,
+  borders: 18,
+  capitals: 18,
+  millionaire: 25, // base; scales per level
+  nightmare: 50000,
 };

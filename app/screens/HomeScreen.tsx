@@ -120,9 +120,6 @@ export default function HomeScreen({ navigation }: any) {
               avatarFlag={profile?.avatar_flag ?? undefined}
               size={32}
             />
-            {profile?.country && (
-              <Text style={styles.countryBadge}>📍{profile.country}</Text>
-            )}
           </TouchableOpacity>
           <TouchableOpacity onPress={() => setShowGoldShop(true)}>
             <GoldDisplay />
@@ -210,7 +207,6 @@ export default function HomeScreen({ navigation }: any) {
               />
               <Text style={styles.menuUsername}>{profile?.username ?? 'Explorer'}</Text>
               <Text style={styles.menuEmail}>{user?.email ?? ''}</Text>
-              {profile?.country && <Text style={styles.menuCountry}>📍 {profile.country}</Text>}
             </View>
             <View style={styles.menuDivider} />
             <TouchableOpacity style={styles.menuItem} onPress={() => { setShowUserMenu(false); signOut(); }}>

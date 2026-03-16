@@ -1,7 +1,19 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { Text } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { Country, getCountryPrice } from '../types';
 import { useAuth } from './AuthContext';
+import { ACHIEVEMENTS_DATA } from '../lib/achievementsData';
+import { useToast } from './ToastContext';
+
+// Empire thresholds that trigger a quest-complete toast
+const EMPIRE_THRESHOLDS: Record<number, string> = {
+  1: 'First Conquest',
+  5: 'Growing Empire',
+  10: 'Imperial Ambitions',
+  25: 'World Power',
+  50: 'Global Hegemon',
+};
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -27,6 +39,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [goldBalance, setGoldBalance] = useState(0);
   const [ownedCountries, setOwnedCountries] = useState<string[]>([]);
   const [loadingGame, setLoadingGame] = useState(true);
+  const { showToast } = useToast();
+
+  // Track which empire thresholds we've already toasted this session
+  const toastedThresholds = useRef<Set<number>>(new Set());
+  const prevOwnedCountRef = useRef(0);
 
   // ── Bootstrap ──────────────────────────────────────────────────────────────
 
@@ -47,6 +64,29 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
   }, [profile]);
 
+  // Check empire thresholds whenever ownedCountries grows
+  useEffect(() => {
+    const newCount = ownedCountries.length;
+    const prevCount = prevOwnedCountRef.current;
+    prevOwnedCountRef.current = newCount;
+
+    if (newCount <= prevCount) return; // no new purchase
+
+    for (const [threshold, title] of Object.entries(EMPIRE_THRESHOLDS)) {
+      const t = Number(threshold);
+      if (newCount >= t && !toastedThresholds.current.has(t)) {
+        toastedThresholds.current.add(t);
+        const ach = ACHIEVEMENTS_DATA.find(a => a.title === title);
+        showToast({
+          title: 'Quest Complete!',
+          message: ach ? `${ach.title} — claim your reward in Quests!` : `${title} quest complete!`,
+          icon: <Text style={{ fontSize: 20 }}>{ach?.icon || '🏅'}</Text>,
+        });
+        break;
+      }
+    }
+  }, [ownedCountries.length]);
+
   async function loadGameData() {
     if (!user) return;
     setLoadingGame(true);
@@ -57,7 +97,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         .eq('user_id', user.id);
 
       if (!error && owned) {
-        setOwnedCountries(owned.map((r: { country_code: string }) => r.country_code));
+        const codes = owned.map((r: { country_code: string }) => r.country_code);
+        setOwnedCountries(codes);
+        // Pre-seed already-crossed thresholds so we don't toast on load
+        for (const threshold of Object.keys(EMPIRE_THRESHOLDS).map(Number)) {
+          if (codes.length >= threshold) {
+            toastedThresholds.current.add(threshold);
+          }
+        }
       }
     } finally {
       setLoadingGame(false);
@@ -109,7 +156,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       if (purchaseRes.error) throw purchaseRes.error;
 
       setGoldBalance(newBalance);
-      setOwnedCountries((prev) => [...prev, country.cca2]);
+      setOwnedCountries(prev => [...prev, country.cca2]);
     },
     [user, goldBalance, ownedCountries]
   );
@@ -130,7 +177,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <GameContext.Provider
-      value={{ goldBalance, ownedCountries, loadingGame, addGold, purchaseCountry, isOwned, canAfford }}
+      value={{
+        goldBalance, ownedCountries, loadingGame,
+        addGold, purchaseCountry, isOwned, canAfford,
+      }}
     >
       {children}
     </GameContext.Provider>

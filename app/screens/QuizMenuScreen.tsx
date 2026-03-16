@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, View, ScrollView, Alert } from 'react-native';
+import { StyleSheet, View, ScrollView } from 'react-native';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { QuizStackParamList } from '../types';
@@ -8,6 +8,7 @@ import DailyRewardModal from '../components/DailyRewardModal';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { useFocusEffect } from '@react-navigation/native';
+import { useAlert } from '../context/AlertContext';
 
 type Props = {
   navigation: StackNavigationProp<QuizStackParamList, 'QuizMenu'>;
@@ -44,56 +45,74 @@ const QUIZZES = [
     screen: 'BordersQuiz' as const,
     title: 'Borders Quiz',
     description: 'Find the country that does NOT share a border',
-    goldReward: '+15 Gold per correct answer',
+    goldReward: '+18 Gold per correct answer',
     emoji: '🧩',
   },
   {
     screen: 'CapitalsQuiz' as const,
     title: 'Capitals Quiz',
     description: 'Match the capital city to its country',
-    goldReward: '+15 Gold per correct answer',
+    goldReward: '+18 Gold per correct answer',
     emoji: '🏛️',
   },
   {
     screen: 'MillionaireQuiz' as const,
     title: 'Millionaire Quiz',
     description: 'Progressive geography challenge — climb the ladder!',
-    goldReward: '+50 to +20,000 Gold per run',
+    goldReward: '+25 to +10,000 Gold per run',
     emoji: '💰',
   },
 ];
 
 export default function QuizMenuScreen({ navigation }: Props) {
   const { profile, disabledUpgrades } = useAuth();
+  const { showAlert } = useAlert();
   const [unlockedItems, setUnlockedItems] = React.useState<Set<string>>(new Set());
 
   useFocusEffect(
     React.useCallback(() => {
       if (!profile) return;
-      supabase
-        .from('user_unlocked_items')
-        .select('item_id')
-        .eq('user_id', profile.id)
-        .then(({ data, error }) => {
-          if (!error && data) {
-            setUnlockedItems(new Set(data.map((r) => r.item_id)));
-          }
-        });
+      supabase.from('user_unlocked_items').select('item_id').eq('user_id', profile.id).then((res) => {
+        if (!res.error && res.data) {
+          setUnlockedItems(new Set(res.data.map((r) => r.item_id)));
+        }
+      });
     }, [profile?.id])
   );
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      {QUIZZES.map((quiz) => (
-        <QuizCard
-          key={quiz.screen}
-          title={quiz.title}
-          description={quiz.description}
-          goldReward={quiz.goldReward}
-          emoji={quiz.emoji}
-          onPress={() => navigation.navigate(quiz.screen)}
-        />
-      ))}
+      {QUIZZES.map((quiz) => {
+        let isLocked = false;
+        let lockMessage = '';
+
+        if (quiz.screen === 'CapitalsQuiz') {
+          // Lock behind the 'upgrade_capitals' item (requires 🔍 flag + Shop purchase)
+          isLocked = !unlockedItems.has('upgrade_capitals');
+          lockMessage = 'Unlock Capitals Quiz in the Shop → Upgrades tab!\n\n(Requires the Speed Detective flag 🔍 from the Flag Quiz Speed Demon quest.)';
+        } else if (quiz.screen === 'BordersQuiz') {
+          isLocked = !unlockedItems.has('upgrade_borders');
+          lockMessage = 'Unlock Borders Quiz in the Shop → Upgrades tab!\n\n(Requires the Chariot avatar from the Ground Invasion quest.)';
+        }
+
+        return (
+          <QuizCard
+            key={quiz.screen}
+            title={quiz.title}
+            description={quiz.description}
+            goldReward={quiz.goldReward}
+            emoji={quiz.emoji}
+            isLocked={isLocked}
+            onPress={() => {
+              if (isLocked) {
+                showAlert({ title: 'Quiz Locked', message: lockMessage });
+              } else {
+                navigation.navigate(quiz.screen);
+              }
+            }}
+          />
+        );
+      })}
       
       {(() => {
         const isBought = unlockedItems.has('upgrade_nightmare');
@@ -104,7 +123,7 @@ export default function QuizMenuScreen({ navigation }: Props) {
           <QuizCard
             title={isUnlocked ? "Nightmare Quiz" : "???"}
             description={isUnlocked ? "Max difficulty. 10 questions. 1 mistake out." : ""}
-            goldReward={isUnlocked ? "100,000 Gold Prize" : "???"}
+            goldReward={isUnlocked ? "50,000 Gold Prize" : "???"}
             iconNode={<TerrorIcon />}
             onPress={() => {
               if (isUnlocked) {

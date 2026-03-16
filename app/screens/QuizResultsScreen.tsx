@@ -7,6 +7,9 @@ import * as Haptics from 'expo-haptics';
 import { QuizStackParamList } from '../types';
 import { triggerSound } from '../components/AudioEngine';
 import { recordQuizCompletion } from './AchievementsScreen';
+import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
+import { ACHIEVEMENTS_DATA } from '../lib/achievementsData';
 
 type Props = {
   navigation: StackNavigationProp<QuizStackParamList, 'QuizResults'>;
@@ -14,8 +17,10 @@ type Props = {
 };
 
 export default function QuizResultsScreen({ navigation, route }: Props) {
-  const { score, total, goldEarned, quizType } = route.params;
+  const { score, total, goldEarned, quizType, elapsedSeconds } = route.params;
   const percentage = Math.round((score / total) * 100);
+  const { showToast } = useToast();
+  const { user } = useAuth();
 
   useEffect(() => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -48,8 +53,35 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
     recordQuizCompletion({
       quizType,
       perfect: percentage === 100,
-      durationSeconds: 999, // duration tracking can be added per-quiz
+      scorePercentage: percentage,
+      durationSeconds: elapsedSeconds ?? 0,
       goldEarned,
+      userId: user?.id,
+    }).then(({ newlyCompletedSpeedDemon, newlyCompletedNightmare, newlyCompletedCapitalsMastery }) => {
+      if (newlyCompletedSpeedDemon) {
+        const ach = ACHIEVEMENTS_DATA.find(a => a.id === 'flag_mastery_30s');
+        showToast({
+          title: 'Quest Complete!',
+          message: ach ? `${ach.title} — claim your reward in Quests!` : 'Flag Quiz Speed Demon!',
+          icon: <Text style={{ fontSize: 20 }}>{ach?.icon ?? '⚡'}</Text>,
+        });
+      }
+      if (newlyCompletedNightmare) {
+        const ach = ACHIEVEMENTS_DATA.find(a => a.id === 'nightmare_complete');
+        showToast({
+          title: 'Quest Unlocked!',
+          message: ach ? `${ach.title} — claim your reward in Quests!` : 'Nightmare Survived!',
+          icon: <Text style={{ fontSize: 20 }}>{ach?.icon ?? '💀'}</Text>,
+        });
+      }
+      if (newlyCompletedCapitalsMastery) {
+        const ach = ACHIEVEMENTS_DATA.find(a => a.id === 'ground_invasion');
+        showToast({
+          title: 'Quest Complete!',
+          message: ach ? `${ach.title} — claim your reward in Quests!` : 'Ground Invasion!',
+          icon: <Text style={{ fontSize: 20 }}>{ach?.icon ?? '⚔️'}</Text>,
+        });
+      }
     });
   }, []);
 
@@ -72,6 +104,12 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
         <Row label="Score" value={`${score} / ${total}`} />
         {quizType !== 'millionaire' && <Row label="Accuracy" value={`${percentage}%`} />}
         <Row label="Gold Earned" value={`🪙 ${goldEarned}`} highlight />
+        {elapsedSeconds != null && (
+          <Row
+            label="Total Time"
+            value={`⏱ ${String(Math.floor(elapsedSeconds / 60)).padStart(2, '0')}:${String(elapsedSeconds % 60).padStart(2, '0')}`}
+          />
+        )}
       </View>
 
       <TouchableOpacity

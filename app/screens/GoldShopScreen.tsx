@@ -37,7 +37,7 @@ const GOLD_PACKAGES: GoldPackage[] = [
     id: 'gold_10k',
     productId: 'geoquest_gold_10k',
     gold: 10_000,
-    price: '$3.99',
+    price: '$1.99',
     emoji: '⚔️',
     title: "Warlord's Stash",
     subtitle: 'Fuel your first conquests',
@@ -46,7 +46,7 @@ const GOLD_PACKAGES: GoldPackage[] = [
     id: 'gold_100k',
     productId: 'geoquest_gold_100k',
     gold: 100_000,
-    price: '$34.99',
+    price: '$17.99',
     emoji: '🏰',
     title: 'War Chest',
     subtitle: 'Dominate the world stage',
@@ -56,7 +56,7 @@ const GOLD_PACKAGES: GoldPackage[] = [
     id: 'gold_300k',
     productId: 'geoquest_gold_300k',
     gold: 300_000,
-    price: '$99.99',
+    price: '$49.99',
     emoji: '👑',
     title: 'Empire Maker',
     subtitle: 'Conquer everything. Become legend.',
@@ -390,7 +390,7 @@ export default function GoldShopScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0a0a1a' },
-  content: { padding: 20, paddingTop: 56, paddingBottom: 40, gap: 16 },
+  content: { padding: 20, paddingTop: 8, paddingBottom: 40, gap: 16 },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',

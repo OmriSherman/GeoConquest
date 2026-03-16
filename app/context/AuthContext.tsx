@@ -18,13 +18,13 @@ interface AuthContextValue {
   profile: Profile | null;
   loading: boolean;
   needsUsername: boolean;
-  signUp: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string) => Promise<{ user: User | null; session: Session | null }>;
   signIn: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   setUsername: (username: string, avatarEmoji?: string, avatarFlag?: string, country?: string | null) => Promise<void>;
   purchaseAvatarItem: (itemType: 'avatar' | 'flag', itemId: string, cost: number) => Promise<void>;
-  claimAchievement: (achievementId: string, rewardGold: number, rewardItem?: { type: 'avatar' | 'flag'; itemId: string }) => Promise<void>;
+  claimAchievement: (achievementId: string, rewardGold: number, rewardItems?: { type: 'avatar' | 'flag'; itemId: string }[]) => Promise<void>;
   purchaseQuizUpgrade: (newTurns: number, cost: number) => Promise<void>;
   disabledUpgrades: Set<string>;
   toggleUpgrade: (id: string) => Promise<void>;
@@ -62,34 +62,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (val) setDisabledUpgrades(new Set(JSON.parse(val)));
     });
 
-    // Narrow fallback: only used when there is no stored session.
-    // Safe because: if the user later signs in, SIGNED_IN fires and takes over.
-    // If there IS a session, INITIAL_SESSION fires and handles loading properly.
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
-      if (!s) {
-        setSession(null);
+    // 1. Check active session immediately purely from storage
+    supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
+      setSession(currentSession);
+      if (!currentSession) {
+        setProfile(null);
+        setNeedsUsername(false);
         setLoading(false);
       }
     });
 
+    // 2. Listen for auth changes (login, logout, token refresh)
     const { data: listener } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        // console.log('[Auth] onAuthStateChange:', event, session?.user?.email ?? 'no user');
-        setSession(session);
-
-        if (session?.user) {
-          setLoading(true);
-          const userId = session.user.id;
-          const isGoogle =
-            event === 'SIGNED_IN' && session.user.app_metadata?.provider === 'google';
-
-          // Use .then() chain — not async/await — so we don't block the Supabase
-          // auth state machine with an async callback.
-          fetchProfile(userId)
-            .then(() => { if (isGoogle) return detectAndSetCountry(session.user); })
-            .catch((err) => console.warn('[Auth] Post-login error:', err))
-            .finally(() => setLoading(false));
-        } else {
+      (event, newSession) => {
+        setSession(newSession);
+        if (!newSession) {
           setProfile(null);
           setNeedsUsername(false);
           setLoading(false);
@@ -99,6 +86,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => listener.subscription.unsubscribe();
   }, []);
+
+  // 3. Independent effect: Whenever `session` changes to a valid user, fetch their profile
+  useEffect(() => {
+    if (session?.user) {
+      setLoading(true);
+      
+      const isGoogle = session.user.app_metadata?.provider === 'google';
+      const userId = session.user.id;
+
+      fetchProfile(userId)
+        .then(() => { 
+          // Detect country if it's the very first Google login and we don't have one
+          if (isGoogle) return detectAndSetCountry(session.user); 
+        })
+        .catch((err) => console.warn('[Auth] Post-login profile error:', err))
+        .finally(() => setLoading(false));
+    }
+  }, [session?.user?.id]);
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -113,36 +118,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const p = data as Profile;
       setProfile(p);
 
-      // Check daily reward availability
+      // Check daily reward availability — compare UTC dates on both sides
       if (p.last_reward_claim) {
-        const lastClaimDateUtc = new Date(p.last_reward_claim);
-        const todayLocal = new Date();
-        todayLocal.setHours(0, 0, 0, 0);
-        
-        // Very basic local vs UTC date check.
-        // A robust local comparison:
-        const lastClaimStr = lastClaimDateUtc.toISOString().split('T')[0];
-        // We use the client timezone 'today' string to compare
-        const clientTodayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
-        
-        if (lastClaimStr < clientTodayStr) {
-          setDailyRewardAvailable(true);
-        } else {
-          setDailyRewardAvailable(false);
-        }
+        const lastClaimUtcDate = new Date(p.last_reward_claim).toISOString().split('T')[0];
+        const todayUtcDate = new Date().toISOString().split('T')[0];
+        setDailyRewardAvailable(lastClaimUtcDate < todayUtcDate);
       } else {
         // Never claimed before
         setDailyRewardAvailable(true);
       }
 
-      // Need onboarding if no avatar set yet, or if username is basically a placeholder
-      if (
-        !p.avatar_emoji ||
-        !p.username ||
-        p.username.includes('@') ||
-        p.username === 'explorer' ||
-        p.username.startsWith('user_')
-      ) {
+      // Need onboarding if has_onboarded is false
+      if (!p.has_onboarded) {
         setNeedsUsername(true);
       } else {
         setNeedsUsername(false);
@@ -225,6 +212,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function signUp(email: string, password: string) {
     const { data, error } = await supabase.auth.signUp({ email, password });
     if (error) throw error;
+    return data;
   }
 
   async function signIn(email: string, password: string) {
@@ -239,7 +227,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo },
+        options: {
+          redirectTo,
+          queryParams: {
+            prompt: 'select_account',
+          },
+        },
       });
       // console.log('[Auth] signInWithOAuth result:', { url: data?.url, error });
       if (error) throw error;
@@ -247,14 +240,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     // Native (iOS / Android)
-    const redirectUri = AuthSession.makeRedirectUri({ path: 'auth/callback' });
-    // console.log('[Auth] Native redirectUri:', redirectUri);
+    // Use the custom scheme directly to prevent Expo Go from intercepting `exp://` as an OTA update
+    const redirectUri = 'geoconquest://auth/callback';
+    console.log('[Auth] Native redirectUri:', redirectUri);
 
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: redirectUri,
         skipBrowserRedirect: true,
+        queryParams: {
+          prompt: 'select_account',
+        },
       },
     });
 
@@ -281,8 +278,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (sessionError) throw sessionError;
       } else {
         // PKCE flow — exchange auth code for session
-        const { error: sessionError } = await supabase.auth.exchangeCodeForSession(url);
-        if (sessionError) throw sessionError;
+        const codeMatch = url.match(/[?&]code=([^&]+)/);
+        if (codeMatch) {
+          const code = codeMatch[1];
+          const { error: sessionError } = await supabase.auth.exchangeCodeForSession(code);
+          if (sessionError) throw sessionError;
+        } else {
+          throw new Error('No authorization code found in redirect URL.');
+        }
       }
     } else if (result.type === 'dismiss' || result.type === 'cancel') {
       // On some Android configurations the browser closes but OAuth actually
@@ -331,6 +334,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       username,
       avatar_emoji: avatarEmoji || '🧑',
       avatar_flag: avatarFlag || '🏴‍☠️',
+      email: session.user.email,
+      has_onboarded: true,
     };
     if (country !== undefined) updateData.country = country;
 
@@ -350,10 +355,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     setProfile((prev) => ({
-      ...(prev || { id: userId, gold_balance: 500, created_at: new Date().toISOString() }),
+      ...(prev || { id: userId, gold_balance: 500, created_at: new Date().toISOString(), has_onboarded: false }),
       username,
       avatar_emoji: avatarEmoji || '🧑',
       avatar_flag: avatarFlag || '🏴‍☠️',
+      email: session.user.email,
+      has_onboarded: true,
       country: country ?? prev?.country ?? null,
     } as Profile));
     setNeedsUsername(false);
@@ -374,7 +381,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setProfile(prev => prev ? { ...prev, gold_balance: prev.gold_balance - cost } : prev);
   }
 
-  async function claimAchievement(achievementId: string, rewardGold: number, rewardItem?: { type: 'avatar' | 'flag'; itemId: string }) {
+  async function claimAchievement(achievementId: string, rewardGold: number, rewardItems?: { type: 'avatar' | 'flag'; itemId: string }[]) {
     if (!profile) return;
 
     const { data, error } = await supabase.rpc('claim_achievement', {
@@ -393,14 +400,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setProfile((prev) => prev ? { ...prev, gold_balance: data[0].new_balance } : prev);
     }
 
-    // Unlock reward item if provided (no gold cost — it's a trophy reward)
-    if (rewardItem) {
+    // Unlock reward items if provided (no gold cost — trophy rewards)
+    for (const item of rewardItems ?? []) {
       const { error: unlockError } = await supabase.from('user_unlocked_items').insert(
-        { user_id: profile.id, item_id: rewardItem.itemId, item_type: rewardItem.type }
+        { user_id: profile.id, item_id: item.itemId, item_type: item.type }
       );
-      // 23505 is PostgreSQL's unique_violation error code, which is fine since they already own it
+      // 23505 = unique_violation: already unlocked, that's fine
       if (unlockError && unlockError.code !== '23505') {
-        console.warn('Failed to insert unlocked item:', unlockError);
+        throw new Error(`Reward item could not be unlocked: ${unlockError.message}`);
       }
     }
   }
@@ -425,12 +432,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function claimDailyReward(): Promise<number> {
     if (!profile) return 0;
-    
-    const clientTodayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD local
 
-    const { data, error } = await supabase.rpc('claim_daily_reward', {
-      client_today_date: clientTodayStr,
-    });
+    const { data, error } = await supabase.rpc('claim_daily_reward');
 
     if (error) {
       throw error;

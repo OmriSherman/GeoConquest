@@ -36,6 +36,8 @@ export default function SignUpScreen({ navigation }: Props) {
     setLoading(true);
     try {
       await signUp(email.trim(), password);
+      // Since email verification is disabled, onAuthStateChange will handle
+      // the redirection automatically when the session is returned.
     } catch (err: any) {
       Alert.alert('Sign Up Failed', err.message ?? 'Something went wrong');
     } finally {

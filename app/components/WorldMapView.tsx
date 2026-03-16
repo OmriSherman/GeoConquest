@@ -129,43 +129,48 @@ export default function WorldMapView({
   useEffect(() => {
     if (!loading) {
       if (focusCountry) {
-        // Find feature
-        const f = (features || []).find(
-          (feat: any) => getCountryCca2(feat.rawFeature.id, feat.name) === focusCountry
-        );
-        if (f && f.bounds) {
-          const [[xmin, ymin], [xmax, ymax]] = f.bounds;
-          const dx = xmax - xmin;
-          const dy = ymax - ymin;
-          // compute scale so it fits nicely
-          let s = 1.0 / Math.max(dx / VIEWBOX_W, dy / VIEWBOX_H);
-          // clamp to a reasonable max zoom
-          if (s > 10) s = 10;
-          if (s < 1) s = 1;
+        // First snap to world view so the user sees the full map before zooming in
+        scale.value = 1;
+        translateX.value = 0;
+        translateY.value = 0;
+        savedScale.value = 1;
+        savedTranslateX.value = 0;
+        savedTranslateY.value = 0;
 
-          // compute center translation
-          const cx = (xmin + xmax) / 2;
-          const cy = (ymin + ymax) / 2;
+        // Then zoom to the country after a short pause
+        const timer = setTimeout(() => {
+          const f = (features || []).find(
+            (feat: any) => getCountryCca2(feat.rawFeature.id, feat.name) === focusCountry
+          );
+          if (f && f.bounds) {
+            const [[xmin, ymin], [xmax, ymax]] = f.bounds;
+            const dx = xmax - xmin;
+            const dy = ymax - ymin;
+            let s = 1.0 / Math.max(dx / VIEWBOX_W, dy / VIEWBOX_H);
+            if (s > 10) s = 10;
+            if (s < 1) s = 1;
 
-          // Our styling centers scaling via VIEWBOX_W/2, so tx just needs to move cx to the center
-          let tx = VIEWBOX_W / 2 - cx;
-          let ty = VIEWBOX_H / 2 - cy;
+            const cx = (xmin + xmax) / 2;
+            const cy = (ymin + ymax) / 2;
+            // Correct centering for scale > 1: tx = W/s - W/2 - country_center_x
+            let tx = VIEWBOX_W / s - VIEWBOX_W / 2 - cx;
+            let ty = VIEWBOX_H / s - VIEWBOX_H / 2 - cy;
 
-          // Pre-clamp tx and ty so the initial zoom-in doesn't fly out of bounds
-          // Which would cause onUpdate to glitch when the user first touches it
-          const boundX = (s - 1) * (VIEWBOX_W / 2);
-          const boundY = (s - 1) * (VIEWBOX_H / 2);
-          tx = Math.min(Math.max(tx, -boundX), boundX);
-          ty = Math.min(Math.max(ty, -boundY), boundY);
+            const boundX = (s - 1) * (VIEWBOX_W / 2);
+            const boundY = (s - 1) * (VIEWBOX_H / 2);
+            tx = Math.min(Math.max(tx, -boundX), boundX);
+            ty = Math.min(Math.max(ty, -boundY), boundY);
 
-          scale.value = withTiming(s, { duration: 600, easing: Easing.out(Easing.cubic) });
-          translateX.value = withTiming(tx, { duration: 600, easing: Easing.out(Easing.cubic) });
-          translateY.value = withTiming(ty, { duration: 600, easing: Easing.out(Easing.cubic) });
-          
-          savedScale.value = s;
-          savedTranslateX.value = tx;
-          savedTranslateY.value = ty;
-        }
+            scale.value = withTiming(s, { duration: 800, easing: Easing.out(Easing.cubic) });
+            translateX.value = withTiming(tx, { duration: 800, easing: Easing.out(Easing.cubic) });
+            translateY.value = withTiming(ty, { duration: 800, easing: Easing.out(Easing.cubic) });
+
+            savedScale.value = s;
+            savedTranslateX.value = tx;
+            savedTranslateY.value = ty;
+          }
+        }, 650);
+        return () => clearTimeout(timer);
       } else {
         // Reset to world view
         scale.value = withTiming(1, { duration: 600, easing: Easing.out(Easing.cubic) });

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   Alert,
+  ImageBackground,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
@@ -51,94 +52,134 @@ export default function LoginScreen({ navigation }: Props) {
   }
 
   return (
-    <KeyboardAvoidingView
+    <ImageBackground
+      source={require('../../assets/login screen bg.gif')}
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      resizeMode="cover"
     >
-      <View style={styles.inner}>
-        <Text style={styles.title}>GeoConquest</Text>
-        <Text style={styles.subtitle}>Conquer the world, one quiz at a time</Text>
-
-        {/* Google button */}
-        <TouchableOpacity
-          style={[styles.googleButton, googleLoading && styles.buttonDisabled]}
-          onPress={handleGoogleSignIn}
-          disabled={googleLoading}
-          activeOpacity={0.85}
+      {/* Dark overlay to keep text readable */}
+      <View style={styles.overlay}>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
-          <Text style={styles.googleIcon}>G</Text>
-          <Text style={styles.googleButtonText}>
-            {googleLoading ? 'Connecting…' : 'Continue with Google'}
-          </Text>
-        </TouchableOpacity>
+          <View style={styles.inner}>
+            {/* Hero text — floats over the animated map */}
+            <View style={styles.heroSection}>
+              <Text style={styles.title}>GeoConquest</Text>
+              <Text style={styles.subtitle}>Conquer the world, one quiz at a time</Text>
+            </View>
 
-        {/* Divider */}
-        <View style={styles.divider}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>or</Text>
-          <View style={styles.dividerLine} />
-        </View>
+            {/* Form card */}
+            <View style={styles.formCard}>
+              {/* Google button */}
+              <TouchableOpacity
+                style={[styles.googleButton, googleLoading && styles.buttonDisabled]}
+                onPress={handleGoogleSignIn}
+                disabled={googleLoading}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.googleIcon}>G</Text>
+                <Text style={styles.googleButtonText}>
+                  {googleLoading ? 'Connecting…' : 'Continue with Google'}
+                </Text>
+              </TouchableOpacity>
 
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          placeholderTextColor="#555"
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          placeholderTextColor="#555"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-        />
+              {/* Divider */}
+              <View style={styles.divider}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>or</Text>
+                <View style={styles.dividerLine} />
+              </View>
 
-        <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
-          onPress={handleSignIn}
-          disabled={loading}
-        >
-          <Text style={styles.buttonText}>{loading ? 'Signing in…' : 'Sign In'}</Text>
-        </TouchableOpacity>
+              <TextInput
+                style={styles.input}
+                placeholder="Email"
+                placeholderTextColor="#555"
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                keyboardType="email-address"
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="Password"
+                placeholderTextColor="#555"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+              />
 
-        <TouchableOpacity onPress={() => navigation.navigate('SignUp')}>
-          <Text style={styles.link}>Don't have an account? Sign Up</Text>
-        </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, loading && styles.buttonDisabled]}
+                onPress={handleSignIn}
+                disabled={loading}
+              >
+                <Text style={styles.buttonText}>{loading ? 'Signing in…' : 'Sign In'}</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity onPress={() => navigation.navigate('SignUp')}>
+              <Text style={styles.link}>Don't have an account? Sign Up</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
       </View>
-    </KeyboardAvoidingView>
+    </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0a0a1a' },
+  container: {
+    flex: 1,
+  },
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(5,5,18,0.62)',
+  },
   inner: {
     flex: 1,
     justifyContent: 'center',
-    paddingHorizontal: 32,
-    gap: 16,
+    paddingHorizontal: 28,
+    gap: 20,
+  },
+  heroSection: {
+    alignItems: 'center',
+    marginBottom: 4,
   },
   title: {
-    fontSize: 42,
+    fontSize: 44,
     fontWeight: 'bold',
     color: '#FFD700',
     textAlign: 'center',
-    marginBottom: 4,
+    letterSpacing: 0.5,
+    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 8,
+    marginBottom: 6,
   },
   subtitle: {
-    color: '#aaa',
+    color: '#ccc',
     textAlign: 'center',
-    marginBottom: 8,
     fontSize: 14,
+    letterSpacing: 0.3,
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  formCard: {
+    backgroundColor: 'rgba(10,10,26,0.82)',
+    borderRadius: 20,
+    padding: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(255,215,0,0.15)',
+    gap: 14,
   },
   googleButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1a1a2e',
+    backgroundColor: 'rgba(30,30,60,0.9)',
     borderRadius: 12,
     paddingVertical: 14,
     gap: 10,
@@ -170,7 +211,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   input: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: 'rgba(20,20,45,0.9)',
     color: '#fff',
     borderRadius: 12,
     paddingHorizontal: 16,
@@ -182,11 +223,22 @@ const styles = StyleSheet.create({
   button: {
     backgroundColor: '#FFD700',
     borderRadius: 12,
-    paddingVertical: 16,
+    paddingVertical: 15,
     alignItems: 'center',
-    marginTop: 8,
+    shadowColor: '#FFD700',
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 6,
   },
   buttonDisabled: { opacity: 0.6 },
   buttonText: { color: '#0a0a1a', fontWeight: 'bold', fontSize: 16 },
-  link: { color: '#FFD700', textAlign: 'center', marginTop: 8 },
+  link: {
+    color: '#FFD700',
+    textAlign: 'center',
+    fontSize: 14,
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
 });

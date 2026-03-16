@@ -106,6 +106,9 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
   const currentIndexRef = useRef(0);
   const questionsRef = useRef<MillionaireQuestion[]>([]);
   const autoAdvanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const quizStartRef = useRef<number>(0);
+  const elapsedIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [elapsedSec, setElapsedSec] = useState(0);
   const ladderScrollRef = useRef<ScrollView>(null);
   const [ladderWidth, setLadderWidth] = useState(0);
   const breathAnim = useRef(new Animated.Value(1)).current;
@@ -165,11 +168,13 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
     const failedIndex = currentIndexRef.current;
     const prize = 0;
 
+    if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current);
     navigation.replace('QuizResults', {
       score: failedIndex, // number of correct answers
       total: 15,
       goldEarned: prize,
       quizType: 'millionaire',
+      elapsedSeconds: Math.floor((Date.now() - quizStartRef.current) / 1000),
     });
   }
 
@@ -203,6 +208,10 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
         setError(e.message ?? 'Failed to load questions');
       } finally {
         setLoading(false);
+        quizStartRef.current = Date.now();
+        elapsedIntervalRef.current = setInterval(() => {
+          setElapsedSec(Math.floor((Date.now() - quizStartRef.current) / 1000));
+        }, 1000);
       }
     })();
 
@@ -221,6 +230,7 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
 
     return () => {
       if (autoAdvanceTimer.current) clearTimeout(autoAdvanceTimer.current);
+      if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current);
       stopTimer();
       Speech.stop(); // Clean up speech on unmount
     };
@@ -426,11 +436,13 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
     setShowWalkOrContinue(false);
     const prize = walkOrContinuePrize;
     if (prize > 0) addGold(prize);
+    if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current);
     navigation.replace('QuizResults', {
       score: currentIndexRef.current + 1,
       total: 15,
       goldEarned: prize,
       quizType: 'millionaire',
+      elapsedSeconds: Math.floor((Date.now() - quizStartRef.current) / 1000),
     });
   }
 
@@ -444,11 +456,13 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
   // ── End game handlers ──────────────────────────────────────────────────────
 
   function handleWinContinue() {
+    if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current);
     navigation.replace('QuizResults', {
       score: 15,
       total: 15,
       goldEarned: MILLIONAIRE_GOLD_LADDER[14],
       quizType: 'millionaire',
+      elapsedSeconds: Math.floor((Date.now() - quizStartRef.current) / 1000),
     });
   }
 
@@ -495,6 +509,7 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
           <Text style={[styles.timerText, { color: timerColor }]}>{timeLeft}s</Text>
         </View>
       )}
+      <Text style={styles.elapsedTimerText}>⏱ {String(Math.floor(elapsedSec / 60)).padStart(2, '0')}:{String(elapsedSec % 60).padStart(2, '0')}</Text>
 
       {/* Prize Ladder Strip */}
       <ScrollView
@@ -797,6 +812,7 @@ const styles = StyleSheet.create({
     width: 26,
     textAlign: 'right',
   },
+  elapsedTimerText: { color: '#aaa', fontSize: 13, fontWeight: '600', textAlign: 'right', paddingHorizontal: 16, paddingBottom: 4 },
 
   // Ladder strip
   ladderStrip: {

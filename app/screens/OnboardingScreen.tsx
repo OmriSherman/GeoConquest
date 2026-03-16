@@ -23,6 +23,17 @@ import { StyleSheet } from 'react-native';
 // Country flags only (for onboarding flag step)
 const COUNTRY_FLAGS = FLAG_OPTIONS.filter(f => f.category === 'country');
 
+/** Decode cca2 from a standard ISO regional-indicator flag emoji (e.g. 🇮🇱 → 'IL') */
+function flagEmojiToCca2(emoji: string): string | null {
+  try {
+    const chars = [...emoji];
+    if (chars.length !== 2) return null;
+    const code = chars.map(c => String.fromCharCode(c.codePointAt(0)! - 127397)).join('');
+    if (/^[A-Z]{2}$/.test(code)) return code;
+  } catch {}
+  return null;
+}
+
 type Step = 'username' | 'avatar' | 'flag';
 
 export default function OnboardingScreen() {
@@ -78,7 +89,7 @@ export default function OnboardingScreen() {
         username.trim(),
         selectedAvatar,
         selectedFlag,
-        null
+        flagEmojiToCca2(selectedFlag)
       );
     } catch (err: any) {
       Alert.alert('Error', err.message ?? 'Failed to create profile');

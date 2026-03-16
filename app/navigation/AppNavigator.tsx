@@ -30,7 +30,9 @@ import ShopScreen from '../screens/ShopScreen';
 import GoldShopScreen from '../screens/GoldShopScreen';
 import LeaderboardScreen from '../screens/LeaderboardScreen';
 import AchievementsScreen from '../screens/AchievementsScreen';
+import PremiumScreen from '../screens/PremiumScreen';
 import GoldDisplay from '../components/GoldDisplay';
+import { useGame } from '../context/GameContext';
 
 // ─── Stack / Tab creators ─────────────────────────────────────────────────────
 
@@ -161,7 +163,7 @@ function MainNavigator() {
         name="Leaderboard"
         component={LeaderboardScreen}
         options={{
-          tabBarLabel: 'Ranks',
+          tabBarLabel: 'Leaderboard',
           tabBarIcon: ({ focused }) => <TabIcon label="🏆" focused={focused} />,
         }}
       />
@@ -177,7 +179,7 @@ function MainNavigator() {
   );
 }
 
-// ─── Root navigator ───────────────────────────────────────────────────────────
+
 
 export default function AppNavigator() {
   const { session, loading, needsUsername } = useAuth();
@@ -198,7 +200,14 @@ export default function AppNavigator() {
         ) : needsUsername ? (
           <RootStack.Screen name="ChooseUsername" component={OnboardingScreen} />
         ) : (
-          <RootStack.Screen name="Main" component={MainNavigator} />
+          <>
+            <RootStack.Screen name="Main" component={MainNavigator} />
+            <RootStack.Screen
+              name="Premium"
+              component={PremiumScreen}
+              options={{ presentation: 'modal', headerShown: false }}
+            />
+          </>
         )}
       </RootStack.Navigator>
     </NavigationContainer>

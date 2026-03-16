@@ -1,5 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View, ViewStyle } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 interface Props {
   title: string;
@@ -9,20 +10,36 @@ interface Props {
   onPress: () => void;
   style?: ViewStyle;
   iconNode?: React.ReactNode;
+  isLocked?: boolean;
 }
 
-export default function QuizCard({ title, description, goldReward, emoji, onPress, style, iconNode }: Props) {
+export default function QuizCard({ title, description, goldReward, emoji, onPress, style, iconNode, isLocked }: Props) {
   return (
-    <TouchableOpacity style={[styles.card, style]} onPress={onPress} activeOpacity={0.85}>
+    <TouchableOpacity
+      style={[
+        styles.card,
+        isLocked && { opacity: 0.5 },
+        style
+      ]}
+      onPress={onPress}
+      activeOpacity={isLocked ? 1 : 0.85}
+    >
       <View style={[styles.left, (title === '???' || title.includes('Nightmare')) && { backgroundColor: '#1a0000', borderColor: '#400', borderWidth: 1 }]}>
         {iconNode ? iconNode : <Text style={styles.emoji}>{emoji}</Text>}
       </View>
       <View style={styles.body}>
-        <Text style={[styles.title, (title === '???' || title.includes('Nightmare')) && { color: '#ff3333', textShadowColor: '#ff0000', textShadowRadius: 8, fontSize: 20, letterSpacing: 4 }]}>{title}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <Text style={[styles.title, (title === '???' || title.includes('Nightmare')) && { color: '#ff3333', textShadowColor: '#ff0000', textShadowRadius: 8, fontSize: 20, letterSpacing: 4 }]}>
+            {title}
+          </Text>
+          {isLocked && <Ionicons name="lock-closed" size={14} color="#aaa" style={{ marginLeft: 6 }} />}
+        </View>
         {description ? <Text style={styles.description}>{description}</Text> : null}
-        <Text style={[styles.reward, (title === '???' || title.includes('Nightmare')) && { color: '#cc0000', marginTop: 6 }]}>
-          {title === '???' ? goldReward : `🪙 ${goldReward}`}
-        </Text>
+        {!isLocked && (
+          <Text style={[styles.reward, (title === '???' || title.includes('Nightmare')) && { color: '#cc0000', marginTop: 6 }]}>
+            {title === '???' ? goldReward : `🪙 ${goldReward}`}
+          </Text>
+        )}
       </View>
       <Text style={[styles.arrow, (title === '???' || title.includes('Nightmare')) && { color: '#880000' }]}>›</Text>
     </TouchableOpacity>

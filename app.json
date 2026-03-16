@@ -34,7 +34,8 @@
     },
     "plugins": [
       "expo-web-browser",
-      "react-native-iap"
+      "react-native-iap",
+      "expo-secure-store"
     ],
     "extra": {
       "eas": {

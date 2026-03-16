@@ -30,7 +30,7 @@ import * as Speech from 'expo-speech';
 const AUTO_ADVANCE_DELAY_MS = 2500;
 const TIMER_SECONDS = 15;
 const TOTAL_QUESTIONS = 10;
-const PRIZE_GOLD = 100000;
+const PRIZE_GOLD = 50000;
 
 type Props = {
   navigation: StackNavigationProp<QuizStackParamList, 'NightmareQuiz'>;
@@ -63,6 +63,9 @@ export default function NightmareQuizScreen({ navigation }: Props) {
   const currentIndexRef = useRef(0);
   const questionsRef = useRef<MillionaireQuestion[]>([]);
   const autoAdvanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const quizStartRef = useRef<number>(0);
+  const elapsedIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [elapsedSec, setElapsedSec] = useState(0);
 
   // ── Timer ──────────────────────────────────────────────────────────────────
 
@@ -92,11 +95,13 @@ export default function NightmareQuizScreen({ navigation }: Props) {
   }
 
   function endGameWithLoss() {
+    if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current);
     navigation.replace('QuizResults', {
       score: currentIndexRef.current, // number of correct answers
       total: TOTAL_QUESTIONS,
       goldEarned: 0,
       quizType: 'nightmare',
+      elapsedSeconds: Math.floor((Date.now() - quizStartRef.current) / 1000),
     });
   }
 
@@ -130,11 +135,16 @@ export default function NightmareQuizScreen({ navigation }: Props) {
         setError(e.message ?? 'Failed to load questions');
       } finally {
         setLoading(false);
+        quizStartRef.current = Date.now();
+        elapsedIntervalRef.current = setInterval(() => {
+          setElapsedSec(Math.floor((Date.now() - quizStartRef.current) / 1000));
+        }, 1000);
       }
     })();
 
     return () => {
       if (autoAdvanceTimer.current) clearTimeout(autoAdvanceTimer.current);
+      if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current);
       stopTimer();
       Speech.stop();
     };
@@ -228,11 +238,13 @@ export default function NightmareQuizScreen({ navigation }: Props) {
   // ── End game handlers ──────────────────────────────────────────────────────
 
   function handleWinContinue() {
+    if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current);
     navigation.replace('QuizResults', {
       score: TOTAL_QUESTIONS,
       total: TOTAL_QUESTIONS,
       goldEarned: PRIZE_GOLD,
       quizType: 'nightmare',
+      elapsedSeconds: Math.floor((Date.now() - quizStartRef.current) / 1000),
     });
   }
 
@@ -268,6 +280,7 @@ export default function NightmareQuizScreen({ navigation }: Props) {
         <Text style={styles.progressText}>
           {currentIndex + 1} / {TOTAL_QUESTIONS}
         </Text>
+        <Text style={styles.elapsedTimerText}>⏱ {String(Math.floor(elapsedSec / 60)).padStart(2, '0')}:{String(elapsedSec % 60).padStart(2, '0')}</Text>
         <Text style={styles.prizeHeader}>Prize: 💰 100k</Text>
       </View>
 
@@ -361,17 +374,14 @@ export default function NightmareQuizScreen({ navigation }: Props) {
             {question.type === 'shape' && (
               <View>
                 <Text style={styles.prompt}>{question.questionText}</Text>
-                <View 
-                  style={[
-                    styles.shapeContainer,
-                    question.rotation ? { transform: [{ rotate: `${question.rotation}deg` }] } : undefined,
-                  ]}
-                >
-                  <CountryShapeView
-                    countryCode={question.subjectCountry.cca2}
-                    height={150}
-                    color="#FF4444"
-                  />
+                <View style={styles.shapeContainer}>
+                  <View style={question.rotation ? { transform: [{ rotate: `${question.rotation}deg` }] } : undefined}>
+                    <CountryShapeView
+                      countryCode={question.subjectCountry.cca2}
+                      height={150}
+                      color="#FF4444"
+                    />
+                  </View>
                 </View>
               </View>
             )}
@@ -487,6 +497,7 @@ const styles = StyleSheet.create({
   },
   progressText: { color: '#ff8888', fontWeight: 'bold', fontSize: 16 },
   prizeHeader: { color: '#FFD700', fontWeight: 'bold', fontSize: 16 },
+  elapsedTimerText: { color: '#aaa', fontSize: 13, fontWeight: '600' },
 
   // Timer
   timerContainer: {

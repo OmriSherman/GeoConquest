@@ -1,5 +1,20 @@
+import { Image } from 'react-native';
 import { Country } from '../types';
 import { supabase } from './supabase';
+
+// ─── Local flag overrides (for countries whose remote flags are wrong/unavailable) ──
+// Resolved lazily to avoid boot-time issues
+const LOCAL_FLAG_OVERRIDES: Record<string, () => string> = {
+  AF: () => Image.resolveAssetSource(require('../../assets/flags/afghanistan.png')).uri,
+};
+
+function getLocalFlagUri(cca2: string): string | null {
+  try {
+    return LOCAL_FLAG_OVERRIDES[cca2]?.() ?? null;
+  } catch {
+    return null;
+  }
+}
 
 // ─── Types (RestCountries API shape) ─────────────────────────────────────────
 
@@ -57,7 +72,7 @@ export async function fetchCountries(): Promise<Country[]> {
         cca2: c.cca2,
         cca3: c.cca3 || '',
         ccn3: c.ccn3 || '',
-        flagUrl: c.flag_url,
+        flagUrl: getLocalFlagUri(c.cca2) ?? c.flag_url,
         borders: c.borders ?? [],
         region: c.region,
         population: c.population ?? 0,
