@@ -1,6 +1,6 @@
 import 'react-native-gesture-handler';
 import React, { useEffect } from 'react';
-import { AppState, Platform } from 'react-native';
+import { AppState, Image, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -11,6 +11,7 @@ import { AlertProvider } from './app/context/AlertContext';
 import AppNavigator from './app/navigation/AppNavigator';
 import AudioEngine from './app/components/AudioEngine';
 import { supabase } from './app/lib/supabase';
+import { getAllCustomAvatarImageSources } from './app/lib/customAvatars';
 
 // Tells Supabase Auth to continuously refresh the session automatically
 // if the app is in the foreground. When this is added, you will continue
@@ -28,6 +29,29 @@ if (Platform.OS !== 'web') {
 }
 
 export default function App() {
+  useEffect(() => {
+    const sources = getAllCustomAvatarImageSources();
+    for (const source of sources) {
+      const resolved = Image.resolveAssetSource(source);
+      if (resolved?.uri) {
+        Image.prefetch(resolved.uri).catch(() => {});
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const ads = require('react-native-google-mobile-ads');
+      const mobileAds = ads?.default;
+      if (typeof mobileAds === 'function') {
+        mobileAds().initialize().catch(() => {});
+      }
+    } catch {
+      // Ads module is unavailable in Expo Go / unsupported environments.
+    }
+  }, []);
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>

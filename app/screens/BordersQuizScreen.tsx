@@ -5,20 +5,21 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import ConfettiCannon from 'react-native-confetti-cannon';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { QuizStackParamList, QuizQuestion } from '../types';
-import { buildBordersQuizQuestions, fetchCountries, getCca3ToCca2Map } from '../lib/countryData';
+import { buildBordersQuizQuestions, fetchCountries, getOfflineFullCountries, getCca3ToCca2Map } from '../lib/countryData';
 import { useGame } from '../context/GameContext';
 import { useAuth } from '../context/AuthContext';
 import AnswerButton from '../components/AnswerButton';
 import BordersMapView from '../components/BordersMapView';
 import { playDingStreak, playWrong } from '../lib/audio';
 import HeatStreakBadge from '../components/HeatStreakBadge';
+import ConfettiCannon from 'react-native-confetti-cannon';
 
 const GOLD_PER_CORRECT = 18;
 const AUTO_ADVANCE_DELAY_MS = 2500;
@@ -59,12 +60,23 @@ export default function BordersQuizScreen({ navigation }: Props) {
   useEffect(() => {
     (async () => {
       try {
-        const countries = await fetchCountries();
+        let countries;
+        try {
+          countries = await fetchCountries();
+        } catch {
+          if (profile?.is_conquerer) {
+            countries = getOfflineFullCountries();
+          } else {
+            throw new Error('OFFLINE_NO_PREMIUM');
+          }
+        }
         const q = buildBordersQuizQuestions(countries, TOTAL_QUESTIONS);
         setQuestions(q);
         questionsRef.current = q;
       } catch (e: any) {
-        setError(e.message ?? 'Failed to load countries');
+        setError(e.message === 'OFFLINE_NO_PREMIUM'
+          ? 'offline_upgrade'
+          : (e.message ?? 'Failed to load countries'));
       } finally {
         setLoading(false);
         quizStartRef.current = Date.now();
@@ -98,7 +110,6 @@ export default function BordersQuizScreen({ navigation }: Props) {
     if (isCorrect) {
       comboRef.current += 1;
       setCurrentCombo(comboRef.current);
-      setShowConfetti(true);
       playDingStreak(comboRef.current);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
@@ -150,7 +161,6 @@ export default function BordersQuizScreen({ navigation }: Props) {
       currentIndexRef.current = nextIndex;
       setCurrentIndex(nextIndex);
       setAnswered(false);
-      setShowConfetti(false);
       setButtonStates(['default', 'default', 'default', 'default']);
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -170,6 +180,23 @@ export default function BordersQuizScreen({ navigation }: Props) {
   }
 
   if (error || questions.length === 0) {
+    if (error === 'offline_upgrade') {
+      return (
+        <View style={styles.centered}>
+          <Text style={{ fontSize: 40, marginBottom: 12 }}>📡</Text>
+          <Text style={[styles.errorText, { color: '#FFD700', fontWeight: 'bold' }]}>You're Offline</Text>
+          <Text style={[styles.errorText, { color: '#aaa', fontSize: 14, marginTop: 8 }]}>
+            Upgrade to Conqueror's Pass to play all quizzes without an internet connection.
+          </Text>
+          <TouchableOpacity
+            onPress={() => navigation.getParent()?.navigate('Premium')}
+            style={{ marginTop: 20, backgroundColor: '#7B2FBE', paddingHorizontal: 28, paddingVertical: 12, borderRadius: 12 }}
+          >
+            <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>Upgrade</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
     return (
       <View style={styles.centered}>
         <Text style={styles.errorText}>{error ?? 'No questions available'}</Text>

@@ -26,7 +26,7 @@ import * as Haptics from 'expo-haptics';
 import ConfettiCannon from 'react-native-confetti-cannon';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
-import { playPurchase, playVictory, playReject } from '../lib/audio';
+import { playPurchasedItem, playVictory, playReject } from '../lib/audio';
 import AvatarDisplay from '../components/AvatarDisplay';
 
 // ─── Item pools ───────────────────────────────────────────────────────────────
@@ -202,7 +202,7 @@ export default function CrateShopScreen() {
     const picked = pickWeightedItem(crate.pool);
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    playPurchase();
+    playPurchasedItem();
 
     shakeAndReveal(async () => {
       try {
@@ -289,7 +289,7 @@ export default function CrateShopScreen() {
 
           <View style={styles.revealAvatar}>
             <AvatarDisplay
-              avatarId={reveal.item.type === 'avatar' ? reveal.item.id : '🧑'}
+              avatarId={reveal.item.type === 'avatar' ? reveal.item.id : 'png_explorer_male'}
               avatarFlag={reveal.item.type === 'flag' ? reveal.item.id : undefined}
               size={80}
             />

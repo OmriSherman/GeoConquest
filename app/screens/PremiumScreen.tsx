@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import {
+  Alert,
   Dimensions,
+  Image,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -9,10 +12,80 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useAuth } from '../context/AuthContext';
 import { useGame } from '../context/GameContext';
+import { useAuth } from '../context/AuthContext';
 
 const { width: SCREEN_W } = Dimensions.get('window');
+
+// ─── IAP Configuration ────────────────────────────────────────────────────────
+
+const SUBSCRIPTION_IDS = Platform.select({
+  ios: ['membership_lifetime', 'geoconquest_conqueror_monthly'],
+  android: ['membership_lifetime', 'geoconquest_conqueror_monthly'],
+  default: [],
+})!;
+
+let IAP: any = null;
+let iapAvailable = false;
+
+async function initIAP(): Promise<boolean> {
+  try {
+    IAP = require('react-native-iap');
+    await IAP.initConnection();
+    if (Platform.OS === 'android') {
+      try {
+        await IAP.flushFailedPurchasesCachedAsPendingAndroid?.();
+      } catch {}
+    }
+    iapAvailable = true;
+    return true;
+  } catch (err) {
+    iapAvailable = false;
+    return false;
+  }
+}
+
+async function requestSubscription(sku: string): Promise<boolean> {
+  if (!iapAvailable || !IAP) return false;
+  try {
+    if (sku === 'membership_lifetime') {
+      await IAP.requestPurchase({
+        type: 'in-app',
+        request: {
+          apple: { sku },
+          google: { skus: [sku] },
+        },
+      });
+      return true;
+    }
+
+    let subscriptionOffers: Array<{ sku: string; offerToken: string }> | undefined;
+
+    if (Platform.OS === 'android') {
+      const subs = await IAP.fetchProducts({ skus: [sku], type: 'subs' });
+      const sub = subs?.find((p: any) => p?.id === sku) ?? subs?.[0];
+      const offerToken =
+        (sub as any)?.subscriptionOfferDetailsAndroid?.[0]?.offerToken;
+
+      if (!offerToken) {
+        throw new Error('Missing subscription offer token. Ensure your base plan/offer is active in Play Console, then try again.');
+      }
+      subscriptionOffers = [{ sku, offerToken }];
+    }
+
+    await IAP.requestPurchase({
+      type: 'subs',
+      request: {
+        apple: { sku },
+        google: { skus: [sku], subscriptionOffers },
+      },
+    });
+    return true;
+  } catch (err: any) {
+    if (err?.code === 'E_USER_CANCELLED') return false;
+    throw err;
+  }
+}
 
 // ─── Countdown timer ──────────────────────────────────────────────────────────
 
@@ -30,39 +103,45 @@ function useCountdown(totalSeconds: number) {
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
+const FEATURE_ICON_IMAGES: Record<string, any> = {
+  gold_coin: require('../../assets/avatars/gold_coin.png'),
+  '⚡': require('../../assets/avatars/lightning.png'),
+  '👑': require('../../assets/avatars/crown.png'),
+  '🏆': require('../../assets/avatars/trophy.png'),
+};
+
 const FEATURES = [
-  { icon: '🪙', title: 'Daily Gold Boost', desc: 'Earn 2× gold from every quiz and daily reward — forever.' },
-  { icon: '🌍', title: 'Unlimited Conquest', desc: 'No daily cap on country claims. Conquer without limits.' },
-  { icon: '⚡', title: 'Bonus Quiz Turns', desc: 'Start every quiz with 20 turns instead of 10.' },
-  { icon: '👑', title: 'Commander Badge', desc: 'Exclusive crown badge displayed on the global leaderboard.' },
-  { icon: '🎭', title: 'Monthly Avatar Drops', desc: 'New exclusive avatars released each month, yours to keep.' },
-  { icon: '📊', title: 'Advanced Analytics', desc: 'Full history, regional accuracy maps, and personal records.' },
+  { icon: 'gold_coin', title: 'Daily Triple Rewards', desc: 'Earn 3× gold and 3× tickets from daily login rewards.' },
+  { icon: '📡', title: 'Play Offline', desc: 'Capitals, Borders & Shape quizzes work with no internet connection.' },
+  { icon: '🎭', title: 'Unique Avatars', desc: 'Exclusive Conqueror avatars not available anywhere else.' },
+  { icon: '⚡', title: 'Unique Quests', desc: 'Access to exclusive quest content and rewards only for Conquerors.' },
+  { icon: '👑', title: 'Conqueror Badge', desc: 'Exclusive crown badge displayed on the global leaderboard.' },
+  { icon: '🏆', title: 'Big Game Bonus', desc: 'Earn 2× gold during special in-game events and competitions.' },
 ];
 
 const COMPARE_ROWS: Array<{ label: string; free: string | boolean; pro: string | boolean }> = [
-  { label: 'Daily Gold Multiplier', free: '1×', pro: '2×' },
-  { label: 'Countries Per Day', free: '5', pro: 'Unlimited' },
-  { label: 'Quiz Turns', free: '10', pro: '20' },
+  { label: 'Daily Login Gold Multiplier', free: '1×', pro: '3×' },
+  { label: 'Daily Login Ticket Multiplier', free: '1×', pro: '3×' },
   { label: 'Leaderboard Badge', free: false, pro: true },
-  { label: 'Exclusive Avatars', free: false, pro: true },
-  { label: 'Advanced Analytics', free: false, pro: true },
+  { label: 'Unique Avatars', free: false, pro: true },
+  { label: 'Unique Quests', free: false, pro: true },
   { label: 'Early Feature Access', free: false, pro: true },
-  { label: 'Ad-Free Experience', free: false, pro: true },
+  { label: 'Play Offline', free: 'Flag only', pro: 'All quizzes' },
 ];
 
 const TESTIMONIALS = [
   {
-    text: 'Went from rank #847 to top 50 in a month. The bonus turns are genuinely game-changing.',
+    text: 'Went from rank #847 to top 50 in a month. The 2× gold boost is genuinely game-changing.',
     name: 'AtlasHunter_92',
     stars: 5,
   },
   {
-    text: 'The 2× gold boost paid for itself in a week. I now own 80+ countries and I\'m not stopping.',
+    text: 'The double tickets stack up fast. I now own 80+ countries and I\'m not stopping.',
     name: 'MapMaster_Pro',
     stars: 5,
   },
   {
-    text: 'Commander avatars are incredible. Worth it for the exclusives alone — I get compliments every match.',
+    text: 'Conqueror avatars are incredible. Worth it for the exclusives alone — I get compliments every match.',
     name: 'GeoConqueror',
     stars: 5,
   },
@@ -70,12 +149,12 @@ const TESTIMONIALS = [
 
 const FAQ_ITEMS = [
   {
-    q: 'When will I be charged?',
-    a: 'Your 7-day free trial begins immediately. You\'ll only be charged after the trial ends — we send a reminder 24h before.',
+    q: 'How does the Lifetime plan work?',
+    a: 'It\'s a one-time payment of $39.99 — no subscription, no renewals. You get permanent Conqueror access plus 100,000 gold and 30 tickets credited instantly.',
   },
   {
-    q: 'Can I cancel anytime?',
-    a: 'Absolutely. Cancel with one tap from Settings at any time, no questions asked. You keep access until the end of your billing period.',
+    q: 'Can I cancel my Monthly plan?',
+    a: 'Yes. Cancel with one tap from your App Store / Google Play subscription settings at any time. You keep Conqueror access until the end of your billing period.',
   },
   {
     q: 'Do I keep my items if I cancel?',
@@ -83,20 +162,82 @@ const FAQ_ITEMS = [
   },
   {
     q: 'What payment methods are accepted?',
-    a: 'Apple Pay, Google Play Billing, and all major credit cards. All payments are processed securely via the App Store / Play Store.',
+    a: 'All payments are processed securely via the App Store or Google Play Billing — no direct card details are ever stored by us.',
   },
 ];
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function PremiumScreen({ navigation }: { navigation?: any }) {
-  const { profile } = useAuth();
   const { ownedCountries } = useGame();
+  const { profile, purchaseConqueror } = useAuth();
   const insets = useSafeAreaInsets();
   const countdown = useCountdown(3 * 3600 + 47 * 60 + 22);
 
-  const [plan, setPlan] = useState<'annual' | 'monthly'>('annual');
+  const [plan, setPlan] = useState<'unlimited' | 'monthly'>('unlimited');
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [purchasing, setPurchasing] = useState(false);
+  const [iapReady, setIapReady] = useState(false);
+
+  // Initialize IAP and listen for purchase updates
+  useEffect(() => {
+    let purchaseListener: any;
+    let purchaseErrorListener: any;
+
+    (async () => {
+      const ready = await initIAP();
+      setIapReady(ready);
+
+      if (ready && IAP) {
+        // Listen for completed subscriptions
+        purchaseListener = IAP.purchaseUpdatedListener(async (purchase: any) => {
+          // console.log('[IAP] Subscription received:', purchase.productId);
+
+          // Determine plan from product ID
+          const purchasedPlan = purchase.productId.includes('monthly') ? 'monthly' : 'unlimited';
+
+          try {
+            // Activate conqueror on backend
+            await purchaseConqueror(purchasedPlan);
+
+            // Acknowledge the purchase
+            try {
+              await IAP.finishTransaction({ purchase, isConsumable: false });
+            } catch (ackErr) {
+              console.warn('[IAP] Acknowledge error:', ackErr);
+            }
+
+            Alert.alert(
+              '🎉 Welcome, Conqueror!',
+              purchasedPlan === 'unlimited'
+                ? 'You now have permanent Conqueror access plus 100,000 gold and 30 tickets!'
+                : 'Your monthly Conqueror subscription is active!',
+              [{ text: 'Awesome!', onPress: () => navigation?.goBack() }]
+            );
+          } catch (err: any) {
+            Alert.alert('Error', err.message ?? 'Failed to activate Conqueror status');
+          } finally {
+            setPurchasing(false);
+          }
+        });
+
+        purchaseErrorListener = IAP.purchaseErrorListener((err: any) => {
+          if (err?.code !== 'E_USER_CANCELLED') {
+            Alert.alert('Purchase Failed', err?.message ?? 'Please try again.');
+          }
+          setPurchasing(false);
+        });
+      }
+    })();
+
+    return () => {
+      purchaseListener?.remove?.();
+      purchaseErrorListener?.remove?.();
+      if (iapAvailable && IAP) {
+        IAP.endConnection?.();
+      }
+    };
+  }, [purchaseConqueror, navigation]);
 
   const countriesOwned = ownedCountries.length;
   const hookStat =
@@ -106,11 +247,65 @@ export default function PremiumScreen({ navigation }: { navigation?: any }) {
       ? `You've conquered ${countriesOwned} ${countriesOwned === 1 ? 'country' : 'countries'} so far.`
       : "You're just starting your conquest.";
 
+  async function handlePurchase() {
+    if (purchasing || profile?.is_conquerer) return;
+
+    setPurchasing(true);
+    try {
+      if (!iapReady) {
+        // IAP not available — show development message
+        Alert.alert(
+          'In-App Purchases',
+          'In-app subscriptions are only available in production builds.\n\n' +
+          'To test:\n' +
+          '1. Build with EAS: npx eas build\n' +
+          '2. Configure subscriptions in App Store Connect / Google Play Console\n\n' +
+          `Plan: ${plan === 'unlimited' ? 'Lifetime' : 'Monthly'}\n` +
+          `Price: ${plan === 'unlimited' ? '$39.99 once' : '$2.49 first month, then $4.99/mo'}`,
+          [{ text: 'OK', onPress: () => setPurchasing(false) }]
+        );
+        return;
+      }
+
+      const productId = plan === 'unlimited'
+        ? 'membership_lifetime'
+        : 'geoconquest_conqueror_monthly';
+
+      const planDetails = plan === 'unlimited'
+        ? 'Lifetime ($39.99 once) + 100K Gold + 30 Tickets'
+        : 'Monthly ($2.49 first month, then $4.99/mo)';
+
+      Alert.alert(
+        'Become a Conqueror',
+        `${planDetails}\n\nReady to claim your premium status?`,
+        [
+          { text: 'Cancel', style: 'cancel', onPress: () => setPurchasing(false) },
+          {
+            text: 'Purchase',
+            onPress: async () => {
+              try {
+                const started = await requestSubscription(productId);
+                if (!started) setPurchasing(false);
+                // Purchase listener will handle activation
+              } catch (err: any) {
+                Alert.alert('Purchase Failed', err.message ?? 'Please try again.');
+                setPurchasing(false);
+              }
+            },
+          },
+        ]
+      );
+    } catch (err: any) {
+      Alert.alert('Error', err.message ?? 'Something went wrong.');
+      setPurchasing(false);
+    }
+  }
+
   return (
     <View style={styles.root}>
       {/* ── Urgency banner ─────────────────────────────────────────────────── */}
       <View style={[styles.urgencyBar, { paddingTop: insets.top + 6 }]}>
-        <Text style={styles.urgencyText}>⚡ 50% off first month — expires in </Text>
+        <Text style={styles.urgencyText}>Monthly plan — first month 50% off — expires in </Text>
         <Text style={styles.urgencyTimer}>{countdown}</Text>
       </View>
 
@@ -128,13 +323,20 @@ export default function PremiumScreen({ navigation }: { navigation?: any }) {
 
         {/* ── Hero ───────────────────────────────────────────────────────── */}
         <View style={styles.hero}>
-          <Text style={styles.heroCrown}>👑</Text>
-          <Text style={styles.heroTitle}>Become a{'\n'}World Commander</Text>
+          <Image
+            source={require('../../assets/avatars/conqueror.png')}
+            style={styles.heroConqueror}
+            resizeMode="contain"
+          />
+          <Text style={styles.heroTitle}>Become a{'\n'}World Conqueror</Text>
           <Text style={styles.heroSub}>
             Master geography. Dominate the leaderboard.{'\n'}Conquer the world without limits.
           </Text>
           <View style={styles.joinPill}>
-            <Text style={styles.joinText}>🌍  Join 12,000+ Premium Explorers</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Image source={require('../../assets/avatars/globe.png')} style={{ width: 16, height: 16 }} resizeMode="contain" />
+              <Text style={styles.joinText}>Join 1,200 Premium Explorers</Text>
+            </View>
           </View>
         </View>
 
@@ -143,18 +345,21 @@ export default function PremiumScreen({ navigation }: { navigation?: any }) {
           <Text style={styles.hookText}>
             {hookStat}{' '}
             <Text style={styles.hookHighlight}>
-              Commander-tier explorers own 3× more territory
+              Conqueror-tier explorers own 3× more territory
             </Text>
             {' '}and climb the leaderboard 5× faster than free players.
           </Text>
         </View>
 
         {/* ── Features ───────────────────────────────────────────────────── */}
-        <Text style={styles.sectionTitle}>Everything in Commander</Text>
+        <Text style={styles.sectionTitle}>Everything in Conqueror</Text>
         <View style={styles.featureGrid}>
           {FEATURES.map((f, i) => (
             <View key={i} style={styles.featureCard}>
-              <Text style={styles.featureIcon}>{f.icon}</Text>
+              {FEATURE_ICON_IMAGES[f.icon]
+                ? <Image source={FEATURE_ICON_IMAGES[f.icon]} style={{ width: 26, height: 26, marginBottom: 8 }} resizeMode="contain" />
+                : <Text style={styles.featureIcon}>{f.icon}</Text>
+              }
               <Text style={styles.featureTitle}>{f.title}</Text>
               <Text style={styles.featureDesc}>{f.desc}</Text>
             </View>
@@ -162,12 +367,12 @@ export default function PremiumScreen({ navigation }: { navigation?: any }) {
         </View>
 
         {/* ── Comparison ─────────────────────────────────────────────────── */}
-        <Text style={styles.sectionTitle}>Free vs Commander</Text>
+        <Text style={styles.sectionTitle}>Free vs Conqueror</Text>
         <View style={styles.table}>
           <View style={[styles.tableRow, styles.tableHeaderRow]}>
             <Text style={[styles.tableCell, styles.tableLabelCol, styles.tableHeaderText]}>Feature</Text>
             <Text style={[styles.tableCellCenter, styles.tableHeaderText]}>Free</Text>
-            <Text style={[styles.tableCellCenter, styles.tableHeaderTextPro]}>Commander</Text>
+            <Text style={[styles.tableCellCenter, styles.tableHeaderTextPro]}>Conqueror</Text>
           </View>
           {COMPARE_ROWS.map((row, i) => (
             <View key={i} style={[styles.tableRow, i % 2 === 1 && styles.tableRowAlt]}>
@@ -193,24 +398,32 @@ export default function PremiumScreen({ navigation }: { navigation?: any }) {
         {/* ── Pricing ────────────────────────────────────────────────────── */}
         <Text style={styles.sectionTitle}>Choose Your Plan</Text>
         <View style={styles.pricingRow}>
-          {/* Annual */}
+          {/* Unlimited */}
           <TouchableOpacity
-            style={[styles.priceCard, plan === 'annual' && styles.priceCardSelected]}
-            onPress={() => setPlan('annual')}
+            style={[styles.priceCard, plan === 'unlimited' && styles.priceCardSelected]}
+            onPress={() => setPlan('unlimited')}
             activeOpacity={0.85}
           >
             <View style={styles.popularBadge}>
               <Text style={styles.popularText}>MOST POPULAR</Text>
             </View>
-            <Text style={styles.planName}>Annual</Text>
+            <Text style={styles.planName}>Lifetime</Text>
             <Text style={styles.planPrice}>
-              $39.99<Text style={styles.planPer}>/yr</Text>
+              $39.99<Text style={styles.planPer}> once</Text>
             </Text>
-            <Text style={styles.planBreakdown}>Just $0.77/week</Text>
+            <Text style={styles.planBreakdown}>One-time payment · Lifetime access</Text>
             <View style={styles.savingBadge}>
-              <Text style={styles.savingText}>SAVE 33%</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Text style={styles.savingText}>+100K</Text>
+                <Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 14, height: 14 }} resizeMode="contain" />
+                <Text style={styles.savingText}>+30</Text>
+                <Image
+                  source={require('../../assets/avatars/raffle_ticket.png')}
+                  style={{ width: 14, height: 14 }}
+                  resizeMode="contain"
+                />
+              </View>
             </View>
-            <Text style={styles.planOldPrice}>Was $59.88/yr</Text>
           </TouchableOpacity>
 
           {/* Monthly */}
@@ -223,29 +436,29 @@ export default function PremiumScreen({ navigation }: { navigation?: any }) {
             <Text style={styles.planPrice}>
               $2.49<Text style={styles.planPer}>/mo</Text>
             </Text>
-            <Text style={styles.planBreakdown}>First month 50% off</Text>
+            <Text style={styles.planBreakdown}>First month special</Text>
             <Text style={styles.planOldPrice}>Then $4.99/mo</Text>
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.trialNote}>7-day free trial · Cancel anytime · No card required to start</Text>
+        <Text style={styles.trialNote}>Processed securely via App Store / Google Play</Text>
 
         {/* ── Trust signals ──────────────────────────────────────────────── */}
         <View style={styles.trustRow}>
           {[
             { icon: 'shield-checkmark' as const, label: 'Secure Payment' },
-            { icon: 'close-circle' as const, label: 'Cancel Anytime' },
+            { icon: 'infinite' as const, label: 'Lifetime Access' },
             { icon: 'flash' as const, label: 'Instant Access' },
           ].map((t, i) => (
             <View key={i} style={styles.trustItem}>
-              <Ionicons name={t.icon} size={18} color="#4D96FF" />
+              <Ionicons name={t.icon} size={18} color="#9B59B6" />
               <Text style={styles.trustText}>{t.label}</Text>
             </View>
           ))}
         </View>
 
         {/* ── Testimonials ───────────────────────────────────────────────── */}
-        <Text style={styles.sectionTitle}>What Commanders Say</Text>
+        <Text style={styles.sectionTitle}>What Conquerors Say</Text>
         <View style={styles.starsRow}>
           <Text style={styles.starsGold}>★★★★★</Text>
           <Text style={styles.ratingLabel}>  4.9 / 5 from 2,000+ commanders</Text>
@@ -281,26 +494,45 @@ export default function PremiumScreen({ navigation }: { navigation?: any }) {
         <View style={styles.finalBlock}>
           <Text style={styles.finalTitle}>Ready to conquer the world?</Text>
           <Text style={styles.finalSub}>
-            Start free. No card required. Cancel before your trial ends and you won't be charged a thing.
+            Join 1,200 Conquerors and claim your spot on the global leaderboard.
           </Text>
         </View>
       </ScrollView>
 
       {/* ── Sticky CTA bar ─────────────────────────────────────────────────── */}
       <View style={[styles.stickyBar, { paddingBottom: Math.max(insets.bottom, 12) + 8 }]}>
-        <TouchableOpacity style={styles.ctaPrimary} activeOpacity={0.85}>
-          <Text style={styles.ctaPrimaryLabel}>Start 7-Day Free Trial</Text>
+        <TouchableOpacity
+          style={[styles.ctaPrimary, (purchasing || profile?.is_conquerer) && styles.ctaDisabled]}
+          onPress={handlePurchase}
+          disabled={purchasing || profile?.is_conquerer}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.ctaPrimaryLabel}>
+            {profile?.is_conquerer
+              ? '✓ Conqueror Active'
+              : purchasing
+              ? 'Processing...'
+              : plan === 'unlimited'
+              ? 'Get Lifetime Access'
+              : 'Start Monthly'}
+          </Text>
           <Text style={styles.ctaPlanNote}>
-            {plan === 'annual' ? 'Annual · $39.99/yr after trial' : 'Monthly · $2.49 first month'}
+            {profile?.is_conquerer
+              ? 'Enjoy your premium status'
+              : !iapReady
+              ? 'Build with EAS to enable purchases'
+              : plan === 'unlimited'
+              ? '$39.99 · Lifetime · +100K Gold + 30 Tickets'
+              : '$2.49 first month, then $4.99/mo'}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.ctaSwitch}
-          onPress={() => setPlan(plan === 'annual' ? 'monthly' : 'annual')}
+          onPress={() => setPlan(plan === 'unlimited' ? 'monthly' : 'unlimited')}
           activeOpacity={0.7}
         >
           <Text style={styles.ctaSwitchText}>
-            {plan === 'annual' ? 'Switch to Monthly instead' : 'Switch to Annual & Save 33%'}
+            {plan === 'unlimited' ? 'Switch to Monthly ($4.99/mo)' : 'Switch to Lifetime — $39.99 once'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -315,17 +547,17 @@ const styles = StyleSheet.create({
 
   // Urgency
   urgencyBar: {
-    backgroundColor: '#1a0a00',
+    backgroundColor: '#120820',
     borderBottomWidth: 1,
-    borderBottomColor: '#FF8C00',
+    borderBottomColor: '#7B2FBE',
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingBottom: 8,
   },
-  urgencyText: { color: '#FFA500', fontSize: 13, fontWeight: '600' },
-  urgencyTimer: { color: '#FFD700', fontSize: 13, fontWeight: 'bold' },
+  urgencyText: { color: '#9B59B6', fontSize: 13, fontWeight: '600' },
+  urgencyTimer: { color: '#9B59B6', fontSize: 13, fontWeight: 'bold' },
 
   // Scroll
   scroll: { flex: 1 },
@@ -341,12 +573,12 @@ const styles = StyleSheet.create({
   // Hero
   hero: {
     alignItems: 'center',
-    paddingVertical: 28,
+    paddingVertical: 12,
     paddingHorizontal: 8,
   },
-  heroCrown: { fontSize: 56, marginBottom: 12 },
+  heroConqueror: { width: 220, height: 270, marginBottom: 8 },
   heroTitle: {
-    color: '#FFD700',
+    color: '#9B59B6',
     fontSize: 30,
     fontWeight: 'bold',
     textAlign: 'center',
@@ -361,10 +593,10 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   joinPill: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#1a0a2e',
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#2a2a4e',
+    borderColor: '#7B2FBE',
     paddingHorizontal: 18,
     paddingVertical: 8,
   },
@@ -372,17 +604,17 @@ const styles = StyleSheet.create({
 
   // Hook
   hookCard: {
-    backgroundColor: '#0e0e1f',
+    backgroundColor: '#120820',
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#FFD70033',
+    borderColor: '#7B2FBE33',
     borderLeftWidth: 3,
-    borderLeftColor: '#FFD700',
+    borderLeftColor: '#7B2FBE',
     padding: 16,
     marginBottom: 28,
   },
   hookText: { color: '#bbb', fontSize: 14, lineHeight: 21 },
-  hookHighlight: { color: '#FFD700', fontWeight: '700' },
+  hookHighlight: { color: '#9B59B6', fontWeight: '700' },
 
   // Section title
   sectionTitle: {
@@ -401,14 +633,14 @@ const styles = StyleSheet.create({
   },
   featureCard: {
     width: (SCREEN_W - 42) / 2,
-    backgroundColor: '#0e0e1f',
+    backgroundColor: '#120820',
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#2a2a4e',
+    borderColor: '#7B2FBE',
     padding: 14,
   },
   featureIcon: { fontSize: 26, marginBottom: 8 },
-  featureTitle: { color: '#FFD700', fontSize: 13, fontWeight: 'bold', marginBottom: 4 },
+  featureTitle: { color: '#9B59B6', fontSize: 13, fontWeight: 'bold', marginBottom: 4 },
   featureDesc: { color: '#888', fontSize: 12, lineHeight: 17 },
 
   // Comparison table
@@ -437,11 +669,11 @@ const styles = StyleSheet.create({
   tableCellCenter: { flex: 1, textAlign: 'center', fontSize: 12 },
   tableCellCenterView: { flex: 1, alignItems: 'center' },
   tableHeaderText: { color: '#888', fontWeight: 'bold', fontSize: 11, textAlign: 'center' },
-  tableHeaderTextPro: { color: '#FFD700', fontWeight: 'bold', fontSize: 11, textAlign: 'center', flex: 1 },
+  tableHeaderTextPro: { color: '#9B59B6', fontWeight: 'bold', fontSize: 11, textAlign: 'center', flex: 1 },
   tableFreeVal: { color: '#666', fontSize: 12 },
-  tableProVal: { color: '#FFD700', fontSize: 12, fontWeight: '600' },
+  tableProVal: { color: '#9B59B6', fontSize: 12, fontWeight: '600' },
   checkYes: { color: '#6BCB77', fontSize: 14, fontWeight: 'bold' },
-  checkPro: { color: '#FFD700', fontSize: 14, fontWeight: 'bold' },
+  checkPro: { color: '#9B59B6', fontSize: 14, fontWeight: 'bold' },
   checkNo: { color: '#444', fontSize: 14 },
 
   // Pricing
@@ -449,6 +681,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     marginBottom: 14,
+    marginTop: 16,
+    alignItems: 'stretch',
   },
   priceCard: {
     flex: 1,
@@ -461,28 +695,26 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   priceCardSelected: {
-    borderColor: '#FFD700',
-    backgroundColor: '#141420',
-    shadowColor: '#FFD700',
-    shadowOpacity: 0.15,
+    borderColor: '#7B2FBE',
+    backgroundColor: '#120820',
+    shadowColor: '#7B2FBE',
+    shadowOpacity: 0.25,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 2 },
     elevation: 6,
   },
-  priceCardMonthly: {
-    marginTop: 16,
-  },
+  priceCardMonthly: {},
   popularBadge: {
     position: 'absolute',
     top: -12,
-    backgroundColor: '#FFD700',
+    backgroundColor: '#7B2FBE',
     paddingHorizontal: 10,
     paddingVertical: 3,
     borderRadius: 10,
   },
-  popularText: { color: '#0a0a1a', fontSize: 9, fontWeight: 'bold' },
+  popularText: { color: '#fff', fontSize: 9, fontWeight: 'bold' },
   planName: { color: '#aaa', fontSize: 12, fontWeight: '600', marginTop: 8, marginBottom: 6 },
-  planPrice: { color: '#FFD700', fontSize: 26, fontWeight: 'bold' },
+  planPrice: { color: '#9B59B6', fontSize: 26, fontWeight: 'bold' },
   planPer: { fontSize: 14, fontWeight: 'normal', color: '#888' },
   planBreakdown: { color: '#6BCB77', fontSize: 11, fontWeight: '600', marginTop: 4 },
   savingBadge: {
@@ -495,7 +727,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   savingText: { color: '#6BCB77', fontSize: 10, fontWeight: 'bold' },
-  planOldPrice: { color: '#555', fontSize: 11, marginTop: 4, textDecorationLine: 'line-through' },
+  planOldPrice: { color: '#888', fontSize: 11, marginTop: 4 },
 
   trialNote: {
     color: '#666',
@@ -519,7 +751,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
-  starsGold: { color: '#FFD700', fontSize: 18 },
+  starsGold: { color: '#9B59B6', fontSize: 18 },
   ratingLabel: { color: '#888', fontSize: 12 },
   testimonialCard: {
     backgroundColor: '#0e0e1f',
@@ -531,8 +763,8 @@ const styles = StyleSheet.create({
   },
   testimonialQuote: { color: '#ccc', fontSize: 13, lineHeight: 19, marginBottom: 10, fontStyle: 'italic' },
   testimonialFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  testimonialName: { color: '#FFD700', fontSize: 12, fontWeight: '600' },
-  testimonialStars: { color: '#FFD700', fontSize: 13 },
+  testimonialName: { color: '#9B59B6', fontSize: 12, fontWeight: '600' },
+  testimonialStars: { color: '#9B59B6', fontSize: 13 },
 
   // FAQ
   faqItem: {
@@ -554,7 +786,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     marginTop: 12,
   },
-  finalTitle: { color: '#FFD700', fontSize: 20, fontWeight: 'bold', textAlign: 'center', marginBottom: 10 },
+  finalTitle: { color: '#9B59B6', fontSize: 20, fontWeight: 'bold', textAlign: 'center', marginBottom: 10 },
   finalSub: { color: '#888', fontSize: 13, textAlign: 'center', lineHeight: 20 },
 
   // Sticky CTA
@@ -566,14 +798,17 @@ const styles = StyleSheet.create({
     paddingTop: 12,
   },
   ctaPrimary: {
-    backgroundColor: '#FFD700',
+    backgroundColor: '#7B2FBE',
     borderRadius: 14,
     paddingVertical: 14,
     alignItems: 'center',
     marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#9B59B6',
   },
-  ctaPrimaryLabel: { color: '#0a0a1a', fontSize: 16, fontWeight: 'bold' },
-  ctaPlanNote: { color: '#0a0a1a', fontSize: 11, opacity: 0.7, marginTop: 2 },
+  ctaPrimaryLabel: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  ctaPlanNote: { color: '#ddd', fontSize: 11, opacity: 0.8, marginTop: 2 },
+  ctaDisabled: { opacity: 0.6 },
   ctaSwitch: { alignItems: 'center', paddingVertical: 4 },
   ctaSwitchText: { color: '#888', fontSize: 12 },
 });

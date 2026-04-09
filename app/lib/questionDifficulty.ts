@@ -396,6 +396,18 @@ export function buildNightmareQuestions(all: Country[]): MillionaireQuestion[] {
   for (let d = 1; d <= 10; d++) buckets[d] = [];
   for (const { country, diff } of withDiff) buckets[diff].push(country);
 
+  // Countries without shape data in world-atlas TopoJSON — same set as ShapeQuizScreen
+  const NO_SHAPE = new Set(['GP', 'MQ', 'YT', 'RE', 'PM', 'BL', 'MF', 'CX', 'CC', 'HM', 'NF', 'CK', 'NU', 'TK', 'WF', 'AX', 'SJ', 'BV', 'TF', 'UM', 'GG', 'JE', 'IM', 'GI', 'FK', 'FJ']);
+  // Pool of all countries that have a valid renderable shape — any difficulty
+  const shapeEligible = all.filter(c => c.area > 1000 && !NO_SHAPE.has(c.cca2));
+  // Separate bucket for shape subjects so any eligible country can appear (rotated)
+  const shapeBuckets: Record<number, Country[]> = {};
+  for (let d = 1; d <= 10; d++) shapeBuckets[d] = [];
+  for (const c of shapeEligible) {
+    const d = getCountryDifficulty(c);
+    shapeBuckets[d].push(c);
+  }
+
   const usedCca2 = new Set<string>();
   const questions: MillionaireQuestion[] = [];
 
@@ -410,18 +422,23 @@ export function buildNightmareQuestions(all: Country[]): MillionaireQuestion[] {
     const diff = 10;
 
     for (const type of typeChoices) {
-      const subjectPool = getCandidatesFromBuckets(buckets, diff, 20, usedCca2);
-      if (subjectPool.length === 0) continue;
-
-      const subject = subjectPool[Math.floor(Math.random() * subjectPool.length)];
-
       if (type === 'flag') {
+        const subjectPool = getCandidatesFromBuckets(buckets, diff, 20, usedCca2);
+        if (subjectPool.length === 0) continue;
+        const subject = subjectPool[Math.floor(Math.random() * subjectPool.length)];
         question = buildFlagQuestion(subject, all, diff, goldReward);
         usedCca2.add(subject.cca2);
         break;
       }
 
       if (type === 'shape') {
+        // Use the shape-eligible pool (any difficulty); prefer higher diff but fall back freely
+        const subjectPool = getCandidatesFromBuckets(shapeBuckets, diff, 20, usedCca2);
+        const pool = subjectPool.length > 0
+          ? subjectPool
+          : shapeEligible.filter(c => !usedCca2.has(c.cca2));
+        if (pool.length === 0) continue;
+        const subject = pool[Math.floor(Math.random() * pool.length)];
         question = buildShapeQuestion(subject, all, diff, goldReward);
         usedCca2.add(subject.cca2);
         break;

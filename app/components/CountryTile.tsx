@@ -1,6 +1,7 @@
 import React from 'react';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Country, getCountryPrice } from '../types';
+import GoldCoinIcon from './GoldCoinIcon';
 
 interface Props {
   country: Country;
@@ -30,9 +31,10 @@ export default function CountryTile({ country, owned, canAfford, onPress }: Prop
         {owned ? (
           <Text style={styles.ownedLabel}>Owned ✓</Text>
         ) : (
-          <Text style={[styles.price, !canAfford && styles.priceCantAfford]}>
-            🪙 {price}
-          </Text>
+          <View style={styles.priceRow}>
+            <GoldCoinIcon size={12} style={{ opacity: canAfford ? 1 : 0.5 }} />
+            <Text style={[styles.priceText, !canAfford && styles.priceCantAfford]}>{price}</Text>
+          </View>
         )}
       </View>
     </TouchableOpacity>
@@ -62,6 +64,7 @@ const styles = StyleSheet.create({
   info: { padding: 8 },
   name: { color: '#fff', fontSize: 12, fontWeight: '600' },
   ownedLabel: { color: '#4CAF50', fontSize: 11, marginTop: 2 },
-  price: { color: '#FFD700', fontSize: 11, marginTop: 2 },
+  priceRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  priceText: { color: '#FFD700', fontSize: 11 },
   priceCantAfford: { color: '#555' },
 });

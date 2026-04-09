@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Image,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -9,30 +10,108 @@ import {
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { useAlert } from '../context/AlertContext';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 import ConfettiCannon from 'react-native-confetti-cannon';
 import { Ionicons } from '@expo/vector-icons';
 import AvatarDisplay from '../components/AvatarDisplay';
-import { playPurchase, playDing } from '../lib/audio';
+import { playPurchasedItem, playDing } from '../lib/audio';
 import { supabase } from '../lib/supabase';
 import { AVATAR_CHARACTERS, FLAG_OPTIONS, FlagOption, CUSTOM_AVATARS } from '../lib/avatarData';
+import { getLevelInfo } from '../lib/xpSystem';
 import { ACHIEVEMENTS_DATA } from '../lib/achievementsData';
+import { CARD_PALETTES, resolveCardState } from '../lib/cardStates';
 import { fetchCountries } from '../lib/countryData';
 import { cca2ToFlagEmoji } from '../types';
 import CrateShopScreen from './CrateShopScreen';
 
 type Tab = 'avatars' | 'flags' | 'crates';
 
+const REWARD_AVATAR_TO_ACHIEVEMENT_IDS = ACHIEVEMENTS_DATA.reduce((map, achievement) => {
+  const rewardItems = achievement.rewardItems ?? (achievement.rewardItem ? [achievement.rewardItem] : []);
+  for (const rewardItem of rewardItems) {
+    if (rewardItem.type !== 'avatar') continue;
+    const existing = map.get(rewardItem.itemId) ?? [];
+    map.set(rewardItem.itemId, [...existing, achievement.id]);
+  }
+  return map;
+}, new Map<string, string[]>());
+
 export default function AvatarShopScreen() {
   const { profile, setUsername, purchaseAvatarItem } = useAuth();
-  const { showAlert } = useAlert();
+  const { showAlert, showNotEnoughGoldAlert, showPremiumAlert, showLevelAlert, showUniqueAlert } = useAlert();
+  const navigation = useNavigation<any>();
   const [activeTab, setActiveTab] = useState<Tab>('avatars');
   const [unlockedItems, setUnlockedItems] = useState<Set<string>>(new Set());
   const [countryFlags, setCountryFlags] = useState<FlagOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
+
+  // Preload all custom avatars on mount
+  useEffect(() => {
+    const avatarSources = [
+      require('../../assets/avatars/avatar_1.png'),
+      require('../../assets/avatars/avatar_2.png'),
+      require('../../assets/avatars/avatar_3.png'),
+      require('../../assets/avatars/monkey_1.png'),
+      require('../../assets/avatars/monkey_2.png'),
+      require('../../assets/avatars/monkey_3.png'),
+      require('../../assets/avatars/josh_1.png'),
+      require('../../assets/avatars/josh_2.png'),
+      require('../../assets/avatars/josh_3.png'),
+      require('../../assets/avatars/chill_lady.png'),
+      require('../../assets/avatars/incredible_lady.png'),
+      require('../../assets/avatars/dayum_gurl.png'),
+      require('../../assets/avatars/angry_man.png'),
+      require('../../assets/avatars/osi_boi.png'),
+      require('../../assets/avatars/beast_mark.png'),
+      require('../../assets/avatars/freegle.png'),
+      require('../../assets/avatars/euro_bro.png'),
+      require('../../assets/avatars/triboi.png'),
+      require('../../assets/avatars/dir.png'),
+      require('../../assets/avatars/hurt.png'),
+      require('../../assets/avatars/nana.png'),
+      require('../../assets/avatars/silly_guy.png'),
+      require('../../assets/avatars/shovel_man.png'),
+      require('../../assets/avatars/threek.png'),
+      require('../../assets/avatars/Vorvir.png'),
+      require('../../assets/avatars/divine_high_king.png'),
+      require('../../assets/avatars/piga.png'),
+      require('../../assets/avatars/divine_high_queen.png'),
+      require('../../assets/avatars/cheezus.png'),
+      require('../../assets/avatars/micro_pp.png'),
+      require('../../assets/avatars/i_heart_420.png'),
+      require('../../assets/avatars/conqueror.png'),
+      require('../../assets/avatars/smart_bulb.png'),
+      require('../../assets/avatars/explorer_male.png'),
+      require('../../assets/avatars/explorer_female.png'),
+      require('../../assets/avatars/explorer_dog.png'),
+      require('../../assets/avatars/explorer_cat.png'),
+      require('../../assets/avatars/skull.png'),
+      require('../../assets/avatars/bullseye.png'),
+      require('../../assets/avatars/vhs_demon.png'),
+      require('../../assets/avatars/goblin_energy_drink.png'),
+      require('../../assets/avatars/possessed_cart.png'),
+      require('../../assets/avatars/glitched_jester.png'),
+      require('../../assets/avatars/doomscroll_skull.png'),
+      require('../../assets/avatars/wifi_parasite.png'),
+      require('../../assets/avatars/cry_laugh_mask.png'),
+      require('../../assets/avatars/tax_ghost.png'),
+      require('../../assets/avatars/rotten_crown.png'),
+      require('../../assets/avatars/suspicious_duck.png'),
+      require('../../assets/avatars/sleepy_wizard.png'),
+      require('../../assets/avatars/meme_relic_frog.png'),
+      require('../../assets/avatars/cursed_usb_idol.png'),
+      require('../../assets/avatars/cat_knight.png'),
+    ];
+    // Prefetch all avatar images - require() returns numeric IDs for bundled assets
+    avatarSources.forEach(src => {
+      if (typeof src === 'number') {
+        Image.prefetch(`asset:${src}`).catch(() => {});
+      }
+    });
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -66,28 +145,24 @@ export default function AvatarShopScreen() {
         data.forEach(row => unlockedSet.add(row.item_id));
       }
 
-      // Hack to retroactively fix the missed achievement reward bug:
       const { data: achData } = await supabase
         .from('user_achievements')
         .select('achievement_id')
         .eq('user_id', profile.id);
+      const claimedAchievementIds = new Set((achData ?? []).map((a: any) => a.achievement_id));
 
-      if (achData) {
-        const achIds = new Set(achData.map((a: any) => a.achievement_id));
-        for (const ach of ACHIEVEMENTS_DATA) {
-          if (ach.rewardItem && achIds.has(ach.id) && !unlockedSet.has(ach.rewardItem.itemId)) {
-            const { error: insertErr } = await supabase.from('user_unlocked_items').insert({
-               user_id: profile.id,
-               item_id: ach.rewardItem.itemId,
-               item_type: ach.rewardItem.type
-            });
-            if (!insertErr || insertErr.code === '23505') {
-              unlockedSet.add(ach.rewardItem.itemId);
-            } else {
-              console.warn('[AvatarShop] Failed to retroactively unlock reward item:', insertErr.message);
-            }
-          }
-        }
+      const invalidRewardAvatars = Array.from(unlockedSet).filter((itemId) => {
+        const requiredAchievements = REWARD_AVATAR_TO_ACHIEVEMENT_IDS.get(itemId);
+        if (!requiredAchievements) return false;
+        return !requiredAchievements.some((achievementId) => claimedAchievementIds.has(achievementId));
+      });
+      if (invalidRewardAvatars.length > 0) {
+        await supabase
+          .from('user_unlocked_items')
+          .delete()
+          .eq('user_id', profile.id)
+          .in('item_id', invalidRewardAvatars);
+        invalidRewardAvatars.forEach((itemId) => unlockedSet.delete(itemId));
       }
 
       setUnlockedItems(unlockedSet);
@@ -98,10 +173,10 @@ export default function AvatarShopScreen() {
     }
   }
 
-  async function handleItemPress(itemType: 'avatar' | 'flag', emoji: string, price: number, isPremium: boolean) {
+  async function handleItemPress(itemType: 'avatar' | 'flag', emoji: string, price: number, isPremium: boolean, isQuestOnly = false) {
     if (!profile) return;
 
-    const isUnlocked = !isPremium || unlockedItems.has(emoji) || (itemType === 'flag' && profile.avatar_flag === emoji);
+    const isUnlocked = (!isPremium && !isQuestOnly) || unlockedItems.has(emoji) || (itemType === 'flag' && profile.avatar_flag === emoji);
     
     // Check if it's currently equipped
     const isEquippedAvatar = itemType === 'avatar' && profile.avatar_emoji === emoji;
@@ -128,7 +203,10 @@ export default function AvatarShopScreen() {
     } else {
       // Purchase flow
       if (profile.gold_balance < price) {
-        showAlert({ title: 'Not Enough Gold', message: `You need 🪙 ${price} gold.` });
+        const itemNode = itemType === 'avatar'
+          ? <AvatarDisplay avatarId={emoji} size={72} />
+          : <Text style={{ fontSize: 56 }}>{emoji}</Text>;
+        showNotEnoughGoldAlert({ itemNode, onBuyGold: () => {} });
         return;
       }
 
@@ -136,7 +214,7 @@ export default function AvatarShopScreen() {
       try {
         await purchaseAvatarItem(itemType, emoji, price);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        playPurchase();
+        playPurchasedItem();
         setShowConfetti(true);
         setTimeout(() => setShowConfetti(false), 3000);
         setUnlockedItems(prev => new Set(prev).add(emoji));
@@ -154,7 +232,9 @@ export default function AvatarShopScreen() {
     const symbols = FLAG_OPTIONS.filter(f => f.category !== 'country');
     return [...symbols, ...countryFlags];
   }, [countryFlags]);
-  const listData = activeTab === 'avatars' ? [...AVATAR_CHARACTERS, ...CUSTOM_AVATARS] : flagListData;
+  const listData = activeTab === 'avatars'
+    ? CUSTOM_AVATARS.filter(a => !a.cosmetic && (!a.questOnly || unlockedItems.has(a.key)))
+    : flagListData;
   const itemType = activeTab === 'avatars' ? 'avatar' : 'flag';
 
   return (
@@ -163,11 +243,12 @@ export default function AvatarShopScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>Avatar Shop</Text>
         <View style={styles.goldBadge}>
-          <Text style={styles.goldText}>💰 {profile?.gold_balance ?? 0}</Text>
+          <Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 16, height: 16 }} resizeMode="contain" />
+          <Text style={styles.goldText}>{profile?.gold_balance ?? 0}</Text>
         </View>
       </View>
 
-      <Text style={styles.subtitle}>Customize your explorer profile on the leaderboard.</Text>
+      <Text style={styles.subtitle}>Customize your explorer profile. Crown = Conqueror only</Text>
 
       {/* Tabs */}
       <View style={styles.tabContainer}>
@@ -176,7 +257,7 @@ export default function AvatarShopScreen() {
           onPress={() => setActiveTab('avatars')}
         >
           <Text style={[styles.tabText, activeTab === 'avatars' && styles.tabTextActive]}>
-            🧑 Characters
+            Characters
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -184,7 +265,7 @@ export default function AvatarShopScreen() {
           onPress={() => setActiveTab('flags')}
         >
           <Text style={[styles.tabText, activeTab === 'flags' && styles.tabTextActive]}>
-            🏳️ Flags & Badges
+            Flags & Badges
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -192,7 +273,7 @@ export default function AvatarShopScreen() {
           onPress={() => setActiveTab('crates')}
         >
           <Text style={[styles.tabText, activeTab === 'crates' && styles.tabTextActive]}>
-            📦 Crates
+            Crates
           </Text>
         </TouchableOpacity>
       </View>
@@ -215,25 +296,36 @@ export default function AvatarShopScreen() {
               contentContainerStyle={styles.listContent}
               columnWrapperStyle={styles.row}
               renderItem={({ item }) => {
-                const typedItem = item as typeof AVATAR_CHARACTERS[0] & { requiresId?: string; collection?: string; questOnly?: boolean };
-                const itemKey = typedItem.emoji || (typedItem as any).key;
-                const isUnlocked = !typedItem.isPremium || unlockedItems.has(itemKey) || (itemType === 'flag' && profile?.avatar_flag === itemKey);
+                const typedItem = item as typeof AVATAR_CHARACTERS[0] & { requiresId?: string; collection?: string; questOnly?: boolean; requiresLevel?: number; isPremiumSubscription?: boolean };
+                const itemKey = typedItem.emoji || (item as any).key;
+                const isQuestOnly = !!(typedItem as any).questOnly;
+                const isUnlocked = (!typedItem.isPremium && !isQuestOnly) || unlockedItems.has(itemKey) || (itemType === 'flag' && profile?.avatar_flag === itemKey);
                 const isEquipped = itemType === 'avatar'
                   ? profile?.avatar_emoji === itemKey
                   : profile?.avatar_flag === itemKey;
-                const isQuestOnly = !!(typedItem as any).questOnly;
 
-                // Tier check
+                // Resolve card state using the unified system
+                const playerLevel = getLevelInfo(profile?.xp ?? 0).level;
+                const cs = resolveCardState({
+                  isUnlocked,
+                  isSubscriptionLocked: !!typedItem.isPremiumSubscription,
+                  requiredLevel: typedItem.requiresLevel,
+                  playerLevel,
+                  isQuestOnly,
+                });
+                const cp = CARD_PALETTES[cs.primaryState];
+                const bp = CARD_PALETTES[cs.badgeState];
+
+                // Tier check (separate internal mechanic, not part of the 4-state system)
                 let meetsRequirement = true;
                 let requirementName = '';
-                if (typedItem.requiresId && !isUnlocked) {
+                if (typedItem.requiresId && !isUnlocked && cs.states.length === 0) {
                    meetsRequirement = unlockedItems.has(typedItem.requiresId);
                    if (!meetsRequirement) {
                       const reqAvatar = AVATAR_CHARACTERS.find(a => a.emoji === typedItem.requiresId) || (listData as any[]).find(a => a.emoji === typedItem.requiresId) || (listData as any[]).find(a => a.key === typedItem.requiresId);
                       requirementName = reqAvatar?.label || 'Previous Tier';
                    }
                 }
-
                 const isLockedByTier = !meetsRequirement;
 
               return (
@@ -241,26 +333,46 @@ export default function AvatarShopScreen() {
                   style={[
                     styles.itemCard,
                     isEquipped && styles.itemCardEquipped,
-                    (!isUnlocked && !isLockedByTier && !isQuestOnly) && styles.itemCardLocked,
                     isLockedByTier && styles.itemCardTierLocked,
-                    (isQuestOnly && !isUnlocked) && styles.itemCardQuestOnly,
+                    (!isUnlocked && !isLockedByTier && cs.states.length === 0) && styles.itemCardLocked,
+                    cs.states.length > 0 && !isEquipped && { backgroundColor: cp.cardBg, borderColor: cp.cardBorder },
                   ]}
                   onPress={() => {
+                    if (cs.isSubscriptionLocked) {
+                        showPremiumAlert({
+                          itemNode: <AvatarDisplay avatarId={itemKey} size={72} />,
+                          itemName: typedItem.label,
+                          onUpgrade: () => navigation.getParent()?.navigate('Premium'),
+                        });
+                        return;
+                    }
+                    if (cs.isLevelLocked) {
+                        showLevelAlert({ requiredLevel: typedItem.requiresLevel ?? 0, itemName: typedItem.label });
+                        return;
+                    }
                     if (isLockedByTier) {
-                        showAlert({ title: 'Locked', message: `You must own ${requirementName} before you can purchase this item.` });
+                        showAlert({
+                          variant: 'ticket',
+                          title: 'Item Required',
+                          message: `You must own ${requirementName} before purchasing this item.`,
+                          buttons: [{ text: 'OK', style: 'cta' }],
+                        });
                         return;
                     }
-                    if (isQuestOnly && !isUnlocked) {
-                        showAlert({ title: 'Quest Reward', message: 'This item can only be earned by completing quests.\n\nCheck the Trophies tab to claim it!' });
+                    if (cs.isQuestOnly && !isUnlocked) {
+                        showUniqueAlert({
+                          itemName: typedItem.label,
+                          requirement: 'This item can only be earned by completing quests.\n\nCheck the Trophies tab to claim it!',
+                        });
                         return;
                     }
-                    handleItemPress(itemType, typedItem.emoji || (typedItem as any).key, typedItem.price, typedItem.isPremium);
+                    handleItemPress(itemType, typedItem.emoji || (typedItem as any).key, typedItem.price, typedItem.isPremium, isQuestOnly);
                   }}
                   disabled={actionLoading}
                 >
-                  <View style={{ opacity: isLockedByTier ? 0.3 : 1, alignItems: 'center' }}>
+                  <View style={{ opacity: cs.contentOpacity, alignItems: 'center' }}>
                     <AvatarDisplay
-                      avatarId={itemType === 'avatar' ? (typedItem.emoji || (typedItem as any).key) : '🧑'}
+                      avatarId={itemType === 'avatar' ? (typedItem.emoji || (typedItem as any).key) : 'png_explorer_male'}
                       avatarFlag={itemType === 'flag' ? (typedItem.emoji || (typedItem as any).key) : undefined}
                       size={46}
                     />
@@ -278,9 +390,18 @@ export default function AvatarShopScreen() {
                     <View style={styles.statusBadgeOwned}>
                       <Text style={styles.statusTextOwned}>Owned</Text>
                     </View>
-                  ) : isQuestOnly ? (
-                    <View style={styles.statusBadgeQuestOnly}>
-                      <Text style={styles.statusTextQuestOnly}>⚡ Quest</Text>
+                  ) : cs.isLevelLocked ? (
+                    <View style={[styles.stateBadge, { backgroundColor: bp.badgeBg, borderColor: bp.badgeBorder }]}>
+                      <Text style={[styles.stateBadgeText, { color: bp.badgeColor }]}>Lvl {typedItem.requiresLevel}</Text>
+                    </View>
+                  ) : cs.isSubscriptionLocked ? (
+                    <View style={[styles.stateBadge, { backgroundColor: bp.badgeBg, borderColor: bp.badgeBorder, flexDirection: 'row', alignItems: 'center', gap: 3 }]}>
+                      <Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 10, height: 10 }} resizeMode="contain" />
+                      <Text style={[styles.stateBadgeText, { color: bp.badgeColor }]}>{typedItem.price}</Text>
+                    </View>
+                  ) : cs.isQuestOnly ? (
+                    <View style={[styles.stateBadge, { backgroundColor: bp.badgeBg, borderColor: bp.badgeBorder }]}>
+                      <Text style={[styles.stateBadgeText, { color: bp.badgeColor }]}>Locked</Text>
                     </View>
                   ) : isLockedByTier ? (
                     <View style={styles.statusBadgeTierLocked}>
@@ -288,11 +409,15 @@ export default function AvatarShopScreen() {
                         <Ionicons name="lock-closed" size={10} color="#fff" style={{ marginRight: 2 }} />
                         <Text style={styles.statusTextTierLocked}>Requires <Text style={styles.statusTextTierName}>{requirementName}</Text></Text>
                       </View>
-                      <Text style={styles.priceText}>🪙 {typedItem.price}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                        <Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 10, height: 10 }} resizeMode="contain" />
+                        <Text style={styles.priceText}>{typedItem.price}</Text>
+                      </View>
                     </View>
                   ) : (
                     <View style={styles.priceBadge}>
-                      <Text style={styles.priceText}>🪙 {typedItem.price}</Text>
+                      <Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 10, height: 10 }} resizeMode="contain" />
+                      <Text style={styles.priceText}>{typedItem.price}</Text>
                     </View>
                   )}
                 </TouchableOpacity>
@@ -337,6 +462,9 @@ const styles = StyleSheet.create({
   },
   title: { color: '#fff', fontSize: 24, fontWeight: 'bold' },
   goldBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     backgroundColor: '#1a1a30',
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -399,6 +527,10 @@ const styles = StyleSheet.create({
   itemCardTierLocked: {
     borderColor: '#3a1a1a',
     backgroundColor: '#1a1a2e',
+  },
+  itemCardLevelLocked: {
+    borderColor: '#1a3a5a',
+    backgroundColor: '#0d1b2a',
   },
   emojiText: {
     fontSize: 48,
@@ -471,7 +603,22 @@ const styles = StyleSheet.create({
     color: '#ffaaaa',
     fontSize: 9,
   },
+  /** Generic state badge — layout only; apply colors inline from CARD_PALETTES */
+  stateBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginTop: 'auto',
+    borderWidth: 1,
+  },
+  stateBadgeText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
   priceBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
     backgroundColor: '#1a1a30',
     paddingHorizontal: 8,
     paddingVertical: 4,

@@ -28,18 +28,7 @@ export function isSpriteSheet(entry: CustomAvatarEntry): entry is SpriteSheet {
   );
 }
 
-// Sprite sheet images — 2816x1536, 3 avatars side by side
-const SPRITE_AR = 2816 / 1536; // ≈ 1.833
-
-const LADIES_IMG = require('../../assets/avatars/Chill Lady. Incredible Lady. Dayum Gurl.png');
-const ANGRYMEN_IMG = require('../../assets/avatars/AngryMan. OsiBoi. Beast Mark.png');
-const FREEGLE_IMG = require('../../assets/avatars/Freegle. EuroBro. Triboi.png');
-const DIR_HURT_NANA_IMG = require('../../assets/avatars/Dir. Hurt. Nana.png');
-const SILLY_GUY_IMG = require('../../assets/avatars/Silly Guy. Shovel Man. Threek.png');
-const DIVINE_KING_IMG = require('../../assets/avatars/Divine High King. The Singularity. Piga.png');
-const DIVINE_QUEEN_IMG = require('../../assets/avatars/Divine High Queen. Chariot. Cheezus.png');
 const MONKEY_AR = 938 / 1536; // ≈ 0.611
-const LANDSCAPE_AR = 1195 / 896; // ≈ 1.333 — new landscape sprite sheets
 
 export const CUSTOM_AVATAR_COMPONENTS: Record<string, CustomAvatarEntry> = {
   // Frog Collection
@@ -58,44 +47,133 @@ export const CUSTOM_AVATAR_COMPONENTS: Record<string, CustomAvatarEntry> = {
   svg_oh_my_josh: require('../../assets/avatars/josh_3.png'),
 
   // Lady Collection (shop tier chain)
-  png_chill_lady:      { source: LADIES_IMG, columns: 3, index: 0, aspectRatio: SPRITE_AR },
-  png_incredible_lady: { source: LADIES_IMG, columns: 3, index: 1, aspectRatio: SPRITE_AR },
-  png_dayum_gurl:      { source: LADIES_IMG, columns: 3, index: 2, aspectRatio: SPRITE_AR },
+  png_chill_lady:      require('../../assets/avatars/chill_lady.png'),
+  png_incredible_lady: require('../../assets/avatars/incredible_lady.png'),
+  png_dayum_gurl:      require('../../assets/avatars/dayum_gurl.png'),
 
   // Continent Quest Rewards
-  png_angry_man:  { source: ANGRYMEN_IMG, columns: 3, index: 0, aspectRatio: SPRITE_AR },
-  png_osi_boi:    { source: ANGRYMEN_IMG, columns: 3, index: 1, aspectRatio: SPRITE_AR },
-  png_beast_mark: { source: ANGRYMEN_IMG, columns: 3, index: 2, aspectRatio: SPRITE_AR },
+  png_angry_man:  require('../../assets/avatars/angry_man.png'),
+  png_osi_boi:    require('../../assets/avatars/osi_boi.png'),
+  png_beast_mark: require('../../assets/avatars/beast_mark.png'),
 
-  png_freegle:  { source: FREEGLE_IMG, columns: 3, index: 0, aspectRatio: SPRITE_AR },
-  png_euro_bro: { source: FREEGLE_IMG, columns: 3, index: 1, aspectRatio: SPRITE_AR },
-  png_triboi:   { source: FREEGLE_IMG, columns: 3, index: 2, aspectRatio: SPRITE_AR },
+  png_freegle:  require('../../assets/avatars/freegle.png'),
+  png_euro_bro: require('../../assets/avatars/euro_bro.png'),
+  png_triboi:   require('../../assets/avatars/triboi.png'),
 
   // Dir. / Hurt. / Nana.
-  png_dir:  { source: DIR_HURT_NANA_IMG, columns: 3, index: 0, aspectRatio: SPRITE_AR, nudgeX: -0.1 },
-  png_hurt: { source: DIR_HURT_NANA_IMG, columns: 3, index: 1, aspectRatio: SPRITE_AR, nudgeX: -0.1 },
-  png_nana: { source: DIR_HURT_NANA_IMG, columns: 3, index: 2, aspectRatio: SPRITE_AR },
+  png_dir:  require('../../assets/avatars/dir.png'),
+  png_hurt: require('../../assets/avatars/hurt.png'),
+  png_nana: require('../../assets/avatars/nana.png'),
 
   // Silly Guy / Shovel Man / Threek
-  png_silly_guy:  { source: SILLY_GUY_IMG, columns: 3, index: 0, aspectRatio: SPRITE_AR, nudgeX: -0.1 },
-  png_shovel_man: { source: SILLY_GUY_IMG, columns: 3, index: 1, aspectRatio: SPRITE_AR, nudgeX: -0.1 },
-  png_threek:     { source: SILLY_GUY_IMG, columns: 3, index: 2, aspectRatio: SPRITE_AR },
+  png_silly_guy:  require('../../assets/avatars/silly_guy.png'),
+  png_shovel_man: require('../../assets/avatars/shovel_man.png'),
+  png_threek:     require('../../assets/avatars/threek.png'),
 
   // Vorvir (landscape PNG — zoom in to fill the circle)
   png_vorvir: { source: require('../../assets/avatars/Vorvir.png'), columns: 1, index: 0, aspectRatio: 1195 / 896, zoom: 1.5 },
 
-  // Divine High King sheet (Quest: World Domination / The Singularity / Shop: Piga)
-  png_divine_high_king: { source: DIVINE_KING_IMG, columns: 3, index: 0, aspectRatio: LANDSCAPE_AR, nudgeY: 0.5 },
-  png_the_singularity:  { source: DIVINE_KING_IMG, columns: 3, index: 1, aspectRatio: LANDSCAPE_AR, nudgeY: 0.5 },
-  png_piga:             { source: DIVINE_KING_IMG, columns: 3, index: 2, aspectRatio: LANDSCAPE_AR, nudgeY: 0.2 },
+  // Divine Collection (portrait images — nudgeY shifts crop toward head)
+  png_divine_high_king:  { source: require('../../assets/avatars/divine_high_king.png'),  columns: 1, index: 0, aspectRatio: 398 / 896, nudgeY: 0.26 },
+  png_piga:              { source: require('../../assets/avatars/piga.png'),              columns: 1, index: 0, aspectRatio: 398 / 896, nudgeY: 0.36 },
+  png_divine_high_queen: { source: require('../../assets/avatars/divine_high_queen.png'), columns: 1, index: 0, aspectRatio: 398 / 896, nudgeY: 0.29 },
+  png_cheezus:           { source: require('../../assets/avatars/cheezus.png'),           columns: 1, index: 0, aspectRatio: 398 / 896, nudgeY: 0.28 },
 
-  // Divine High Queen sheet (Quest: Ground Invasion / True Conqueror / Shop: Cheezus)
-  png_divine_high_queen: { source: DIVINE_QUEEN_IMG, columns: 3, index: 0, aspectRatio: LANDSCAPE_AR, nudgeY: 0.55 },
-  png_chariot:           { source: DIVINE_QUEEN_IMG, columns: 3, index: 1, aspectRatio: LANDSCAPE_AR, nudgeY: 0.25 },
-  png_cheezus:           { source: DIVINE_QUEEN_IMG, columns: 3, index: 2, aspectRatio: LANDSCAPE_AR, nudgeY: 0.4, nudgeX: -0.1 },
+  // Meme Collection
+  png_micro_pp:    require('../../assets/avatars/micro_pp.png'),
+  png_i_heart_420: require('../../assets/avatars/i_heart_420.png'),
+
+  // Premium page hero — not purchasable
+  png_conqueror: require('../../assets/avatars/conqueror.png'),
+
+  // Smart Bulb (avatar shop)
+  png_smart_bulb: require('../../assets/avatars/smart_bulb.png'),
+
+  // Explorer Collection (default onboarding avatars)
+  png_explorer_male:   require('../../assets/avatars/explorer_male.png'),
+  png_explorer_female: require('../../assets/avatars/explorer_female.png'),
+  png_explorer_dog:    require('../../assets/avatars/explorer_dog.png'),
+  png_explorer_cat:    require('../../assets/avatars/explorer_cat.png'),
+
+  // Icons Collection
+  png_skull:         require('../../assets/avatars/skull.png'),
+  png_bullseye:      require('../../assets/avatars/bullseye.png'),
+  png_eyes:          require('../../assets/avatars/eyes.png'),
+  png_flame:         require('../../assets/avatars/flame.png'),
+  png_eagle:         require('../../assets/avatars/eagle.png'),
+  png_wave:          require('../../assets/avatars/wave.png'),
+  png_mountain:      require('../../assets/avatars/mountain.png'),
+  png_ruler:         require('../../assets/avatars/ruler.png'),
+  png_theater_mask:  require('../../assets/avatars/theater_mask.png'),
+  png_trident:       require('../../assets/avatars/trident.png'),
+  png_compass:       require('../../assets/avatars/compass.png'),
+  png_treasure_chest: require('../../assets/avatars/treasure_chest.png'),
+  png_shield:        require('../../assets/avatars/shield.png'),
+  png_ancient_map:   require('../../assets/avatars/ancient_map.png'),
+
+  // Avatar shop
+  png_demon:    require('../../assets/avatars/demon.png'),
+  png_lmao:     require('../../assets/avatars/lmao.png'),
+  png_commando: require('../../assets/avatars/commando.png'),
+
+  // Smiley Collection
+  png_smiley: require('../../assets/avatars/smiley.png'),
+  png_lmfao:  require('../../assets/avatars/lmfao.png'),
+
+  // Characters
+  png_squidbob: require('../../assets/avatars/squidbob.png'),
+
+  // Cultural Warriors
+  png_pirate:  require('../../assets/avatars/pirate.png'),
+  png_viking:  require('../../assets/avatars/viking.png'),
+  png_pharaoh: require('../../assets/avatars/pharaoh.png'),
+  png_samurai: require('../../assets/avatars/samurai.png'),
+  png_knight:  require('../../assets/avatars/knight.png'),
+
+  // Sci-fi / Fantasy
+  png_astronaut:   require('../../assets/avatars/astronaut.png'),
+  png_alien_grey:  require('../../assets/avatars/alien_grey.png'),
+  png_grim_reaper: require('../../assets/avatars/grim_reaper.png'),
+
+  // Meme / Internet
+  png_npc: require('../../assets/avatars/npc.png'),
+
+  // Cursed
+  png_voodoo_doll:   require('../../assets/avatars/voodoo_doll.png'),
+  png_possessed_axe: require('../../assets/avatars/possessed_axe.png'),
+  png_soul_jar:      require('../../assets/avatars/soul_jar.png'),
+  png_apple_a_day:   require('../../assets/avatars/apple_a_day.png'),
+  png_vhs_demon:            require('../../assets/avatars/vhs_demon.png'),
+  png_goblin_energy_drink:  require('../../assets/avatars/goblin_energy_drink.png'),
+  png_possessed_cart:       require('../../assets/avatars/possessed_cart.png'),
+  png_glitched_jester:      require('../../assets/avatars/glitched_jester.png'),
+  png_doomscroll_skull:     require('../../assets/avatars/doomscroll_skull.png'),
+  png_wifi_parasite:        require('../../assets/avatars/wifi_parasite.png'),
+  png_cry_laugh_mask:       require('../../assets/avatars/cry_laugh_mask.png'),
+  png_tax_ghost:            require('../../assets/avatars/tax_ghost.png'),
+  png_rotten_crown:         require('../../assets/avatars/rotten_crown.png'),
+  png_suspicious_duck:      require('../../assets/avatars/suspicious_duck.png'),
+  png_sleepy_wizard:        require('../../assets/avatars/sleepy_wizard.png'),
+  png_meme_relic_frog:      require('../../assets/avatars/meme_relic_frog.png'),
+  png_cursed_usb_idol:      require('../../assets/avatars/cursed_usb_idol.png'),
+  png_cat_knight:           require('../../assets/avatars/cat_knight.png'),
+
+  // Endgame
+  png_cosmic_armor: require('../../assets/avatars/cosmic_armor.png'),
+  png_world_ender:  require('../../assets/avatars/world_ender.png'),
+
+  // Internal use — Nightmare Quiz screens
+  png_demon_hand:      require('../../assets/avatars/demon_hand.png'),
+  png_evil_vanquished: require('../../assets/avatars/evil_vanquished.png'),
 };
 
 
 export function isCustomAvatar(value: string): boolean {
   return value.startsWith('svg_') || value.startsWith('png_');
+}
+
+export function getAllCustomAvatarImageSources(): ImageSourcePropType[] {
+  return Object.values(CUSTOM_AVATAR_COMPONENTS).map((entry) =>
+    isSpriteSheet(entry) ? entry.source : entry
+  );
 }

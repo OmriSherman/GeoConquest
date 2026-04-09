@@ -1,7 +1,7 @@
 import { CUSTOM_AVATARS } from './avatarData';
 
 export interface AchievementRewardItem {
-    type: 'avatar' | 'flag';
+    type: 'avatar' | 'flag' | 'item';
     itemId: string;
     label: string;   // display name shown in UI
 }
@@ -12,6 +12,7 @@ export interface Achievement {
     description: string;
     icon: string;
     rewardGold: number;
+    rewardTickets?: number;              // millionaire tickets awarded on claim
     rewardItem?: AchievementRewardItem;   // single item (legacy / most quests)
     rewardItems?: AchievementRewardItem[]; // multiple items (e.g. World Domination)
     isPremium?: boolean;                 // continent/premium quests
@@ -28,20 +29,81 @@ export interface Achievement {
         totalByRegion?: Record<string, number>;
         ownedItems?: Set<string>;
         ownedAvatarCount?: number;
+        playerLevel?: number;
+        quizCount?: number;
     }) => [number, number];
 }
 
-// Max-tier avatar keys (no other avatar requires them as prerequisite)
+// Max-tier avatar keys: avatars whose collection name contains "Tier 3"
 const _maxTierAvatarKeys = CUSTOM_AVATARS
-    .filter(a => !CUSTOM_AVATARS.some(b => b.requiresId === a.key))
+    .filter(a => a.collection?.toLowerCase().includes('tier 3'))
     .map(a => a.key);
 
 export const ACHIEVEMENTS_DATA: Achievement[] = [
+
+    // ─── Level Quests ─────────────────────────────────────────────────────────
+
+    {
+        id: 'level_10',
+        title: 'First Ascension',
+        description: 'Reach Level 10.',
+        icon: 'png_star',
+        rewardGold: 1000,
+        getProgress: (stats) => [Math.min(stats.playerLevel ?? 1, 10), 10],
+    },
+    {
+        id: 'level_25',
+        title: 'Seasoned Explorer',
+        description: 'Reach Level 25.',
+        icon: 'png_star2',
+        rewardGold: 2500,
+        rewardTickets: 1,
+        getProgress: (stats) => [Math.min(stats.playerLevel ?? 1, 25), 25],
+    },
+    {
+        id: 'level_30',
+        title: 'Veteran Tactician',
+        description: 'Reach Level 30.',
+        icon: 'png_war_medal',
+        isPremium: true,
+        rewardGold: 5000,
+        rewardTickets: 5,
+        getProgress: (stats) => [Math.min(stats.playerLevel ?? 1, 30), 30],
+    },
+    {
+        id: 'level_50',
+        title: 'Elite Conqueror',
+        description: 'Reach Level 50.',
+        icon: 'png_diamond',
+        rewardGold: 5000,
+        getProgress: (stats) => [Math.min(stats.playerLevel ?? 1, 50), 50],
+    },
+    {
+        id: 'level_80',
+        title: 'Legendary Commander',
+        description: 'Reach Level 80.',
+        icon: 'png_commando',
+        rewardGold: 8000,
+        rewardTickets: 5,
+        getProgress: (stats) => [Math.min(stats.playerLevel ?? 1, 80), 80],
+    },
+    {
+        id: 'level_100',
+        title: 'God of Geography',
+        description: 'Reach Level 100.',
+        icon: 'png_sun',
+        rewardGold: 10000,
+        rewardTickets: 10,
+        getProgress: (stats) => [Math.min(stats.playerLevel ?? 1, 100), 100],
+    },
+
+    // ─── Countries ────────────────────────────────────────────────────────────
+
     {
         id: 'first_blood',
         title: 'First Conquest',
         description: 'Claim your very first country on the map.',
-        icon: '🚩',
+        icon: 'png_flags',
         rewardGold: 100,
         getProgress: (stats) => [Math.min(stats.ownedCount, 1), 1],
     },
@@ -49,7 +111,7 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
         id: 'empire_5',
         title: 'Growing Empire',
         description: 'Claim 5 different countries.',
-        icon: '🗺️',
+        icon: 'png_shape',
         rewardGold: 500,
         getProgress: (stats) => [Math.min(stats.ownedCount, 5), 5],
     },
@@ -57,33 +119,50 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
         id: 'empire_10',
         title: 'Imperial Ambitions',
         description: 'Claim 10 different countries.',
-        icon: '🏰',
+        icon: 'png_castle',
         rewardGold: 1000,
-        rewardItem: { type: 'avatar', itemId: '🧙‍♂️', label: 'Wizard' },
+        rewardItem: { type: 'avatar', itemId: 'png_rotten_crown', label: 'Rotten Crown' },
         getProgress: (stats) => [Math.min(stats.ownedCount, 10), 10],
     },
     {
         id: 'empire_25',
         title: 'World Power',
         description: 'Claim 25 different countries.',
-        icon: '🌍',
+        icon: 'png_globe',
         rewardGold: 2500,
+        rewardTickets: 1,
         getProgress: (stats) => [Math.min(stats.ownedCount, 25), 25],
     },
     {
         id: 'empire_50',
         title: 'Global Hegemon',
         description: 'Claim 50 different countries.',
-        icon: '👑',
+        icon: 'png_crown',
         rewardGold: 1000,
-        rewardItem: { type: 'avatar', itemId: '🥷', label: 'Ninja' },
+        rewardTickets: 1,
+        rewardItem: { type: 'avatar', itemId: 'png_meme_relic_frog', label: 'Chillin' },
         getProgress: (stats) => [Math.min(stats.ownedCount, 50), 50],
     },
+
+    // ─── Login Streak ─────────────────────────────────────────────────────────
+
+    {
+        id: 'streak_20',
+        title: 'GeoConquest Addict',
+        description: 'Log in for 20 days in a row.',
+        icon: 'png_calendar',
+        rewardGold: 25000,
+        rewardTickets: 2,
+        getProgress: (stats) => [Math.min(stats.loginStreak, 20), 20],
+    },
+
+    // ─── Territory ────────────────────────────────────────────────────────────
+
     {
         id: 'area_1m',
         title: 'Vast Territories',
         description: 'Control over 1M sq km.',
-        icon: '📏',
+        icon: 'png_ruler',
         rewardGold: 1500,
         getProgress: (stats) => [Math.min(stats.areaSqKm, 1_000_000), 1_000_000],
     },
@@ -91,104 +170,19 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
         id: 'area_10m',
         title: 'Continental Span',
         description: 'Control over 10M sq km.',
-        icon: '⛰️',
+        icon: 'png_mountain',
         rewardGold: 2000,
-        rewardItem: { type: 'avatar', itemId: '🐉', label: 'Dragon' },
+        rewardTickets: 2,
         getProgress: (stats) => [Math.min(stats.areaSqKm, 10_000_000), 10_000_000],
     },
     {
         id: 'area_100m',
         title: 'Master of Earth',
         description: 'Control over 100M sq km.',
-        icon: '🌌',
+        icon: 'png_galaxy',
         rewardGold: 10000,
-        rewardItem: { type: 'avatar', itemId: '👑', label: 'Monarch' },
+        rewardTickets: 3,
         getProgress: (stats) => [Math.min(stats.areaSqKm, 100_000_000), 100_000_000],
-    },
-    {
-        id: 'streak_20',
-        title: 'GeoConquest Addict',
-        description: 'Log in for 20 days in a row.',
-        icon: '📅',
-        rewardGold: 25000,
-        rewardItem: { type: 'avatar', itemId: 'svg_witcher', label: 'Witcher' },
-        getProgress: (stats) => [Math.min(stats.loginStreak, 20), 20],
-    },
-    {
-        id: 'flag_mastery_30s',
-        title: 'Flag Quiz Speed Demon',
-        description: 'Finish the Flag Quiz with >90% accuracy in under 30s.',
-        icon: '⚡',
-        rewardGold: 2500,
-        rewardItem: { type: 'flag', itemId: '🔍', label: 'Speed Detective' },
-        getProgress: (stats) => [stats.fastFlagMastery ? 1 : 0, 1],
-    },
-    {
-        id: 'avatar_collector_10',
-        title: 'Avatar Hunter',
-        description: 'Collect 10 different avatars.',
-        icon: '🎭',
-        rewardGold: 3000,
-        getProgress: (stats) => [Math.min(stats.ownedAvatarCount ?? 0, 10), 10],
-    },
-    {
-        id: 'max_tier_avatar',
-        title: 'Pinnacle Collector',
-        description: 'Obtain the highest tier avatar in any collection.',
-        icon: '🏆',
-        rewardGold: 5000,
-        getProgress: (stats) => {
-            if (!stats.ownedItems) return [0, 1];
-            const hasMaxTier = _maxTierAvatarKeys.some(k => stats.ownedItems!.has(k));
-            return [hasMaxTier ? 1 : 0, 1];
-        },
-    },
-    {
-        // Hidden as ??? until the user owns the Dark Scroll upgrade
-        id: 'nightmare_complete',
-        title: 'Nightmare Survived',
-        description: 'Complete the Nightmare Quiz.',
-        icon: '💀',
-        rewardGold: 25000,
-        rewardItem: { type: 'avatar', itemId: 'png_beast_mark', label: 'Beast Mark' },
-        getProgress: (stats) => [stats.nightmareCompleted ? 1 : 0, 1],
-    },
-    {
-        id: 'complete_the_world',
-        title: 'World Domination',
-        description: 'Own all 250 countries in the world.',
-        icon: '🌐',
-        rewardGold: 100000,
-        rewardItems: [
-            { type: 'avatar', itemId: 'png_divine_high_king', label: 'Divine High King' },
-            { type: 'avatar', itemId: 'png_divine_high_queen', label: 'Divine High Queen' },
-        ],
-        getProgress: (stats) => [Math.min(stats.ownedCount, 250), 250],
-    },
-    {
-        // Hidden as ??? until nightmare_complete is claimed (Beast Mark obtained)
-        id: 'true_conqueror',
-        title: 'True Conqueror',
-        description: 'Wield the Divine High King, Divine High Queen, and Beast Mark.',
-        icon: '☠️',
-        rewardGold: 500000,
-        rewardItem: { type: 'avatar', itemId: 'png_the_singularity', label: 'The Singularity' },
-        getProgress: (stats) => {
-            const hasDHK = stats.ownedItems?.has('png_divine_high_king') ? 1 : 0;
-            const hasDHQ = stats.ownedItems?.has('png_divine_high_queen') ? 1 : 0;
-            const hasBeastMark = stats.ownedItems?.has('png_beast_mark') ? 1 : 0;
-            return [hasDHK + hasDHQ + hasBeastMark, 3];
-        },
-    },
-
-    {
-        id: 'ground_invasion',
-        title: 'Ground Invasion',
-        description: 'Finish the Capitals Quiz with >90% accuracy in under 30s.',
-        icon: '⚔️',
-        rewardGold: 1000,
-        rewardItem: { type: 'avatar', itemId: 'png_chariot', label: 'Chariot' },
-        getProgress: (stats) => [stats.fastCapitalsMastery ? 1 : 0, 1],
     },
 
     // ─── Continent Quests (Premium) ───────────────────────────────────────────
@@ -197,9 +191,10 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
         id: 'conquer_africa',
         title: 'Sovereign of Africa',
         description: 'Own every country on the African continent.',
-        icon: '🌍',
+        icon: 'png_globe',
         isPremium: true,
         rewardGold: 8000,
+        rewardTickets: 7,
         rewardItem: { type: 'avatar', itemId: 'png_triboi', label: 'Triboi' },
         getProgress: (stats) => [
             stats.ownedByRegion?.['Africa'] ?? 0,
@@ -210,9 +205,10 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
         id: 'conquer_europe',
         title: 'Emperor of Europe',
         description: 'Own every country in Europe.',
-        icon: '🏰',
+        icon: 'png_castle',
         isPremium: true,
         rewardGold: 6000,
+        rewardTickets: 7,
         rewardItem: { type: 'avatar', itemId: 'png_euro_bro', label: 'EuroBro' },
         getProgress: (stats) => [
             stats.ownedByRegion?.['Europe'] ?? 0,
@@ -223,9 +219,10 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
         id: 'conquer_asia',
         title: 'Sultan of Asia',
         description: 'Own every country in Asia.',
-        icon: '🏯',
+        icon: 'png_castle',
         isPremium: true,
         rewardGold: 8000,
+        rewardTickets: 7,
         rewardItem: { type: 'avatar', itemId: 'png_angry_man', label: 'AngryMan' },
         getProgress: (stats) => [
             stats.ownedByRegion?.['Asia'] ?? 0,
@@ -236,9 +233,10 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
         id: 'conquer_oceania',
         title: 'Pacific Overlord',
         description: 'Own every country in Oceania.',
-        icon: '🌊',
+        icon: 'png_wave',
         isPremium: true,
         rewardGold: 4000,
+        rewardTickets: 7,
         rewardItem: { type: 'avatar', itemId: 'png_osi_boi', label: 'OsiBoi' },
         getProgress: (stats) => [
             stats.ownedByRegion?.['Oceania'] ?? 0,
@@ -249,13 +247,133 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
         id: 'conquer_americas',
         title: 'Commander of the Americas',
         description: 'Own every country in the Americas.',
-        icon: '🦅',
+        icon: 'png_eagle',
         isPremium: true,
         rewardGold: 8000,
+        rewardTickets: 7,
         rewardItem: { type: 'avatar', itemId: 'png_freegle', label: 'Freegle' },
         getProgress: (stats) => [
             stats.ownedByRegion?.['Americas'] ?? 0,
             stats.totalByRegion?.['Americas'] ?? 35,
         ],
+    },
+
+    // ─── Quiz Mastery ─────────────────────────────────────────────────────────
+
+    {
+        id: 'flag_mastery_30s',
+        title: 'Speed Detective',
+        description: 'Finish the Flag Quiz with >90% accuracy in under 30s.',
+        icon: 'png_lightning',
+        rewardGold: 2500,
+        getProgress: (stats) => [stats.fastFlagMastery ? 1 : 0, 1],
+    },
+    {
+        id: 'ground_invasion',
+        title: 'Ground Invasion',
+        description: 'Finish the Capitals Quiz with >90% accuracy in under 30s.',
+        icon: 'png_crossed_swords',
+        rewardGold: 1000,
+        getProgress: (stats) => [stats.fastCapitalsMastery ? 1 : 0, 1],
+    },
+
+    // ─── Quiz Milestones ──────────────────────────────────────────────────────
+
+    {
+        id: 'quiz_10',
+        title: 'Quiz Rookie',
+        description: 'Complete 10 quizzes of any type.',
+        icon: 'png_open_scroll',
+        rewardGold: 1000,
+        rewardTickets: 1,
+        getProgress: (stats) => [Math.min(stats.quizCount ?? 0, 10), 10],
+    },
+    {
+        id: 'quiz_50',
+        title: 'Quiz Veteran',
+        description: 'Complete 50 quizzes of any type.',
+        icon: 'png_compass',
+        rewardGold: 2500,
+        rewardTickets: 3,
+        getProgress: (stats) => [Math.min(stats.quizCount ?? 0, 50), 50],
+    },
+
+    // ─── Collection ───────────────────────────────────────────────────────────
+
+    {
+        id: 'avatar_collector_10',
+        title: 'Avatar Hunter',
+        description: 'Collect 10 different avatars.',
+        icon: 'png_theater_mask',
+        rewardGold: 3000,
+        rewardTickets: 1,
+        getProgress: (stats) => [Math.min(stats.ownedAvatarCount ?? 0, 10), 10],
+    },
+    {
+        id: 'max_tier_avatar',
+        title: 'Pinnacle Collector',
+        description: 'Obtain the highest tier avatar in any collection.',
+        icon: 'png_trophy',
+        rewardGold: 5000,
+        rewardTickets: 1,
+        getProgress: (stats) => {
+            if (!stats.ownedItems) return [0, 1];
+            const hasMaxTier = _maxTierAvatarKeys.some(k => stats.ownedItems!.has(k));
+            return [hasMaxTier ? 1 : 0, 1];
+        },
+    },
+
+    // ─── Endgame ──────────────────────────────────────────────────────────────
+
+    {
+        id: 'complete_the_world',
+        title: 'World Domination',
+        description: 'Own all 250 countries in the world.',
+        icon: 'png_domination',
+        rewardGold: 100000,
+        rewardTickets: 10,
+        rewardItems: [
+            { type: 'avatar', itemId: 'png_divine_high_king', label: 'Divine High King' },
+            { type: 'avatar', itemId: 'png_divine_high_queen', label: 'Divine High Queen' },
+        ],
+        getProgress: (stats) => [Math.min(stats.ownedCount, 250), 250],
+    },
+    {
+        // Hidden as ??? until the user owns the Dark Scroll upgrade
+        id: 'nightmare_complete',
+        title: 'Nightmare Survived',
+        description: 'Well played, conqueror of the underworld.',
+        icon: 'png_evil_vanquished',
+        rewardGold: 25000,
+        rewardItem: { type: 'item', itemId: 'png_beast_mark', label: 'Beast Mark' },
+        getProgress: (stats) => [stats.nightmareCompleted ? 1 : 0, 1],
+    },
+    {
+        // Hidden as ??? until nightmare_complete is claimed (Beast Mark obtained)
+        id: 'true_conqueror',
+        title: 'There is only one.',
+        description: 'Wield the Divine High King, Divine High Queen, and Beast Mark.',
+        icon: 'png_demon',
+        rewardGold: 500000,
+        getProgress: (stats) => {
+            const hasDHK = stats.ownedItems?.has('png_divine_high_king') ? 1 : 0;
+            const hasDHQ = stats.ownedItems?.has('png_divine_high_queen') ? 1 : 0;
+            const hasBeastMark = stats.ownedItems?.has('png_beast_mark') ? 1 : 0;
+            return [hasDHK + hasDHQ + hasBeastMark, 3];
+        },
+    },
+    {
+        // Hidden as ??? until true_conqueror is claimed
+        id: 'never_enough',
+        title: 'Never Enough',
+        description: 'Wield the Divine High King and the Cosmic Armor.',
+        icon: 'png_galaxy',
+        rewardGold: 1000000,
+        rewardItem: { type: 'avatar', itemId: 'png_world_ender', label: 'World Ender' },
+        getProgress: (stats) => {
+            const hasDivineHighKing = stats.ownedItems?.has('png_divine_high_king') ? 1 : 0;
+            const hasCosmicArmor = stats.ownedItems?.has('png_cosmic_armor') ? 1 : 0;
+            return [hasDivineHighKing + hasCosmicArmor, 2];
+        },
     },
 ];

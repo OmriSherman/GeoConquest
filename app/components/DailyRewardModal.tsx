@@ -1,32 +1,37 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
+  Image,
   Modal,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+
+const TicketImg = ({ size = 14 }: { size?: number }) => (
+  <Image source={require('../../assets/avatars/raffle_ticket.png')} style={{ width: size, height: size }} resizeMode="contain" />
+);
 import * as Haptics from 'expo-haptics';
-import ConfettiCannon from 'react-native-confetti-cannon';
 import { useAuth } from '../context/AuthContext';
 import { playVictory } from '../lib/audio';
+import TopFallConfetti from './TopFallConfetti';
 
 const REWARDS_CYCLE = [
-  { day: 1, gold: 100 },
-  { day: 2, gold: 150 },
-  { day: 3, gold: 200 },
-  { day: 4, gold: 250 },
-  { day: 5, gold: 300 },
-  { day: 6, gold: 400 },
-  { day: 7, gold: 500, isMilestone: true },
+  { day: 1, gold: 100, tickets: 1 },
+  { day: 2, gold: 150, tickets: 1 },
+  { day: 3, gold: 200, tickets: 2 },
+  { day: 4, gold: 250, tickets: 2 },
+  { day: 5, gold: 300, tickets: 3 },
+  { day: 6, gold: 400, tickets: 3 },
+  { day: 7, gold: 500, tickets: 5, isMilestone: true },
 ];
 
 export default function DailyRewardModal() {
   const { profile, dailyRewardAvailable, claimDailyReward } = useAuth();
   const [claiming, setClaiming] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
-  const [claimedReward, setClaimedReward] = useState<number | null>(null);
+  const [claimedReward, setClaimedReward] = useState<{ gold: number; tickets: number } | null>(null);
 
   // Card entrance
   const cardScale = useRef(new Animated.Value(0.88)).current;
@@ -57,14 +62,20 @@ export default function DailyRewardModal() {
   const prevStreak = profile.login_streak ?? 0;
   const previewStreak = dailyRewardAvailable ? prevStreak + 1 : prevStreak;
   const cycleDay = ((previewStreak - 1) % 7) + 1;
-  const todayReward = REWARDS_CYCLE.find(r => r.day === cycleDay)!;
+  const rewardMultiplier = profile.is_conquerer ? 3 : 1;
+  const todayRewardBase = REWARDS_CYCLE.find(r => r.day === cycleDay)!;
+  const todayReward = {
+    ...todayRewardBase,
+    gold: todayRewardBase.gold * rewardMultiplier,
+    tickets: todayRewardBase.tickets * rewardMultiplier,
+  };
 
   const handleClaim = async () => {
     if (claiming) return;
     setClaiming(true);
     try {
       const reward = await claimDailyReward();
-      if (reward > 0) {
+      if (reward.gold > 0) {
         setClaimedReward(reward);
         playVictory();
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -109,7 +120,7 @@ export default function DailyRewardModal() {
           {/* ── Header ─────────────────────────────────────────────────── */}
           <View style={styles.header}>
             <View style={styles.streakPill}>
-              <Text style={styles.streakFlame}>🔥</Text>
+              <Image source={require('../../assets/avatars/flame.png')} style={{ width: 15, height: 15 }} resizeMode="contain" />
               <Text style={styles.streakNumber}>{previewStreak}</Text>
               <Text style={styles.streakLabel}>day streak</Text>
             </View>
@@ -130,6 +141,8 @@ export default function DailyRewardModal() {
                 {REWARDS_CYCLE.map((reward) => {
                   const isToday = reward.day === cycleDay;
                   const isPast = reward.day < cycleDay;
+                  const rewardGold = reward.gold * rewardMultiplier;
+                  const rewardTickets = reward.tickets * rewardMultiplier;
                   return (
                     <View
                       key={reward.day}
@@ -155,11 +168,19 @@ export default function DailyRewardModal() {
                       ) : (
                         <>
                           <Text style={[styles.dayGold, isToday && styles.dayGoldToday]}>
-                            {reward.gold >= 1000 ? `${reward.gold / 1000}k` : reward.gold}
+                            {rewardGold >= 1000 ? `${rewardGold / 1000}k` : rewardGold}
                           </Text>
-                          <Text style={styles.dayEmoji}>
-                            {reward.isMilestone ? '🏆' : '🪙'}
-                          </Text>
+                          <Image
+                            source={reward.isMilestone
+                              ? require('../../assets/avatars/trophy.png')
+                              : require('../../assets/avatars/gold_coin.png')}
+                            style={{ width: 14, height: 14 }}
+                            resizeMode="contain"
+                          />
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+                            <TicketImg size={isToday ? 18 : 16} />
+                            <Text style={[styles.dayTickets, isToday && styles.dayTicketsToday]}>{rewardTickets}</Text>
+                          </View>
                         </>
                       )}
 
@@ -172,10 +193,18 @@ export default function DailyRewardModal() {
               {/* ── Today's reward highlight ──────────────────────────── */}
               <View style={styles.todayHighlight}>
                 <Text style={styles.todayHighlightEyebrow}>TODAY'S REWARD</Text>
+                {rewardMultiplier > 1 && (
+                  <Text style={styles.multiplierLabel}>Conqueror x{rewardMultiplier}</Text>
+                )}
                 <View style={styles.todayHighlightRow}>
-                  <Text style={styles.todayHighlightGold}>
-                    🪙 {todayReward.gold.toLocaleString()}
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 22, height: 22 }} resizeMode="contain" />
+                    <Text style={styles.todayHighlightGold}>{todayReward.gold.toLocaleString()}</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                    <TicketImg size={28} />
+                    <Text style={styles.todayHighlightTickets}>{todayReward.tickets}</Text>
+                  </View>
                   {todayReward.isMilestone && (
                     <View style={styles.milestonePill}>
                       <Text style={styles.milestonePillText}>WEEK BONUS</Text>
@@ -191,9 +220,17 @@ export default function DailyRewardModal() {
                 disabled={claiming}
                 activeOpacity={0.82}
               >
-                <Text style={styles.claimButtonText}>
-                  {claiming ? 'Claiming...' : `Claim 🪙 ${todayReward.gold.toLocaleString()}`}
-                </Text>
+                {claiming ? (
+                  <Text style={styles.claimButtonText}>Claiming...</Text>
+                ) : (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={styles.claimButtonText}>Claim</Text>
+                    <Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 18, height: 18 }} resizeMode="contain" />
+                    <Text style={styles.claimButtonText}>{todayReward.gold.toLocaleString()}</Text>
+                    <TicketImg size={18} />
+                    <Text style={styles.claimButtonText}>{todayReward.tickets}</Text>
+                  </View>
+                )}
               </TouchableOpacity>
             </>
           ) : (
@@ -202,9 +239,19 @@ export default function DailyRewardModal() {
               <Animated.View
                 style={[styles.rewardDisplay, { transform: [{ scale: coinScale }] }]}
               >
-                <Text style={styles.rewardCoin}>🪙</Text>
-                <Text style={styles.rewardAmount}>+{claimedReward.toLocaleString()}</Text>
-                <Text style={styles.rewardGoldLabel}>gold added to your treasury</Text>
+                <View style={styles.rewardRow}>
+                  <View style={styles.rewardItem}>
+                    <Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 72, height: 72 }} resizeMode="contain" />
+                    <Text style={[styles.rewardAmount, styles.rewardAmountGold]}>+{claimedReward.gold.toLocaleString()}</Text>
+                    <Text style={styles.rewardGoldLabel}>gold</Text>
+                  </View>
+                  <View style={styles.rewardDivider} />
+                  <View style={styles.rewardItem}>
+                    <TicketImg size={72} />
+                    <Text style={styles.rewardAmount}>+{claimedReward.tickets}</Text>
+                    <Text style={styles.rewardGoldLabel}>tickets</Text>
+                  </View>
+                </View>
               </Animated.View>
 
               <Text style={styles.comeBackText}>Come back tomorrow to keep your streak!</Text>
@@ -219,17 +266,7 @@ export default function DailyRewardModal() {
             </>
           )}
 
-          {showConfetti && (
-            <View style={styles.confettiContainer} pointerEvents="none">
-              <ConfettiCannon
-                count={130}
-                origin={{ x: 160, y: 0 }}
-                autoStart
-                fadeOut
-                colors={['#FFD700', '#FFA500', '#FFFACD', '#FF8C00', '#fff']}
-              />
-            </View>
-          )}
+          {showConfetti && <TopFallConfetti />}
         </Animated.View>
       </View>
     </Modal>
@@ -398,6 +435,12 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     marginBottom: 6,
   },
+  multiplierLabel: {
+    fontSize: 12,
+    color: '#FFD700',
+    fontWeight: '800',
+    marginBottom: 6,
+  },
   todayHighlightRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -443,25 +486,55 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     letterSpacing: 0.2,
   },
+  // ── Day card tickets ──────────────────────────────────────────────────────
+  dayTickets: {
+    fontSize: 9,
+    color: '#888',
+  },
+  dayTicketsToday: {
+    color: '#FFD700',
+    fontSize: 10,
+  },
+  // ── Today highlight tickets ───────────────────────────────────────────────
+  todayHighlightTickets: {
+    fontSize: 20,
+    color: '#aaa',
+    fontWeight: 'bold',
+  },
   // ── Post-claim ─────────────────────────────────────────────────────────────
   rewardDisplay: {
-    alignItems: 'center',
     paddingVertical: 20,
   },
+  rewardRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 24,
+  },
+  rewardItem: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  rewardDivider: {
+    width: 1,
+    height: 60,
+    backgroundColor: '#2a2a4e',
+  },
   rewardCoin: {
-    fontSize: 62,
-    marginBottom: 6,
+    fontSize: 48,
   },
   rewardAmount: {
-    fontSize: 44,
+    fontSize: 36,
     fontWeight: 'bold',
     color: '#FFD700',
     letterSpacing: -1,
   },
+  rewardAmountGold: {
+    marginTop: 6,
+  },
   rewardGoldLabel: {
     fontSize: 13,
     color: '#666',
-    marginTop: 4,
   },
   comeBackText: {
     fontSize: 13,

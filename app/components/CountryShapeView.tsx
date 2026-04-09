@@ -68,6 +68,33 @@ function buildShapeHtml(numericId: string, color: string): string {
     var targetId="${numericId}";
     var fillColor="${color}";
 
+    // Hardcoded shapes for territories missing from world-atlas sovereign countries dataset
+    var HARDCODED_SHAPES = {
+      '254': { type:'Feature', properties:{}, geometry:{ type:'Polygon', coordinates:[[
+        [-54.5,5.75],[-54.0,5.95],[-52.3,5.75],[-51.65,5.25],
+        [-51.65,4.2],[-52.2,2.5],[-53.3,2.15],[-54.4,2.15],
+        [-54.5,3.5],[-54.5,5.75]
+      ]]}}
+    };
+
+    // Normalize antimeridian-crossing rings so Leaflet doesn't draw a line across the viewport.
+    // Adjusts each longitude so it stays within 180° of the previous point.
+    function normalizeRing(ring) {
+      for (var i=1;i<ring.length;i++) {
+        var d=ring[i][0]-ring[i-1][0];
+        if (d>180) ring[i][0]-=360;
+        else if (d<-180) ring[i][0]+=360;
+      }
+    }
+    function normalizeGeometry(feature) {
+      var type=feature.geometry.type;
+      var coords=JSON.parse(JSON.stringify(feature.geometry.coordinates));
+      if (type==='Polygon') coords.forEach(normalizeRing);
+      else if (type==='MultiPolygon') coords.forEach(function(p){p.forEach(normalizeRing);});
+      return {type:feature.type,id:feature.id,properties:feature.properties,
+              geometry:{type:type,coordinates:coords}};
+    }
+
     var map=L.map('map',{
       zoomControl:false,
       attributionControl:false,
@@ -80,46 +107,45 @@ function buildShapeHtml(numericId: string, color: string): string {
       tap:false,
     });
 
-    // No tile layer — just show the silhouette on dark background
+    var layerStyle={fillColor:fillColor,fillOpacity:0.9,color:fillColor,weight:1.5,opacity:0.6};
 
-    fetch('https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-50m.json')
-      .then(function(r){return r.json()})
-      .then(function(topology){
-        document.getElementById('loading').style.display='none';
-        var geojson=topojson.feature(topology,topology.objects.countries);
-        var targetFeature=null;
-        var targetNum=parseInt(targetId,10);
+    // Check hardcoded shapes first (for territories not in world-atlas)
+    if (HARDCODED_SHAPES[targetId]) {
+      document.getElementById('loading').style.display='none';
+      var layer=L.geoJSON(HARDCODED_SHAPES[targetId],{style:layerStyle}).addTo(map);
+      map.fitBounds(layer.getBounds().pad(0.15),{animate:false});
+    } else {
+      fetch('https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-50m.json')
+        .then(function(r){return r.json()})
+        .then(function(topology){
+          document.getElementById('loading').style.display='none';
+          var geojson=topojson.feature(topology,topology.objects.countries);
+          var targetFeature=null;
+          var targetNum=parseInt(targetId,10);
 
-        for(var i=0;i<geojson.features.length;i++){
-          if(parseInt(String(geojson.features[i].id),10)===targetNum){
-            targetFeature=geojson.features[i];
-            break;
+          for(var i=0;i<geojson.features.length;i++){
+            if(parseInt(String(geojson.features[i].id),10)===targetNum){
+              targetFeature=geojson.features[i];
+              break;
+            }
           }
-        }
 
-        if(!targetFeature){
-          document.getElementById('loading').style.display='block';
-          document.getElementById('loading').textContent='?';
-          return;
-        }
-
-        // Draw just this country
-        var layer=L.geoJSON(targetFeature,{
-          style:{
-            fillColor:fillColor,
-            fillOpacity:0.9,
-            color:fillColor,
-            weight:1.5,
-            opacity:0.6
+          if(!targetFeature){
+            document.getElementById('loading').style.display='block';
+            document.getElementById('loading').textContent='?';
+            return;
           }
-        }).addTo(map);
 
-        // Fit to the country bounds with padding
-        map.fitBounds(layer.getBounds().pad(0.15),{animate:false});
-      })
-      .catch(function(){
-        document.getElementById('loading').textContent='⚠️';
-      });
+          // Only normalize antimeridian-crossing countries (Russia, Fiji, US w/ Aleutians, Kiribati)
+          var ANTIMERIDIAN_IDS = {643:true, 242:true, 840:true, 296:true};
+          var featureToRender = ANTIMERIDIAN_IDS[targetNum] ? normalizeGeometry(targetFeature) : targetFeature;
+          var layer=L.geoJSON(featureToRender,{style:layerStyle}).addTo(map);
+          map.fitBounds(layer.getBounds().pad(0.15),{animate:false});
+        })
+        .catch(function(){
+          document.getElementById('loading').textContent='⚠️';
+        });
+    }
   </script>
 </body>
 </html>`;

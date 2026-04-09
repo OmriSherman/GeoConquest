@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useRef, useEffect, ReactNode } from 'react';
-import { Animated, StyleSheet, Text, View, Platform, SafeAreaView } from 'react-native';
+import { Animated, Easing, StyleSheet, Text, View, Platform, SafeAreaView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -24,18 +24,20 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const showToast = (options: ToastOptions) => {
     setToast(options);
-    
+    translateY.setValue(-150);
+    opacity.setValue(0);
+
     // Slide in
     Animated.parallel([
-      Animated.spring(translateY, {
+      Animated.timing(translateY, {
         toValue: 0,
+        duration: 500,
+        easing: Easing.in(Easing.cubic),
         useNativeDriver: true,
-        friction: 8,
-        tension: 40,
       }),
       Animated.timing(opacity, {
         toValue: 1,
-        duration: 200,
+        duration: 300,
         useNativeDriver: true,
       })
     ]).start();
@@ -45,12 +47,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       Animated.parallel([
         Animated.timing(translateY, {
           toValue: -150,
-          duration: 300,
+          duration: 1000,
+          easing: Easing.in(Easing.cubic),
           useNativeDriver: true,
         }),
         Animated.timing(opacity, {
           toValue: 0,
-          duration: 300,
+          duration: 600,
           useNativeDriver: true,
         })
       ]).start(() => {

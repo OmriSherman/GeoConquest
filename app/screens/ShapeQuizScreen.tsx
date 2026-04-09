@@ -10,10 +10,9 @@ import {
   View,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import ConfettiCannon from 'react-native-confetti-cannon';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { QuizStackParamList, QuizQuestion, Country } from '../types';
-import { buildQuizQuestions, fetchCountries } from '../lib/countryData';
+import { buildQuizQuestions, fetchCountries, getOfflineFullCountries } from '../lib/countryData';
 import { useGame } from '../context/GameContext';
 import AnswerButton from '../components/AnswerButton';
 import CountryShapeView from '../components/CountryShapeView';
@@ -44,7 +43,6 @@ export default function ShapeQuizScreen({ navigation }: Props) {
     'default', 'default', 'default', 'default',
   ]);
   const [currentCombo, setCurrentCombo] = useState(0);
-  const [showConfetti, setShowConfetti] = useState(false);
   const [answered, setAnswered] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -63,14 +61,27 @@ export default function ShapeQuizScreen({ navigation }: Props) {
   useEffect(() => {
     (async () => {
       try {
-        const countries = await fetchCountries();
-        // Filter to countries that have area > 1000 km² (so shape is visible)
-        const bigCountries = countries.filter(c => c.area > 1000);
+        let countries;
+        try {
+          countries = await fetchCountries();
+        } catch {
+          if (profile?.is_conquerer) {
+            countries = getOfflineFullCountries();
+          } else {
+            throw new Error('OFFLINE_NO_PREMIUM');
+          }
+        }
+        // Territories missing from world-atlas TopoJSON (no shape data available)
+        const NO_SHAPE = new Set(['GP', 'MQ', 'YT', 'RE', 'PM', 'BL', 'MF', 'CX', 'CC', 'HM', 'NF', 'CK', 'NU', 'TK', 'WF', 'AX', 'SJ', 'BV', 'TF', 'UM', 'GG', 'JE', 'IM', 'GI', 'FK', 'AQ', 'RU']);
+        // Filter to countries that have area > 1000 km² and have a shape available
+        const bigCountries = countries.filter(c => c.area > 1000 && !NO_SHAPE.has(c.cca2));
         const q = buildQuizQuestions(bigCountries, TOTAL_QUESTIONS);
         setQuestions(q);
         questionsRef.current = q;
       } catch (e: any) {
-        setError(e.message ?? 'Failed to load countries');
+        setError(e.message === 'OFFLINE_NO_PREMIUM'
+          ? 'offline_upgrade'
+          : (e.message ?? 'Failed to load countries'));
       } finally {
         setLoading(false);
         quizStartRef.current = Date.now();
@@ -104,7 +115,6 @@ export default function ShapeQuizScreen({ navigation }: Props) {
     if (isCorrect) {
       comboRef.current += 1;
       setCurrentCombo(comboRef.current);
-      setShowConfetti(true);
       playDingStreak(comboRef.current);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
@@ -161,7 +171,6 @@ export default function ShapeQuizScreen({ navigation }: Props) {
       currentIndexRef.current = nextIndex;
       setCurrentIndex(nextIndex);
       setAnswered(false);
-      setShowConfetti(false);
       setButtonStates(['default', 'default', 'default', 'default']);
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -181,6 +190,23 @@ export default function ShapeQuizScreen({ navigation }: Props) {
   }
 
   if (error || questions.length === 0) {
+    if (error === 'offline_upgrade') {
+      return (
+        <View style={styles.centered}>
+          <Text style={{ fontSize: 40, marginBottom: 12 }}>📡</Text>
+          <Text style={[styles.errorText, { color: '#FFD700', fontWeight: 'bold' }]}>You're Offline</Text>
+          <Text style={[styles.errorText, { color: '#aaa', fontSize: 14, marginTop: 8 }]}>
+            Upgrade to Conqueror's Pass to play all quizzes without an internet connection.
+          </Text>
+          <TouchableOpacity
+            onPress={() => navigation.getParent()?.navigate('Premium')}
+            style={{ marginTop: 20, backgroundColor: '#7B2FBE', paddingHorizontal: 28, paddingVertical: 12, borderRadius: 12 }}
+          >
+            <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>Upgrade</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
     return (
       <View style={styles.centered}>
         <Text style={styles.errorText}>{error ?? 'No questions available'}</Text>
@@ -236,16 +262,6 @@ export default function ShapeQuizScreen({ navigation }: Props) {
               <Text style={styles.tapHint}>Tap anywhere to continue →</Text>
             )}
             
-            {/* Pop Confetti! */}
-            {showConfetti && (
-              <ConfettiCannon 
-                count={40} 
-                origin={{ x: -10, y: 0 }} 
-                explosionSpeed={350} 
-                fallSpeed={2000} 
-                fadeOut 
-              />
-            )}
           </Animated.View>
         </ScrollView>
       </View>

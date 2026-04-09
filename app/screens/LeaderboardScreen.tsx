@@ -1,7 +1,9 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
+  Image,
   Modal,
   ScrollView,
   StyleSheet,
@@ -10,6 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { fetchCountries } from '../lib/countryData';
 import { useAuth } from '../context/AuthContext';
@@ -18,10 +21,45 @@ import AvatarDisplay from '../components/AvatarDisplay';
 import WorldMapView from '../components/WorldMapView';
 import { useFocusEffect } from '@react-navigation/native';
 import { AVATAR_CHARACTERS, CUSTOM_AVATARS, CUSTOM_FLAGS, FLAG_OPTIONS } from '../lib/avatarData';
+import { calcQuizXP, getLevelInfo } from '../lib/xpSystem';
+
+const ACHIEVEMENT_ICON_IMAGES: Record<string, any> = {
+  png_domination:      require('../../assets/avatars/domination.png'),
+  png_evil_vanquished: require('../../assets/avatars/evil_vanquished.png'),
+  png_demon:           require('../../assets/avatars/demon.png'),
+  png_star:            require('../../assets/avatars/star.png'),
+  png_star2:           require('../../assets/avatars/star2.png'),
+  png_war_medal:       require('../../assets/avatars/war_medal.png'),
+  png_diamond:         require('../../assets/avatars/diamond.png'),
+  png_crown:           require('../../assets/avatars/crown.png'),
+  png_sun:             require('../../assets/avatars/sun.png'),
+  png_flags:           require('../../assets/avatars/flags.png'),
+  png_shape:           require('../../assets/avatars/shape.png'),
+  png_castle:          require('../../assets/avatars/castle.png'),
+  png_globe:           require('../../assets/avatars/globe.png'),
+  png_calendar:        require('../../assets/avatars/calendar.png'),
+  png_galaxy:          require('../../assets/avatars/galaxy.png'),
+  png_lightning:       require('../../assets/avatars/lightning.png'),
+  png_crossed_swords:  require('../../assets/avatars/crossed_swords.png'),
+  png_trophy:          require('../../assets/avatars/trophy.png'),
+  png_commando:        require('../../assets/avatars/commando.png'),
+  png_ruler:           require('../../assets/avatars/ruler.png'),
+  png_mountain:        require('../../assets/avatars/mountain.png'),
+  png_wave:            require('../../assets/avatars/wave.png'),
+  png_eagle:           require('../../assets/avatars/eagle.png'),
+  png_theater_mask:    require('../../assets/avatars/theater_mask.png'),
+  png_skull:           require('../../assets/avatars/skull.png'),
+  png_bullseye:        require('../../assets/avatars/bullseye.png'),
+  png_open_scroll:     require('../../assets/avatars/open_scroll.png'),
+  png_compass:         require('../../assets/avatars/compass.png'),
+};
 import { ACHIEVEMENTS_DATA } from '../lib/achievementsData';
 import { CUSTOM_FLAG_COMPONENTS, isCustomFlag } from '../lib/customFlags';
 
 const WORLD_LAND_AREA = 150_000_000; // km²
+const DAILY_WINNER_POPUP_KEY_PREFIX = '@daily_winner_reward_popup_seen:';
+const DAILY_REFRESH_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+const ALLTIME_REFRESH_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 hours
 
 // All premium avatar item IDs (for inventory categorisation)
 const ALL_AVATAR_IDS = new Set([
@@ -39,8 +77,10 @@ interface UserProfile {
   avatar_emoji: string;
   avatar_flag: string;
   gold_balance: number;
+  xp: number;
   login_streak: number;
   created_at: string;
+  is_conquerer?: boolean;
 }
 
 interface ProfileModalData {
@@ -49,23 +89,72 @@ interface ProfileModalData {
   ownedCountryCodes: string[];
   unlockedItemIds: string[];
   claimedAchievementIds: string[];
+  ownedCount: number;
+  ownedArea: number;
   conquestPct: number;
   loading: boolean;
 }
 
+interface AwardDailyWinnerResult {
+  success: boolean;
+  reward_granted: boolean;
+  reward_date: string;
+  winner_user_id: string | null;
+  gold: number;
+  tickets: number;
+  reason: string;
+}
+
+interface DailyXpRow {
+  user_id: string;
+  daily_xp: number;
+}
+
 export default function LeaderboardScreen() {
   const { user } = useAuth();
+  const [leaderboardType, setLeaderboardType] = useState<'alltime' | 'daily'>('daily');
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
+  const [dailyXpEntries, setDailyXpEntries] = useState<(LeaderboardEntry & { daily_xp: number })[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const areaMapRef = useRef<Record<string, number> | null>(null);
+  const lastRefreshRef = useRef<{ daily: number; alltime: number }>({ daily: 0, alltime: 0 });
 
   // Profile modal state
   const [profileModal, setProfileModal] = useState<ProfileModalData | null>(null);
 
+  useEffect(() => {
+    let cancelled = false;
+    fetchCountries()
+      .then((countries) => {
+        if (cancelled) return;
+        const map: Record<string, number> = {};
+        for (const c of countries) map[c.cca2] = c.area || 0;
+        areaMapRef.current = map;
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
-      loadLeaderboard();
-    }, [])
+      const now = Date.now();
+      if (leaderboardType === 'alltime') {
+        if (entries.length > 0 && (now - lastRefreshRef.current.alltime) < ALLTIME_REFRESH_INTERVAL_MS) {
+          setLoading(false);
+          return;
+        }
+        loadLeaderboard();
+      } else {
+        if (dailyXpEntries.length > 0 && (now - lastRefreshRef.current.daily) < DAILY_REFRESH_INTERVAL_MS) {
+          setLoading(false);
+          return;
+        }
+        loadDailyXpLeaderboard();
+      }
+    }, [leaderboardType, entries.length, dailyXpEntries.length])
   );
 
   async function loadLeaderboard() {
@@ -73,14 +162,15 @@ export default function LeaderboardScreen() {
     try {
       let { data: profiles, error: profileErr } = await supabase
         .from('profiles')
-        .select('id, username, avatar_emoji, avatar_flag');
+        .select('id, username, avatar_emoji, avatar_flag, is_conquerer, xp');
 
       if (profileErr) {
         const fallback = await supabase.from('profiles').select('id, username');
         profiles = (fallback.data || []).map((p: any) => ({
           ...p,
-          avatar_emoji: '🧑',
+          avatar_emoji: 'png_explorer_male',
           avatar_flag: '🏳️',
+          xp: 0,
         }));
       }
       if (!profiles) return;
@@ -89,35 +179,43 @@ export default function LeaderboardScreen() {
         .from('owned_countries')
         .select('user_id, country_code');
 
-      const allCountries = await fetchCountries();
-      const areaMap: Record<string, number> = {};
-      for (const c of allCountries) areaMap[c.cca2] = c.area || 0;
+      let areaMap = areaMapRef.current;
+      if (!areaMap) {
+        const countries = await fetchCountries();
+        areaMap = {};
+        for (const c of countries) (areaMap as Record<string, number>)[c.cca2] = c.area || 0;
+        areaMapRef.current = areaMap;
+      }
 
       const countMap: Record<string, number> = {};
       const areaTotal: Record<string, number> = {};
       if (ownedData) {
-        for (const row of ownedData) {
+        for (const row of ownedData as any[]) {
           countMap[row.user_id] = (countMap[row.user_id] || 0) + 1;
-          areaTotal[row.user_id] = (areaTotal[row.user_id] || 0) + (areaMap[row.country_code] || 0);
+          areaTotal[row.user_id] = (areaTotal[row.user_id] || 0) + ((areaMap as Record<string, number>)[row.country_code] || 0);
         }
       }
 
       const leaderboard: LeaderboardEntry[] = profiles
         .map((p) => {
-          const area = areaTotal[p.id] || 0;
+          const ownedArea = areaTotal[p.id] || 0;
+          const conquestPct = Math.min(100, Math.round((ownedArea / WORLD_LAND_AREA) * 10000) / 100);
           return {
             id: p.id,
             username: p.username,
-            avatar_emoji: p.avatar_emoji || '🧑',
+            avatar_emoji: p.avatar_emoji || 'png_explorer_male',
             avatar_flag: p.avatar_flag || '🏳️',
+            xp: p.xp ?? 0,
             owned_count: countMap[p.id] || 0,
-            owned_area: area,
-            conquest_pct: Math.round((area / WORLD_LAND_AREA) * 10000) / 100,
+            owned_area: ownedArea,
+            conquest_pct: conquestPct,
+            is_conquerer: p.is_conquerer,
           };
         })
-        .sort((a, b) => b.conquest_pct - a.conquest_pct);
+        .sort((a, b) => (b.xp ?? 0) - (a.xp ?? 0));
 
       setEntries(leaderboard);
+      lastRefreshRef.current.alltime = Date.now();
     } catch (err) {
       console.warn('Failed to load leaderboard:', err);
     } finally {
@@ -125,24 +223,190 @@ export default function LeaderboardScreen() {
     }
   }
 
+  async function maybeShowDailyWinnerRewardPopup(rows: AwardDailyWinnerResult[] | null) {
+    if (!user?.id || !rows?.length) return;
+
+    const row = rows[0];
+    const rewardDate = row.reward_date;
+    if (!rewardDate || row.winner_user_id !== user.id) return;
+    if (row.reason !== 'awarded' && row.reason !== 'already_awarded') return;
+
+    const key = `${DAILY_WINNER_POPUP_KEY_PREFIX}${user.id}:${rewardDate}`;
+    const alreadySeen = await AsyncStorage.getItem(key);
+    if (alreadySeen) return;
+
+    await AsyncStorage.setItem(key, '1');
+    Alert.alert(
+      'Daily Leaderboard Winner',
+      `You finished #1 for ${rewardDate} and received ${Number(row.gold || 0).toLocaleString()} gold + ${Number(row.tickets || 0).toLocaleString()} tickets.`
+    );
+  }
+
+  async function loadDailyXpLeaderboard() {
+    setLoading(true);
+    try {
+      const { data: awardData, error: awardError } = await supabase.rpc('award_daily_leaderboard_winner');
+      if (awardError) {
+        console.warn('Failed to award daily winner reward:', awardError.message);
+      } else {
+        try {
+          await maybeShowDailyWinnerRewardPopup((awardData as AwardDailyWinnerResult[] | null) ?? null);
+        } catch (popupError: any) {
+          console.warn('Failed to show daily winner reward popup:', popupError?.message ?? popupError);
+        }
+      }
+
+      // Get today's UTC date range
+      const now = new Date();
+      const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
+      const todayEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)).toISOString();
+
+      // Get all profiles
+      let { data: profiles, error: profileErr } = await supabase
+        .from('profiles')
+        .select('id, username, avatar_emoji, avatar_flag, is_conquerer, xp');
+
+      if (profileErr) {
+        const fallback = await supabase.from('profiles').select('id, username');
+        profiles = (fallback.data || []).map((p: any) => ({
+          ...p,
+          avatar_emoji: 'png_explorer_male',
+          avatar_flag: '🏳️',
+          xp: 0,
+        }));
+      }
+      if (!profiles) return;
+
+      const { data: ownedData } = await supabase
+        .from('owned_countries')
+        .select('user_id, country_code');
+
+      let areaMap = areaMapRef.current;
+      if (!areaMap) {
+        const countries = await fetchCountries();
+        areaMap = {};
+        for (const c of countries) (areaMap as Record<string, number>)[c.cca2] = c.area || 0;
+        areaMapRef.current = areaMap;
+      }
+
+      const countMap: Record<string, number> = {};
+      const areaTotal: Record<string, number> = {};
+      if (ownedData) {
+        for (const row of ownedData as any[]) {
+          countMap[row.user_id] = (countMap[row.user_id] || 0) + 1;
+          areaTotal[row.user_id] = (areaTotal[row.user_id] || 0) + ((areaMap as Record<string, number>)[row.country_code] || 0);
+        }
+      }
+
+      const dailyXpMap: Record<string, number> = {};
+      const rpcDaily = await supabase.rpc('get_daily_xp_leaderboard', { p_limit: 500 });
+      if (rpcDaily.error) {
+        console.warn('Failed to load daily XP via RPC, falling back to client query:', rpcDaily.error.message);
+        let quizResults: any[] = [];
+        const primary = await supabase
+          .from('quiz_results')
+          .select('user_id, quiz_type, score, total_questions, xp_earned')
+          .gte('played_at', todayStart)
+          .lt('played_at', todayEnd);
+
+        if (primary.error) {
+          const fallback = await supabase
+            .from('quiz_results')
+            .select('user_id, quiz_type, score')
+            .gte('played_at', todayStart)
+            .lt('played_at', todayEnd);
+          if (fallback.error) throw fallback.error;
+          quizResults = fallback.data ?? [];
+        } else {
+          quizResults = primary.data ?? [];
+        }
+
+        for (const result of quizResults) {
+          let xp = 0;
+          if (typeof result.xp_earned === 'number') {
+            xp = result.xp_earned;
+          } else if (result.quiz_type === 'millionaire') {
+            xp = result.score >= 15 ? 2000 : 0;
+          } else if (['flag', 'shape', 'capitals', 'borders'].includes(result.quiz_type)) {
+            const totalQuestions = Math.max(1, Number(result.total_questions) || 10);
+            xp = calcQuizXP(result.quiz_type, Number(result.score) || 0, totalQuestions, false);
+          } else if (result.quiz_type === 'nightmare') {
+            xp = 0;
+          }
+
+          if (xp <= 0) continue;
+          dailyXpMap[result.user_id] = (dailyXpMap[result.user_id] || 0) + xp;
+        }
+      } else {
+        for (const row of (rpcDaily.data as DailyXpRow[] | null) ?? []) {
+          const xp = Number(row.daily_xp) || 0;
+          if (!row.user_id || xp <= 0) continue;
+          dailyXpMap[row.user_id] = xp;
+        }
+      }
+
+      // Create daily XP leaderboard entries, only including users with XP today
+      const dailyLeaderboard = profiles
+        .filter(p => dailyXpMap[p.id] > 0)
+        .map((p) => {
+          const ownedArea = areaTotal[p.id] || 0;
+          const conquestPct = Math.min(100, Math.round((ownedArea / WORLD_LAND_AREA) * 10000) / 100);
+          return {
+            id: p.id,
+            username: p.username,
+            avatar_emoji: p.avatar_emoji || 'png_explorer_male',
+            avatar_flag: p.avatar_flag || '🏳️',
+            xp: p.xp ?? 0,
+            owned_count: countMap[p.id] || 0,
+            owned_area: ownedArea,
+            conquest_pct: conquestPct,
+            is_conquerer: p.is_conquerer,
+            daily_xp: dailyXpMap[p.id] || 0,
+          };
+        })
+        .sort((a, b) => b.daily_xp - a.daily_xp);
+
+      setDailyXpEntries(dailyLeaderboard);
+      lastRefreshRef.current.daily = Date.now();
+    } catch (err) {
+      console.warn('Failed to load daily XP leaderboard:', err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function openProfile(entry: LeaderboardEntry & { rank: number }) {
-    setProfileModal({ entry, profile: null, ownedCountryCodes: [], unlockedItemIds: [], claimedAchievementIds: [], conquestPct: entry.conquest_pct, loading: true });
+    setProfileModal({ entry, profile: null, ownedCountryCodes: [], unlockedItemIds: [], claimedAchievementIds: [], ownedCount: 0, ownedArea: 0, conquestPct: 0, loading: true });
 
     try {
       const [profileRes, ownedRes, itemsRes, achievementsRes] = await Promise.all([
-        supabase.from('profiles').select('id, username, avatar_emoji, avatar_flag, gold_balance, login_streak, created_at').eq('id', entry.id).single(),
+        supabase.from('profiles').select('id, username, avatar_emoji, avatar_flag, gold_balance, xp, login_streak, created_at, is_conquerer').eq('id', entry.id).single(),
         supabase.from('owned_countries').select('country_code').eq('user_id', entry.id),
         supabase.from('user_unlocked_items').select('item_id').eq('user_id', entry.id),
         supabase.from('user_achievements').select('achievement_id').eq('user_id', entry.id),
       ]);
 
+      const ownedCountryCodes = (ownedRes.data ?? []).map((r: any) => r.country_code);
+      const ownedCount = ownedCountryCodes.length;
+      let areaMap = areaMapRef.current;
+      if (!areaMap) {
+        const cs = await fetchCountries();
+        areaMap = {};
+        for (const c of cs) (areaMap as Record<string, number>)[c.cca2] = c.area || 0;
+        areaMapRef.current = areaMap;
+      }
+      const ownedArea = ownedCountryCodes.reduce((sum, code) => sum + ((areaMap as Record<string, number>)[code] || 0), 0);
+      const conquestPct = Math.min(100, Math.round((ownedArea / WORLD_LAND_AREA) * 10000) / 100);
+
       setProfileModal({
         entry,
         profile: profileRes.data ?? null,
-        ownedCountryCodes: (ownedRes.data ?? []).map((r: any) => r.country_code),
+        ownedCountryCodes,
         unlockedItemIds: (itemsRes.data ?? []).map((r: any) => r.item_id),
         claimedAchievementIds: (achievementsRes.data ?? []).map((r: any) => r.achievement_id),
-        conquestPct: entry.conquest_pct,
+        ownedCount,
+        ownedArea,
+        conquestPct,
         loading: false,
       });
     } catch (err) {
@@ -151,27 +415,67 @@ export default function LeaderboardScreen() {
     }
   }
 
-  function getDisplayEntries(): (LeaderboardEntry & { rank: number; isSeparator?: boolean })[] {
+  function getDisplayEntries(source: any[]): any[] {
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
-      return entries
+      return source
         .map((e, i) => ({ ...e, rank: i + 1 }))
         .filter(e => e.username.toLowerCase().includes(q));
     }
 
-    const result: (LeaderboardEntry & { rank: number; isSeparator?: boolean })[] = [];
-    const top5 = entries.slice(0, 5);
-    top5.forEach((e, i) => result.push({ ...e, rank: i + 1 }));
-
-    const userIndex = entries.findIndex(e => e.id === user?.id);
-    if (userIndex >= 5) {
-      result.push({ id: '__separator__', username: '...', avatar_emoji: '', avatar_flag: '', owned_count: 0, owned_area: 0, conquest_pct: 0, rank: -1, isSeparator: true });
-      const start = Math.max(5, userIndex - 1);
-      const end = Math.min(entries.length, userIndex + 2);
-      for (let i = start; i < end; i++) {
-        result.push({ ...entries[i], rank: i + 1 });
-      }
+    if (source.length <= 8) {
+      return source.map((e, i) => ({ ...e, rank: i + 1 }));
     }
+
+    const result: any[] = [];
+    const shownRanks = new Set<number>();
+    const pushByIndex = (idx: number) => {
+      if (idx < 0 || idx >= source.length) return;
+      const rank = idx + 1;
+      if (shownRanks.has(rank)) return;
+      shownRanks.add(rank);
+      result.push({ ...source[idx], rank });
+    };
+    const pushSeparator = () => {
+      result.push({
+        id: `__separator__${result.length}`,
+        username: '...',
+        avatar_emoji: '',
+        avatar_flag: '',
+        xp: 0,
+        owned_count: 0,
+        owned_area: 0,
+        conquest_pct: 0,
+        rank: -1,
+        isSeparator: true,
+      });
+    };
+
+    const topIndices = [0, 1, 2, 3, 4].filter(i => i < source.length);
+    topIndices.forEach(pushByIndex);
+
+    const userIndex = source.findIndex(e => e.id === user?.id);
+    const bottomIndices = [source.length - 2, source.length - 1].filter(i => i >= 0);
+    const userInTop = userIndex >= 0 && userIndex <= 4;
+    const userInBottom = bottomIndices.includes(userIndex);
+
+    const middleIndices =
+      userIndex >= 0 && !userInTop && !userInBottom
+        ? [userIndex - 1, userIndex, userIndex + 1].filter(i => i >= 0 && i < source.length)
+        : [];
+
+    const bottomUnique = bottomIndices.filter(i => !topIndices.includes(i) && !middleIndices.includes(i));
+
+    if (middleIndices.length > 0) {
+      pushSeparator();
+      middleIndices.forEach(pushByIndex);
+    }
+
+    if (bottomUnique.length > 0) {
+      pushSeparator();
+      bottomUnique.forEach(pushByIndex);
+    }
+
     return result;
   }
 
@@ -184,15 +488,53 @@ export default function LeaderboardScreen() {
     );
   }
 
-  const displayEntries = getDisplayEntries();
+  const activeEntries = leaderboardType === 'alltime' ? entries : dailyXpEntries;
+  const displayEntries = getDisplayEntries(activeEntries);
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>🏆 Leaderboard</Text>
+        <Text style={styles.title}>Leaderboard</Text>
         <Text style={styles.subtitle}>
-          {entries.length} explorers · Ranked by land area conquered
+          {leaderboardType === 'alltime'
+            ? `${entries.length} explorers · Ranked by total XP`
+            : `${dailyXpEntries.length} active today · Ranked by XP earned`}
         </Text>
+        {leaderboardType === 'daily' && (
+          <View style={styles.dailyRewardNoteRow}>
+            <Text style={styles.dailyRewardNoteLabel}>Daily #1 reward:</Text>
+            <View style={styles.dailyRewardItem}>
+              <Image source={require('../../assets/avatars/gold_coin.png')} style={styles.dailyRewardIcon} resizeMode="contain" />
+              <Text style={styles.dailyRewardNote}>1,000</Text>
+            </View>
+            <View style={styles.dailyRewardItem}>
+              <Image source={require('../../assets/avatars/raffle_ticket.png')} style={styles.dailyRewardIcon} resizeMode="contain" />
+              <Text style={styles.dailyRewardNote}>2</Text>
+            </View>
+          </View>
+        )}
+      </View>
+
+      {/* Tab switcher */}
+      <View style={styles.tabRow}>
+        <TouchableOpacity
+          style={[styles.tab, leaderboardType === 'daily' && styles.tabActive]}
+          onPress={() => {
+            setLeaderboardType('daily');
+            setSearchQuery('');
+          }}
+        >
+          <Text style={[styles.tabText, leaderboardType === 'daily' && styles.tabTextActive]}>Daily</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, leaderboardType === 'alltime' && styles.tabActive]}
+          onPress={() => {
+            setLeaderboardType('alltime');
+            setSearchQuery('');
+          }}
+        >
+          <Text style={[styles.tabText, leaderboardType === 'alltime' && styles.tabTextActive]}>All-Time</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Search bar */}
@@ -216,7 +558,11 @@ export default function LeaderboardScreen() {
         contentContainerStyle={styles.list}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyEmoji}>{searchQuery ? '🔍' : '🌐'}</Text>
+            {searchQuery ? (
+              <Text style={styles.emptyEmoji}>🔍</Text>
+            ) : (
+              <Image source={require('../../assets/avatars/eyes.png')} style={styles.emptyIcon} resizeMode="contain" />
+            )}
             <Text style={styles.emptyText}>
               {searchQuery ? `No players found for "${searchQuery}"` : 'No explorers yet. Be the first!'}
             </Text>
@@ -226,7 +572,7 @@ export default function LeaderboardScreen() {
           if (item.isSeparator) {
             return (
               <View style={styles.separator}>
-                <Text style={styles.separatorDots}>• • •</Text>
+                <Text style={styles.separatorDots}>...</Text>
               </View>
             );
           }
@@ -234,6 +580,7 @@ export default function LeaderboardScreen() {
           const isCurrentUser = item.id === user?.id;
           const isTop3 = item.rank <= 3;
           const rankEmoji = item.rank === 1 ? '🥇' : item.rank === 2 ? '🥈' : item.rank === 3 ? '🥉' : '';
+          const conquestPct = (item.conquest_pct ?? 0) as number;
 
           return (
             <TouchableOpacity
@@ -249,24 +596,29 @@ export default function LeaderboardScreen() {
                 )}
               </View>
 
-              <AvatarDisplay avatarId={item.avatar_emoji} avatarFlag={item.avatar_flag} size={36} />
+              <AvatarDisplay avatarId={item.avatar_emoji} avatarFlag={item.avatar_flag} size={36} isConqueror={item.is_conquerer} />
 
               <View style={styles.userInfo}>
                 <Text style={[styles.username, isCurrentUser && styles.usernameHighlight]} numberOfLines={1}>
                   {item.username}{isCurrentUser ? ' (You)' : ''}
                 </Text>
-                <Text style={styles.ownedCount}>
-                  {item.owned_count} countries
-                  {item.owned_area > 0 ? ` · ${(item.owned_area / 1_000_000).toFixed(1)}M km²` : ''}
-                </Text>
+                {leaderboardType === 'alltime' ? (
+                  <Text style={styles.ownedCount}>
+                    Level {getLevelInfo(item.xp ?? 0).level} · {(item.xp ?? 0).toLocaleString()} XP
+                  </Text>
+                ) : (
+                  <Text style={styles.ownedCount}>
+                    Level {getLevelInfo(item.xp ?? 0).level} · {(item as any).daily_xp || 0} XP today
+                  </Text>
+                )}
               </View>
 
               <View style={styles.pctContainer}>
                 <Text style={[styles.pctValue, isTop3 && styles.pctValueTop3]}>
-                  {item.conquest_pct}%
+                  {conquestPct}%
                 </Text>
                 <View style={styles.miniBar}>
-                  <View style={[styles.miniBarFill, { width: `${Math.min(item.conquest_pct * 5, 100)}%` }]} />
+                  <View style={[styles.miniBarFill, { width: `${Math.min(conquestPct * 5, 100)}%` }]} />
                 </View>
               </View>
             </TouchableOpacity>
@@ -311,7 +663,7 @@ function ProfileModalContent({
   isMe: boolean;
   onClose: () => void;
 }) {
-  const { entry, profile, ownedCountryCodes, unlockedItemIds, claimedAchievementIds, loading } = data;
+  const { entry, profile, ownedCountryCodes, unlockedItemIds, claimedAchievementIds, ownedCount, ownedArea, conquestPct, loading } = data;
   const memberSince = profile?.created_at
     ? new Date(profile.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
     : null;
@@ -355,6 +707,7 @@ function ProfileModalContent({
               avatarId={entry.avatar_emoji}
               avatarFlag={entry.avatar_flag}
               size={72}
+              isConqueror={profile?.is_conquerer}
             />
             <View style={modal.identityInfo}>
               <Text style={modal.profileUsername}>{entry.username}{isMe ? ' (You)' : ''}</Text>
@@ -367,10 +720,10 @@ function ProfileModalContent({
           <View style={modal.section}>
             <Text style={modal.sectionTitle}>World Domination</Text>
             <View style={modal.conquestBar}>
-              <View style={[modal.conquestFill, { width: `${Math.min(entry.conquest_pct * 5, 100)}%` as any }]} />
+              <View style={[modal.conquestFill, { width: `${Math.min(conquestPct * 5, 100)}%` as any }]} />
             </View>
             <Text style={modal.conquestLabel}>
-              {entry.conquest_pct}% of Earth's land · {(entry.owned_area / 1_000_000).toFixed(1)}M km²
+              {conquestPct}% of Earth's land · {(ownedArea / 1_000_000).toFixed(1)}M km²
             </Text>
           </View>
 
@@ -394,27 +747,30 @@ function ProfileModalContent({
               <Text style={modal.statLabel}>Gold</Text>
             </View>
             <View style={modal.statBox}>
-              <Text style={modal.statValue}>{entry.owned_count}</Text>
+              <Text style={modal.statValue}>{formatNumberShort(profile?.xp)}</Text>
+              <Text style={modal.statLabel}>XP</Text>
+            </View>
+            <View style={modal.statBox}>
+              <Text style={modal.statValue}>{ownedCount}</Text>
               <Text style={modal.statLabel}>Countries</Text>
             </View>
             <View style={modal.statBox}>
-              <Text style={modal.statValue}>{entry.conquest_pct}%</Text>
-              <Text style={modal.statLabel}>Conquered</Text>
-            </View>
-            <View style={modal.statBox}>
-              <Text style={modal.statValue}>{trophyCount}</Text>
-              <Text style={modal.statLabel}>Trophies</Text>
+              <Text style={modal.statValue}>{trophyCount}/{ACHIEVEMENTS_DATA.length}</Text>
+              <Text style={modal.statLabel}>Quests</Text>
             </View>
           </View>
 
           {/* Trophies */}
           {claimedTrophies.length > 0 && (
             <View style={modal.section}>
-              <Text style={modal.sectionTitle}>Trophies ({trophyCount} / {ACHIEVEMENTS_DATA.length})</Text>
+              <Text style={modal.sectionTitle}>Quests ({trophyCount} / {ACHIEVEMENTS_DATA.length})</Text>
               <View style={modal.trophyGrid}>
                 {claimedTrophies.map(t => (
                   <View key={t.id} style={modal.trophyChip}>
-                    <Text style={modal.trophyIcon}>{t.icon}</Text>
+                    {ACHIEVEMENT_ICON_IMAGES[t.icon]
+                      ? <Image source={ACHIEVEMENT_ICON_IMAGES[t.icon]} style={{ width: 18, height: 18 }} resizeMode="contain" />
+                      : <Text style={modal.trophyIcon}>{t.icon}</Text>
+                    }
                     <Text style={modal.trophyName} numberOfLines={1}>{t.title}</Text>
                   </View>
                 ))}
@@ -485,6 +841,41 @@ const styles = StyleSheet.create({
   header: { padding: 20, paddingTop: 56 },
   title: { color: '#fff', fontSize: 28, fontWeight: 'bold' },
   subtitle: { color: '#aaa', fontSize: 13, marginTop: 4 },
+  dailyRewardNoteRow: {
+    marginTop: 6,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+  },
+  dailyRewardNoteLabel: {
+    color: '#ccc',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  dailyRewardItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  dailyRewardIcon: {
+    width: 14,
+    height: 14,
+  },
+  dailyRewardNote: {
+    color: '#FFD700',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  tabRow: { flexDirection: 'row', paddingHorizontal: 20, marginBottom: 16, gap: 8 },
+  tab: {
+    flex: 1, paddingVertical: 10, borderRadius: 10,
+    backgroundColor: '#1a1a2e', borderWidth: 1, borderColor: '#2a2a4e',
+    alignItems: 'center',
+  },
+  tabActive: { backgroundColor: '#FFD700', borderColor: '#FFD700' },
+  tabText: { color: '#aaa', fontSize: 14, fontWeight: '600' },
+  tabTextActive: { color: '#0a0a1a' },
   searchRow: { paddingHorizontal: 20, marginBottom: 12 },
   searchInput: {
     backgroundColor: '#1a1a2e',
@@ -499,9 +890,10 @@ const styles = StyleSheet.create({
   list: { paddingHorizontal: 20, paddingBottom: 20 },
   emptyContainer: { alignItems: 'center', paddingVertical: 60, gap: 12 },
   emptyEmoji: { fontSize: 48 },
+  emptyIcon: { width: 58, height: 58, opacity: 0.9 },
   emptyText: { color: '#666', fontSize: 16, textAlign: 'center' },
   separator: { alignItems: 'center', paddingVertical: 8 },
-  separatorDots: { color: '#555', fontSize: 18, letterSpacing: 6 },
+  separatorDots: { color: '#555', fontSize: 18, letterSpacing: 3 },
   row: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: '#1a1a2e', borderRadius: 14,

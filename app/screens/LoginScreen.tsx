@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Alert,
+  Image,
   ImageBackground,
   KeyboardAvoidingView,
   Platform,
@@ -20,10 +21,16 @@ type Props = {
 
 export default function LoginScreen({ navigation }: Props) {
   const { signIn, signInWithGoogle } = useAuth();
+  const bgSource = require('../../assets/login screen bg.gif');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+
+  useEffect(() => {
+    const resolved = Image.resolveAssetSource(bgSource);
+    if (resolved?.uri) Image.prefetch(resolved.uri).catch(() => {});
+  }, []);
 
   async function handleSignIn() {
     if (!email || !password) {
@@ -53,7 +60,7 @@ export default function LoginScreen({ navigation }: Props) {
 
   return (
     <ImageBackground
-      source={require('../../assets/login screen bg.gif')}
+      source={bgSource}
       style={styles.container}
       resizeMode="cover"
     >
@@ -122,6 +129,11 @@ export default function LoginScreen({ navigation }: Props) {
             <TouchableOpacity onPress={() => navigation.navigate('SignUp')}>
               <Text style={styles.link}>Don't have an account? Sign Up</Text>
             </TouchableOpacity>
+
+            <View style={styles.poweredByRow}>
+              <Text style={styles.poweredByText}>Powered by BigBrainGlob</Text>
+              <Image source={require('../../assets/bbg_logo.png')} style={styles.poweredByLogo} resizeMode="contain" />
+            </View>
           </View>
         </KeyboardAvoidingView>
       </View>
@@ -240,5 +252,23 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0,0,0,0.6)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
+  },
+  poweredByRow: {
+    marginTop: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    opacity: 0.92,
+  },
+  poweredByText: {
+    color: '#9aa0c2',
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+  poweredByLogo: {
+    width: 22,
+    height: 22,
   },
 });

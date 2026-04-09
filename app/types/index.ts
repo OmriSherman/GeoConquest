@@ -4,6 +4,7 @@ export interface Profile {
   id: string;
   username: string;
   gold_balance: number;
+  xp: number;
   country: string | null;
   email?: string;
   has_onboarded: boolean;
@@ -12,6 +13,13 @@ export interface Profile {
   max_quiz_turns?: number;
   login_streak?: number;
   last_reward_claim?: string;
+  is_conquerer?: boolean;
+  tickets?: number;
+  quiz_count?: number;
+  referred_by?: string | null;
+  referral_bonus_claimed?: boolean;
+  completed_speed_detective?: boolean;
+  completed_ground_invasion?: boolean;
   created_at: string;
 }
 
@@ -86,9 +94,11 @@ export interface LeaderboardEntry {
   username: string;
   avatar_emoji: string;
   avatar_flag: string;
-  owned_count: number;
-  owned_area: number;   // km²
-  conquest_pct: number; // % of Earth's land area owned
+  xp: number;
+  owned_count?: number;
+  owned_area?: number;   // km²
+  conquest_pct?: number; // % of Earth's land area owned
+  is_conquerer?: boolean;
 }
 
 // ─── Navigation ───────────────────────────────────────────────────────────────
@@ -107,7 +117,7 @@ export type AuthStackParamList = {
 
 export type MainTabParamList = {
   Home: undefined;
-  QuizMenu: undefined;
+  Quizzes: undefined;
   Shop: undefined;
   Leaderboard: undefined;
   Achievements: undefined;

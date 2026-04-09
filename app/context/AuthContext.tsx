@@ -1,11 +1,140 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { Alert, Platform } from 'react-native';
+import { Alert, Platform, Share } from 'react-native';
 import { Session, User } from '@supabase/supabase-js';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
 import { supabase } from '../lib/supabase';
 import { Profile } from '../types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ACHIEVEMENTS_DATA } from '../lib/achievementsData';
+
+// ─── Offline cache helpers ────────────────────────────────────────────────────
+
+export const PROFILE_CACHE_KEY = (uid: string) => `@geoquest/profile_cache_${uid}`;
+const MUTATIONS_KEY = (uid: string) => `@geoquest/pending_mutations_${uid}`;
+const NEXT_QUIZ_BOOST_KEY = (uid: string) => `@geoquest/next_quiz_boost_${uid}`;
+
+type PendingMutation =
+  | { type: 'add_gold'; delta: number }
+  | { type: 'add_xp'; delta: number }
+  | { type: 'add_tickets'; delta: number }
+  | { type: 'daily_reward_sync'; newStreak: number; claimedAt: string };
+
+const QUEST_REWARD_AVATAR_TO_ACHIEVEMENT_IDS = ACHIEVEMENTS_DATA.reduce((map, achievement) => {
+  const rewardItems = achievement.rewardItems ?? (achievement.rewardItem ? [achievement.rewardItem] : []);
+  for (const rewardItem of rewardItems) {
+    if (rewardItem.type !== 'avatar') continue;
+    const existing = map.get(rewardItem.itemId) ?? [];
+    map.set(rewardItem.itemId, [...existing, achievement.id]);
+  }
+  return map;
+}, new Map<string, string[]>());
+
+export async function enqueueMutation(userId: string, mutation: PendingMutation) {
+  const key = MUTATIONS_KEY(userId);
+  const raw = await AsyncStorage.getItem(key);
+  const list: PendingMutation[] = raw ? JSON.parse(raw) : [];
+  list.push(mutation);
+  await AsyncStorage.setItem(key, JSON.stringify(list));
+}
+
+/** Called on reconnect. Applies queued offline mutations to the freshly-fetched DB profile. */
+async function processPendingMutations(userId: string, fresh: Profile): Promise<Profile> {
+  try {
+    const key = MUTATIONS_KEY(userId);
+    const raw = await AsyncStorage.getItem(key);
+    if (!raw) return fresh;
+    const list: PendingMutation[] = JSON.parse(raw);
+    if (!list.length) return fresh;
+
+    let goldDelta = 0, xpDelta = 0, ticketDelta = 0;
+    let dailySync: { newStreak: number; claimedAt: string } | null = null;
+
+    for (const m of list) {
+      if (m.type === 'add_gold') goldDelta += m.delta;
+      if (m.type === 'add_xp') xpDelta += m.delta;
+      if (m.type === 'add_tickets') ticketDelta += m.delta;
+      if (m.type === 'daily_reward_sync') dailySync = { newStreak: m.newStreak, claimedAt: m.claimedAt };
+    }
+
+    const payload: Record<string, unknown> = {};
+    const updated = { ...fresh };
+
+    if (goldDelta > 0) {
+      updated.gold_balance = fresh.gold_balance + goldDelta;
+      payload.gold_balance = updated.gold_balance;
+    }
+    if (xpDelta > 0) {
+      updated.xp = (fresh.xp ?? 0) + xpDelta;
+      payload.xp = updated.xp;
+    }
+    if (ticketDelta > 0) {
+      updated.tickets = (fresh.tickets ?? 0) + ticketDelta;
+      payload.tickets = updated.tickets;
+    }
+    if (dailySync && dailySync.newStreak > (fresh.login_streak ?? 0)) {
+      updated.login_streak = dailySync.newStreak;
+      updated.last_reward_claim = dailySync.claimedAt;
+      payload.login_streak = updated.login_streak;
+      payload.last_reward_claim = updated.last_reward_claim;
+    }
+
+    if (Object.keys(payload).length > 0) {
+      const { error } = await supabase.from('profiles').update(payload).eq('id', userId);
+      if (error) return fresh; // keep queue intact if DB update failed
+    }
+
+    await AsyncStorage.removeItem(key);
+    return updated;
+  } catch {
+    return fresh;
+  }
+}
+
+async function reconcileQuestRewardAvatarOwnership(userId: string, unlockedItemIds: Set<string>): Promise<Set<string>> {
+  if (unlockedItemIds.size === 0 || QUEST_REWARD_AVATAR_TO_ACHIEVEMENT_IDS.size === 0) {
+    return unlockedItemIds;
+  }
+
+  try {
+    const { data: achievementsData, error: achievementsError } = await supabase
+      .from('user_achievements')
+      .select('achievement_id')
+      .eq('user_id', userId);
+
+    if (achievementsError) {
+      console.warn('[Auth] Failed to validate quest-reward avatars:', achievementsError.message);
+      return unlockedItemIds;
+    }
+
+    const claimedAchievementIds = new Set((achievementsData ?? []).map((row: any) => row.achievement_id));
+    const invalidQuestRewardAvatars = Array.from(unlockedItemIds).filter((itemId) => {
+      const requiredAchievementIds = QUEST_REWARD_AVATAR_TO_ACHIEVEMENT_IDS.get(itemId);
+      if (!requiredAchievementIds) return false;
+      return !requiredAchievementIds.some((achievementId) => claimedAchievementIds.has(achievementId));
+    });
+
+    if (invalidQuestRewardAvatars.length === 0) return unlockedItemIds;
+
+    const { error: deleteError } = await supabase
+      .from('user_unlocked_items')
+      .delete()
+      .eq('user_id', userId)
+      .in('item_id', invalidQuestRewardAvatars);
+
+    if (deleteError) {
+      console.warn('[Auth] Failed to remove invalid quest-reward avatars:', deleteError.message);
+      return unlockedItemIds;
+    }
+
+    const cleanedSet = new Set(unlockedItemIds);
+    invalidQuestRewardAvatars.forEach((itemId) => cleanedSet.delete(itemId));
+    return cleanedSet;
+  } catch (error) {
+    console.warn('[Auth] Failed to reconcile quest-reward avatars:', error);
+    return unlockedItemIds;
+  }
+}
 
 // Required for OAuth session completion on iOS
 WebBrowser.maybeCompleteAuthSession();
@@ -22,16 +151,31 @@ interface AuthContextValue {
   signIn: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
-  setUsername: (username: string, avatarEmoji?: string, avatarFlag?: string, country?: string | null) => Promise<void>;
+  setUsername: (username: string, avatarEmoji?: string, avatarFlag?: string, country?: string | null, referralCode?: string | null) => Promise<void>;
   purchaseAvatarItem: (itemType: 'avatar' | 'flag', itemId: string, cost: number) => Promise<void>;
-  claimAchievement: (achievementId: string, rewardGold: number, rewardItems?: { type: 'avatar' | 'flag'; itemId: string }[]) => Promise<void>;
+  claimAchievement: (achievementId: string, rewardGold: number, rewardItems?: { type: 'avatar' | 'flag' | 'item'; itemId: string }[], rewardTickets?: number) => Promise<void>;
   purchaseQuizUpgrade: (newTurns: number, cost: number) => Promise<void>;
   disabledUpgrades: Set<string>;
   toggleUpgrade: (id: string) => Promise<void>;
   effectiveMaxTurns: number;
   dailyRewardAvailable: boolean;
   setDailyRewardAvailable: React.Dispatch<React.SetStateAction<boolean>>;
-  claimDailyReward: () => Promise<number>;
+  claimDailyReward: () => Promise<{ gold: number; tickets: number }>;
+  addXP: (amount: number) => Promise<void>;
+  addGold: (amount: number) => Promise<void>;
+  incrementQuizCount: () => Promise<boolean>;
+  shareReferralLink: () => Promise<void>;
+  unlockedItems: Set<string>;
+  refreshUnlockedItems: () => Promise<void>;
+  refreshQuestStatus: () => Promise<void>;
+  spendTicket: () => Promise<void>;
+  addTickets: (amount: number) => Promise<void>;
+  purchaseTicket: (cost: number) => Promise<void>;
+  purchaseTickets: (amount: number, cost: number) => Promise<void>;
+  purchaseConqueror: (plan: 'unlimited' | 'monthly') => Promise<void>;
+  nextQuizBoostActive: boolean;
+  setNextQuizBoostActive: (active: boolean) => Promise<void>;
+  consumeNextQuizBoost: () => Promise<boolean>;
 }
 
 // ─── Context ──────────────────────────────────────────────────────────────────
@@ -47,6 +191,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [needsUsername, setNeedsUsername] = useState(false);
   const [disabledUpgrades, setDisabledUpgrades] = useState<Set<string>>(new Set());
   const [dailyRewardAvailable, setDailyRewardAvailable] = useState(false);
+  const [unlockedItems, setUnlockedItems] = useState<Set<string>>(new Set());
+  const [nextQuizBoostActive, setNextQuizBoostActiveState] = useState(false);
 
   // ── Bootstrap ──────────────────────────────────────────────────────────────
   //
@@ -105,7 +251,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [session?.user?.id]);
 
+  useEffect(() => {
+    if (!session?.user?.id) {
+      setNextQuizBoostActiveState(false);
+      return;
+    }
+    AsyncStorage.getItem(NEXT_QUIZ_BOOST_KEY(session.user.id))
+      .then((raw) => setNextQuizBoostActiveState(raw === '1'))
+      .catch(() => setNextQuizBoostActiveState(false));
+  }, [session?.user?.id]);
+
   // ── Helpers ────────────────────────────────────────────────────────────────
+
+  function applyProfileToState(p: Profile) {
+    setProfile(p);
+    if (p.last_reward_claim) {
+      const lastDate = new Date(p.last_reward_claim).toISOString().split('T')[0];
+      const today = new Date().toISOString().split('T')[0];
+      setDailyRewardAvailable(lastDate < today);
+    } else {
+      setDailyRewardAvailable(true);
+    }
+    setNeedsUsername(!p.has_onboarded);
+  }
 
   async function fetchProfile(userId: string) {
     const { data, error } = await supabase
@@ -115,33 +283,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .single();
 
     if (!error && data) {
-      const p = data as Profile;
-      setProfile(p);
+      // Apply any queued offline mutations onto the fresh DB values
+      let p = await processPendingMutations(userId, data as Profile);
 
-      // Check daily reward availability — compare UTC dates on both sides
-      if (p.last_reward_claim) {
-        const lastClaimUtcDate = new Date(p.last_reward_claim).toISOString().split('T')[0];
-        const todayUtcDate = new Date().toISOString().split('T')[0];
-        setDailyRewardAvailable(lastClaimUtcDate < todayUtcDate);
-      } else {
-        // Never claimed before
-        setDailyRewardAvailable(true);
-      }
+      // Persist updated profile to cache
+      AsyncStorage.setItem(PROFILE_CACHE_KEY(userId), JSON.stringify(p)).catch(() => {});
 
-      // Need onboarding if has_onboarded is false
-      if (!p.has_onboarded) {
-        setNeedsUsername(true);
-      } else {
-        setNeedsUsername(false);
-      }
-    } else if (error && error.code === 'PGRST116') {
+      applyProfileToState(p);
+
+      // Load unlocked items into cache
+      supabase.from('user_unlocked_items').select('item_id').eq('user_id', userId).then(async (res) => {
+        if (!res.error && res.data) {
+          const unlockedSet = new Set(res.data.map((r: { item_id: string }) => r.item_id));
+          const reconciledSet = await reconcileQuestRewardAvatarOwnership(userId, unlockedSet);
+          setUnlockedItems(reconciledSet);
+        }
+      });
+
+    } else if (error?.code === 'PGRST116') {
       // Profile doesn't exist — needs onboarding
-      // console.log('[Auth] No profile found, needs onboarding');
       setNeedsUsername(true);
       setDailyRewardAvailable(false);
     } else {
-      setNeedsUsername(false);
-      setDailyRewardAvailable(false);
+      // Network error or unexpected failure — try the local cache
+      try {
+        const raw = await AsyncStorage.getItem(PROFILE_CACHE_KEY(userId));
+        if (raw) {
+          applyProfileToState(JSON.parse(raw) as Profile);
+        } else {
+          setNeedsUsername(false);
+          setDailyRewardAvailable(false);
+        }
+      } catch {
+        setNeedsUsername(false);
+        setDailyRewardAvailable(false);
+      }
     }
   }
 
@@ -304,6 +480,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function signOut() {
     try {
+      if (profile?.id) {
+        AsyncStorage.multiRemove([PROFILE_CACHE_KEY(profile.id), MUTATIONS_KEY(profile.id), NEXT_QUIZ_BOOST_KEY(profile.id)]).catch(() => {});
+      }
       await supabase.auth.signOut();
     } catch (error) {
       console.warn('Sign out warning:', error);
@@ -318,10 +497,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     username: string,
     avatarEmoji?: string,
     avatarFlag?: string,
-    country?: string | null
+    country?: string | null,
+    referralCode?: string | null
   ) {
     if (!session?.user) return;
     const userId = session.user.id;
+    const nextAvatar = avatarEmoji || 'png_explorer_male';
+
+    // Hard guard: quest-reward avatars can only be equipped if unlocked.
+    const requiredQuestAchievements = QUEST_REWARD_AVATAR_TO_ACHIEVEMENT_IDS.get(nextAvatar);
+    if (requiredQuestAchievements && !unlockedItems.has(nextAvatar)) {
+      throw new Error('This avatar is locked. Complete and claim its quest reward first.');
+    }
 
     // Check if profile exists
     const { data: existing } = await supabase
@@ -332,12 +519,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const updateData: any = {
       username,
-      avatar_emoji: avatarEmoji || '🧑',
+      avatar_emoji: nextAvatar,
       avatar_flag: avatarFlag || '🏴‍☠️',
       email: session.user.email,
       has_onboarded: true,
     };
     if (country !== undefined) updateData.country = country;
+    if (referralCode && referralCode.toLowerCase() !== username.trim().toLowerCase()) {
+      updateData.referred_by = referralCode;
+    }
 
     if (existing) {
       // Update existing profile
@@ -357,11 +547,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setProfile((prev) => ({
       ...(prev || { id: userId, gold_balance: 500, created_at: new Date().toISOString(), has_onboarded: false }),
       username,
-      avatar_emoji: avatarEmoji || '🧑',
+      avatar_emoji: nextAvatar,
       avatar_flag: avatarFlag || '🏴‍☠️',
       email: session.user.email,
       has_onboarded: true,
       country: country ?? prev?.country ?? null,
+      referred_by: referralCode ?? prev?.referred_by ?? null,
+      referral_bonus_claimed: prev?.referral_bonus_claimed ?? false,
     } as Profile));
     setNeedsUsername(false);
   }
@@ -377,11 +569,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (error) throw error;
 
-    // Deduct gold locally on success
+    // Deduct gold locally + update unlock cache
     setProfile(prev => prev ? { ...prev, gold_balance: prev.gold_balance - cost } : prev);
+    setUnlockedItems(prev => new Set([...prev, itemId]));
   }
 
-  async function claimAchievement(achievementId: string, rewardGold: number, rewardItems?: { type: 'avatar' | 'flag'; itemId: string }[]) {
+  async function claimAchievement(achievementId: string, rewardGold: number, rewardItems?: { type: 'avatar' | 'flag' | 'item'; itemId: string }[], rewardTickets?: number) {
     if (!profile) return;
 
     const { data, error } = await supabase.rpc('claim_achievement', {
@@ -389,26 +582,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       p_reward_amount: rewardGold,
     });
 
-    if (error) {
-      if (error.message.includes('already claimed')) {
-        throw new Error('This achievement has already been claimed.');
-      }
+    const alreadyClaimed = !!error?.message?.includes('already claimed');
+
+    if (error && !alreadyClaimed) {
       throw error;
     }
 
-    if (data && data.length > 0) {
+    // Only update gold balance if not already claimed (gold was already granted)
+    if (!alreadyClaimed && data && data.length > 0) {
       setProfile((prev) => prev ? { ...prev, gold_balance: data[0].new_balance } : prev);
     }
 
-    // Unlock reward items if provided (no gold cost — trophy rewards)
+    // Unlock reward items if provided — always attempt, insert is idempotent (23505 = already owned)
     for (const item of rewardItems ?? []) {
       const { error: unlockError } = await supabase.from('user_unlocked_items').insert(
         { user_id: profile.id, item_id: item.itemId, item_type: item.type }
       );
-      // 23505 = unique_violation: already unlocked, that's fine
       if (unlockError && unlockError.code !== '23505') {
         throw new Error(`Reward item could not be unlocked: ${unlockError.message}`);
       }
+      setUnlockedItems(prev => new Set([...prev, item.itemId]));
+    }
+
+    // Grant ticket rewards — skip if already claimed (tickets were already granted)
+    if (!alreadyClaimed && rewardTickets && rewardTickets > 0) {
+      const newTickets = (profile.tickets ?? 0) + rewardTickets;
+      await supabase.from('profiles').update({ tickets: newTickets }).eq('id', profile.id);
+      setProfile(prev => prev ? { ...prev, tickets: newTickets } : prev);
+    }
+
+    // If it was already claimed and items were all already owned too, surface the error
+    if (alreadyClaimed && (rewardItems ?? []).length === 0) {
+      throw new Error('This achievement has already been claimed.');
     }
   }
 
@@ -430,29 +635,349 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setProfile(prev => prev ? { ...prev, gold_balance: prev.gold_balance - cost, max_quiz_turns: newTurns } : prev);
   }
 
-  async function claimDailyReward(): Promise<number> {
-    if (!profile) return 0;
+  // Gold and tickets per cycle day — mirrors REWARDS_CYCLE in DailyRewardModal.tsx
+  const DAILY_GOLD_BY_DAY = [100, 150, 200, 250, 300, 400, 500];
+  const DAILY_TICKETS_BY_DAY = [1, 1, 2, 2, 3, 3, 5];
+
+  async function claimDailyReward(): Promise<{ gold: number; tickets: number }> {
+    if (!profile) return { gold: 0, tickets: 0 };
+    const rewardMultiplier = profile.is_conquerer ? 3 : 1;
 
     const { data, error } = await supabase.rpc('claim_daily_reward');
 
-    if (error) {
-      throw error;
+    // Network error (no DB error code) — claim locally and queue sync
+    if (error && !error.code) {
+      const prevStreak = profile.login_streak ?? 0;
+      const newStreak = prevStreak + 1;
+      const cycleDay = ((newStreak - 1) % 7) + 1;
+      const gold = DAILY_GOLD_BY_DAY[cycleDay - 1] * rewardMultiplier;
+      const tickets = DAILY_TICKETS_BY_DAY[cycleDay - 1] * rewardMultiplier;
+      const claimedAt = new Date().toISOString();
+      const newGold = (profile.gold_balance ?? 0) + gold;
+      const newTickets = (profile.tickets ?? 0) + tickets;
+
+      setProfile(prev => prev ? {
+        ...prev,
+        gold_balance: newGold,
+        login_streak: newStreak,
+        last_reward_claim: claimedAt,
+        tickets: newTickets,
+      } : prev);
+      setDailyRewardAvailable(false);
+
+      // Update local cache so the offline state persists across restarts
+      const raw = await AsyncStorage.getItem(PROFILE_CACHE_KEY(profile.id));
+      if (raw) {
+        const cached = JSON.parse(raw);
+        AsyncStorage.setItem(PROFILE_CACHE_KEY(profile.id), JSON.stringify({
+          ...cached, gold_balance: newGold, login_streak: newStreak,
+          last_reward_claim: claimedAt, tickets: newTickets,
+        })).catch(() => {});
+      }
+
+      // Queue mutations for when we go back online
+      await enqueueMutation(profile.id, { type: 'add_gold', delta: gold });
+      await enqueueMutation(profile.id, { type: 'add_tickets', delta: tickets });
+      await enqueueMutation(profile.id, { type: 'daily_reward_sync', newStreak, claimedAt });
+
+      return { gold, tickets };
     }
+
+    if (error) throw error;
 
     if (data && data.length > 0) {
       const { success, new_balance, new_streak, reward_amount } = data[0];
       if (success) {
-        setProfile(prev => prev ? { 
-          ...prev, 
-          gold_balance: new_balance, 
+        const cycleDay = ((new_streak as number - 1) % 7) + 1;
+        const baseTicketBonus = DAILY_TICKETS_BY_DAY[cycleDay - 1];
+        const ticketBonus = baseTicketBonus * rewardMultiplier;
+        const baseGoldReward = reward_amount as number;
+        const totalGoldReward = baseGoldReward * rewardMultiplier;
+        const extraGoldReward = totalGoldReward - baseGoldReward;
+        const newGoldBalance = (new_balance as number) + extraGoldReward;
+        const newTickets = (profile.tickets ?? 0) + ticketBonus;
+        await supabase.from('profiles').update({ gold_balance: newGoldBalance, tickets: newTickets }).eq('id', profile.id);
+        setProfile(prev => prev ? {
+          ...prev,
+          gold_balance: newGoldBalance,
           login_streak: new_streak,
-          last_reward_claim: new Date().toISOString()
+          last_reward_claim: new Date().toISOString(),
+          tickets: newTickets,
         } : prev);
         setDailyRewardAvailable(false);
-        return reward_amount;
+        return { gold: totalGoldReward, tickets: ticketBonus };
       }
     }
-    return 0;
+    return { gold: 0, tickets: 0 };
+  }
+
+  async function addGold(amount: number) {
+    const userId = profile?.id ?? session?.user?.id;
+    if (!userId || amount === 0) return;
+
+    // Optimistic local update
+    setProfile(prev => prev ? { ...prev, gold_balance: Math.max(0, (prev.gold_balance ?? 0) + amount) } : prev);
+
+    // Use server value as source of truth to avoid stale-client overwrites
+    const { data: currentRow, error: readError } = await supabase
+      .from('profiles')
+      .select('gold_balance')
+      .eq('id', userId)
+      .single();
+
+    if (readError) {
+      if (profile?.id) {
+        await enqueueMutation(profile.id, { type: 'add_gold', delta: amount });
+      }
+      return;
+    }
+
+    const currentGold = Number((currentRow as any)?.gold_balance ?? 0);
+    const newBalance = Math.max(0, currentGold + amount);
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ gold_balance: newBalance })
+      .eq('id', userId);
+
+    if (error) {
+      if (profile?.id) {
+        await enqueueMutation(profile.id, { type: 'add_gold', delta: amount });
+        const raw = await AsyncStorage.getItem(PROFILE_CACHE_KEY(profile.id));
+        if (raw) {
+          const cached = JSON.parse(raw);
+          AsyncStorage.setItem(PROFILE_CACHE_KEY(profile.id), JSON.stringify({ ...cached, gold_balance: newBalance })).catch(() => {});
+        }
+      }
+      return;
+    }
+
+    setProfile(prev => prev ? { ...prev, gold_balance: newBalance } : prev);
+  }
+
+  async function spendTicket() {
+    if (!profile) return;
+    const newCount = Math.max(0, (profile.tickets ?? 0) - 1);
+    await supabase.from('profiles').update({ tickets: newCount }).eq('id', profile.id);
+    setProfile(prev => prev ? { ...prev, tickets: newCount } : prev);
+  }
+
+  async function addTickets(amount: number) {
+    if (!profile || amount <= 0) return;
+    const newCount = (profile.tickets ?? 0) + amount;
+    await supabase.from('profiles').update({ tickets: newCount }).eq('id', profile.id);
+    setProfile(prev => prev ? { ...prev, tickets: newCount } : prev);
+  }
+
+  async function purchaseTickets(amount: number, cost: number) {
+    if (!profile) return;
+    if ((profile.gold_balance ?? 0) < cost) throw new Error('Not enough gold.');
+    const newGold = profile.gold_balance - cost;
+    const newTickets = (profile.tickets ?? 0) + amount;
+    const { error } = await supabase
+      .from('profiles')
+      .update({ gold_balance: newGold, tickets: newTickets })
+      .eq('id', profile.id);
+    if (error) throw error;
+    setProfile(prev => prev ? { ...prev, gold_balance: newGold, tickets: newTickets } : prev);
+  }
+
+  async function purchaseTicket(cost: number) {
+    if (!profile) return;
+    if ((profile.gold_balance ?? 0) < cost) throw new Error('Not enough gold.');
+    const newGold = profile.gold_balance - cost;
+    const newTickets = (profile.tickets ?? 0) + 1;
+    const { error } = await supabase
+      .from('profiles')
+      .update({ gold_balance: newGold, tickets: newTickets })
+      .eq('id', profile.id);
+    if (error) throw error;
+    setProfile(prev => prev ? { ...prev, gold_balance: newGold, tickets: newTickets } : prev);
+  }
+
+  async function purchaseConqueror(plan: 'unlimited' | 'monthly') {
+    if (!profile) throw new Error('Not authenticated');
+
+    try {
+      // Call RPC to activate subscription
+      const { data, error } = await supabase.rpc('activate_conqueror_subscription', {
+        p_user_id: profile.id,
+        p_plan: plan,
+      });
+
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error ?? 'Failed to activate subscription');
+
+      // Update profile locally
+      const updates: any = { is_conquerer: true };
+      const bonusGranted = !!data?.bonus_granted;
+      if (plan === 'unlimited' && bonusGranted) {
+        updates.gold_balance = (profile.gold_balance ?? 0) + 100000;
+        updates.tickets = (profile.tickets ?? 0) + 30;
+      }
+
+      setProfile(prev => prev ? { ...prev, ...updates } : prev);
+    } catch (err: any) {
+      throw new Error(err.message ?? 'Failed to activate Conqueror subscription');
+    }
+  }
+
+  async function refreshUnlockedItems() {
+    if (!profile) return;
+    const { data, error } = await supabase.from('user_unlocked_items').select('item_id').eq('user_id', profile.id);
+    if (!error && data) {
+      const unlockedSet = new Set(data.map((r: { item_id: string }) => r.item_id));
+      const reconciledSet = await reconcileQuestRewardAvatarOwnership(profile.id, unlockedSet);
+      setUnlockedItems(reconciledSet);
+    }
+  }
+
+  async function refreshQuestStatus() {
+    if (!profile) return;
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('completed_speed_detective, completed_ground_invasion')
+      .eq('id', profile.id)
+      .single();
+    if (!error && data) {
+      setProfile(prev => prev ? {
+        ...prev,
+        completed_speed_detective: data.completed_speed_detective,
+        completed_ground_invasion: data.completed_ground_invasion,
+      } : prev);
+    }
+  }
+
+  async function claimReferralBonus(): Promise<boolean> {
+    const { data, error } = await supabase.rpc('claim_referral_bonus');
+    if (error) {
+      console.warn('[Auth] Referral bonus RPC failed:', error.message);
+      return false;
+    }
+    if (!data?.[0]?.success) {
+      return false;
+    }
+    const goldAwarded = data[0].gold_awarded as number;
+    setProfile(prev => prev ? {
+      ...prev,
+      gold_balance: prev.gold_balance + goldAwarded,
+      referral_bonus_claimed: true,
+    } : prev);
+    return true;
+  }
+
+  async function incrementQuizCount(): Promise<boolean> {
+    const userId = profile?.id ?? session?.user?.id;
+    if (!userId) return false;
+
+    let quizCount = profile?.quiz_count ?? 0;
+    let referralBonusClaimed = !!profile?.referral_bonus_claimed;
+    let referredBy = (profile as any)?.referred_by ?? null;
+
+    const { data: latestProfile, error: latestProfileError } = await supabase
+      .from('profiles')
+      .select('quiz_count, referral_bonus_claimed, referred_by')
+      .eq('id', userId)
+      .single();
+
+    if (!latestProfileError && latestProfile) {
+      quizCount = Number((latestProfile as any).quiz_count ?? 0);
+      referralBonusClaimed = !!(latestProfile as any).referral_bonus_claimed;
+      referredBy = (latestProfile as any).referred_by ?? null;
+    }
+
+    const newCount = quizCount + 1;
+    const { error } = await supabase
+      .from('profiles')
+      .update({ quiz_count: newCount })
+      .eq('id', userId);
+    if (error) {
+      console.warn('[Auth] Failed to increment quiz_count:', error.message);
+      if (!referralBonusClaimed && referredBy) {
+        return claimReferralBonus();
+      }
+      return false;
+    }
+
+    setProfile(prev => prev ? { ...prev, quiz_count: newCount } : prev);
+    if (!referralBonusClaimed && referredBy) {
+      return claimReferralBonus();
+    }
+    return false;
+  }
+
+  async function shareReferralLink() {
+    if (!profile?.username) return;
+    const code = profile.username;
+    const link = `geoconquest://refer?code=${encodeURIComponent(code)}`;
+    try {
+      await Share.share({
+        message:
+          `Join me on GeoConquest! Use code ${code} when you sign up — we both get 1500 gold! 🌍\n\n` +
+          `Download: https://apps.apple.com/app/geoconquest/id0000000000\n\n` +
+          `Already installed? ${link}`,
+      });
+    } catch {}
+  }
+
+  async function addXP(amount: number) {
+    const userId = profile?.id ?? session?.user?.id;
+    if (!userId || amount <= 0) return;
+
+    // Optimistic local update
+    setProfile(prev => prev ? { ...prev, xp: (prev.xp ?? 0) + amount } : prev);
+
+    const { data: currentRow, error: readError } = await supabase
+      .from('profiles')
+      .select('xp')
+      .eq('id', userId)
+      .single();
+
+    if (readError) {
+      if (profile?.id) {
+        await enqueueMutation(profile.id, { type: 'add_xp', delta: amount });
+      }
+      return;
+    }
+
+    const currentXp = Number((currentRow as any)?.xp ?? 0);
+    const newXP = currentXp + amount;
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ xp: newXP })
+      .eq('id', userId);
+
+    if (error) {
+      if (profile?.id) {
+        await enqueueMutation(profile.id, { type: 'add_xp', delta: amount });
+        const raw = await AsyncStorage.getItem(PROFILE_CACHE_KEY(profile.id));
+        if (raw) {
+          const cached = JSON.parse(raw);
+          AsyncStorage.setItem(PROFILE_CACHE_KEY(profile.id), JSON.stringify({ ...cached, xp: newXP })).catch(() => {});
+        }
+      }
+      return;
+    }
+
+    setProfile(prev => prev ? { ...prev, xp: newXP } : prev);
+  }
+
+  async function setNextQuizBoostActive(active: boolean) {
+    if (!session?.user?.id) return;
+    const key = NEXT_QUIZ_BOOST_KEY(session.user.id);
+    if (active) {
+      await AsyncStorage.setItem(key, '1');
+    } else {
+      await AsyncStorage.removeItem(key);
+    }
+    setNextQuizBoostActiveState(active);
+  }
+
+  async function consumeNextQuizBoost(): Promise<boolean> {
+    if (!nextQuizBoostActive) return false;
+    await setNextQuizBoostActive(false);
+    return true;
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -496,6 +1021,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         dailyRewardAvailable,
         setDailyRewardAvailable,
         claimDailyReward,
+        addXP,
+        addGold,
+        incrementQuizCount,
+        shareReferralLink,
+        unlockedItems,
+        refreshUnlockedItems,
+        refreshQuestStatus,
+        spendTicket,
+        addTickets,
+        purchaseTicket,
+        purchaseTickets,
+        purchaseConqueror,
+        nextQuizBoostActive,
+        setNextQuizBoostActive,
+        consumeNextQuizBoost,
       }}
     >
       {children}

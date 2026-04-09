@@ -10,14 +10,17 @@ import { Image, ImageSourcePropType, Text, TextStyle, View } from 'react-native'
 import { CUSTOM_AVATAR_COMPONENTS, isCustomAvatar, isSpriteSheet } from '../lib/customAvatars';
 import { CUSTOM_FLAG_COMPONENTS, isCustomFlag } from '../lib/customFlags';
 
+const FALLBACK_AVATAR = require('../../assets/avatars/explorer_male.png');
+
 interface AvatarDisplayProps {
   avatarId: string;
   avatarFlag?: string;
   size?: number;
   style?: TextStyle;
+  isConqueror?: boolean;
 }
 
-export default function AvatarDisplay({ avatarId, avatarFlag, size = 32, style }: AvatarDisplayProps) {
+export default function AvatarDisplay({ avatarId, avatarFlag, size = 32, style, isConqueror }: AvatarDisplayProps) {
   const FlagComponent = avatarFlag && isCustomFlag(avatarFlag)
     ? CUSTOM_FLAG_COMPONENTS[avatarFlag]
     : null;
@@ -29,6 +32,15 @@ export default function AvatarDisplay({ avatarId, avatarFlag, size = 32, style }
       ? <View style={{ position: 'absolute', bottom: -2, right: -2 }}><FlagComponent size={flagSize} /></View>
       : <Text style={{ position: 'absolute', bottom: -2, right: -2, fontSize: flagSize }}>{avatarFlag}</Text>
     : null;
+
+  const starSize = Math.round(size * 0.4);
+  const conquerorBadge = isConqueror ? (
+    <Image
+      source={require('../../assets/avatars/star.png')}
+      style={{ position: 'absolute', top: -4, left: -4, width: starSize, height: starSize }}
+      resizeMode="contain"
+    />
+  ) : null;
 
   const avatarEntry = isCustomAvatar(avatarId) ? CUSTOM_AVATAR_COMPONENTS[avatarId] : null;
 
@@ -54,6 +66,7 @@ export default function AvatarDisplay({ avatarId, avatarFlag, size = 32, style }
               }}
             />
           </View>
+          {conquerorBadge}
           {flagBadge}
         </View>
       );
@@ -62,16 +75,17 @@ export default function AvatarDisplay({ avatarId, avatarFlag, size = 32, style }
     return (
       <View style={[{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }, style]}>
         <Image source={avatarEntry as ImageSourcePropType} style={{ width: size, height: size, borderRadius: size / 2 }} />
+        {conquerorBadge}
         {flagBadge}
       </View>
     );
   }
 
+  // Legacy emoji avatar or unknown key — show explorer PNG fallback
   return (
     <View style={[{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }, style]}>
-      <Text style={{ fontSize: Math.round(size * 0.85), textAlign: 'center', lineHeight: size }}>
-        {avatarId || '🧑'}
-      </Text>
+      <Image source={FALLBACK_AVATAR} style={{ width: size, height: size, borderRadius: size / 2 }} resizeMode="contain" />
+      {conquerorBadge}
       {flagBadge}
     </View>
   );
