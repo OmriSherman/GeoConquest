@@ -1,43 +1,101 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   FlatList,
   Image,
   Modal,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { View as _View } from 'react-native';
+let ViewShot: any = _View;
+let captureRef: ((ref: any, opts?: any) => Promise<string>) | null = null;
+try { const _vs = require('react-native-view-shot'); ViewShot = _vs.default; captureRef = _vs.captureRef; } catch {}
+let Sharing: { isAvailableAsync: () => Promise<boolean>; shareAsync: (uri: string, opts?: any) => Promise<void> } | null = null;
+try { Sharing = require('expo-sharing'); } catch {}
 import { useAuth } from '../context/AuthContext';
 import { useGame } from '../context/GameContext';
 import { fetchCountries } from '../lib/countryData';
 import { supabase } from '../lib/supabase';
 import { Country, LeaderboardEntry } from '../types';
+import { ACHIEVEMENTS_DATA } from '../lib/achievementsData';
+import { CUSTOM_AVATARS } from '../lib/avatarData';
 import GoldDisplay from '../components/GoldDisplay';
 import WorldMapView from '../components/WorldMapView';
 import GoldShopScreen from './GoldShopScreen';
 import AvatarDisplay from '../components/AvatarDisplay';
 import ActivityTicker from '../components/ActivityTicker';
+import XpRingDisplay from '../components/XpRingDisplay';
+import { getLevelInfo } from '../lib/xpSystem';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 
 const WORLD_LAND_AREA = 150_000_000; // km²
+const TOTAL_QUESTS = ACHIEVEMENTS_DATA.length;
+const TOTAL_AVATARS = CUSTOM_AVATARS.length;
 
 export default function HomeScreen({ navigation }: any) {
-  const { profile, signOut, user } = useAuth();
+  const { profile, signOut, user, shareReferralLink } = useAuth();
   const { ownedCountries } = useGame();
+  const mapCaptureRef = useRef<any>(null);
+
+  async function handleShareMap() {
+    if (!captureRef || !mapCaptureRef.current) return;
+    try {
+      const uri = await captureRef(mapCaptureRef, { format: 'png', quality: 0.92 });
+      const isAvailable = Sharing ? await Sharing.isAvailableAsync() : false;
+      if (!isAvailable) {
+        await Share.share({ message: `My GeoConquest empire: ${ownedCountries.length} countries! Can you beat me?` });
+        return;
+      }
+      await Sharing?.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share Your Empire' });
+    } catch (e) {
+      console.warn('Map share failed:', e);
+    }
+  }
+
   const [allCountries, setAllCountries] = useState<Country[]>([]);
   const [topPlayers, setTopPlayers] = useState<LeaderboardEntry[]>([]);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showGoldShop, setShowGoldShop] = useState(false);
-  const [showMapNames, setShowMapNames] = useState(true);
+  const [showMapNames, setShowMapNames] = useState(false);
+  const [mapResetKey, setMapResetKey] = useState(0);
   const [showOwnedList, setShowOwnedList] = useState(false);
+  const [claimedCount, setClaimedCount] = useState(0);
+  const [ownedAvatarCount, setOwnedAvatarCount] = useState(0);
+
+  const fetchCounts = React.useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      const [{ data: questsData }, { data: avatarsData }] = await Promise.all([
+        supabase.from('user_achievements').select('achievement_id').eq('user_id', user.id),
+        supabase.from('user_unlocked_items').select('item_id').eq('user_id', user.id).eq('item_type', 'avatar'),
+      ]);
+      setClaimedCount((questsData ?? []).length);
+      setOwnedAvatarCount((avatarsData ?? []).length);
+    } catch (error) {
+      console.warn('Failed to load Home counters:', error);
+    }
+  }, [user?.id]);
 
   useEffect(() => {
     fetchCountries()
       .then(setAllCountries)
       .catch(console.warn);
   }, []);
+
+  useEffect(() => {
+    fetchCounts();
+  }, [fetchCounts]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchCounts();
+    }, [fetchCounts])
+  );
 
   // Refresh mini-leaderboard whenever the current user's avatar changes
   useEffect(() => {
@@ -48,7 +106,7 @@ export default function HomeScreen({ navigation }: any) {
     try {
       let { data: profiles, error: profileErr } = await supabase
         .from('profiles')
-        .select('id, username, avatar_emoji, avatar_flag');
+        .select('id, username, avatar_emoji, avatar_flag, xp');
 
       if (profileErr) {
         const fallback = await supabase.from('profiles').select('id, username');
@@ -56,41 +114,22 @@ export default function HomeScreen({ navigation }: any) {
           ...p,
           avatar_emoji: '🧑',
           avatar_flag: '🏳️',
+          xp: 0,
         }));
       }
       if (!profiles) return;
 
-      const { data: ownedData } = await supabase
-        .from('owned_countries')
-        .select('user_id, country_code');
-
-      const countries = await fetchCountries();
-      const areaMap: Record<string, number> = {};
-      for (const c of countries) areaMap[c.cca2] = c.area || 0;
-
-      const countMap: Record<string, number> = {};
-      const areaTotal: Record<string, number> = {};
-      if (ownedData) {
-        for (const row of ownedData) {
-          countMap[row.user_id] = (countMap[row.user_id] || 0) + 1;
-          areaTotal[row.user_id] = (areaTotal[row.user_id] || 0) + (areaMap[row.country_code] || 0);
-        }
-      }
-
       const leaderboard: LeaderboardEntry[] = profiles
         .map((p) => {
-          const area = areaTotal[p.id] || 0;
           return {
             id: p.id,
             username: p.username,
-            avatar_emoji: p.avatar_emoji || '🧑',
+            avatar_emoji: p.avatar_emoji || 'png_explorer_male',
             avatar_flag: p.avatar_flag || '🏴‍☠️',
-            owned_count: countMap[p.id] || 0,
-            owned_area: area,
-            conquest_pct: Math.round((area / WORLD_LAND_AREA) * 10000) / 100,
+            xp: p.xp ?? 0,
           };
         })
-        .sort((a, b) => b.conquest_pct - a.conquest_pct)
+        .sort((a, b) => b.xp - a.xp)
         .slice(0, 3);
 
       setTopPlayers(leaderboard);
@@ -112,17 +151,19 @@ export default function HomeScreen({ navigation }: any) {
         {/* ── Compact Header ──────────────────────────────────────────────── */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => setShowUserMenu(true)} style={styles.userRow}>
+            {(() => {
+              const { level, xpIntoLevel, xpForNextLevel } = getLevelInfo(profile?.xp ?? 0);
+              return <XpRingDisplay level={level} xpCurrent={xpIntoLevel} xpMax={xpForNextLevel} size={38} isPremium={!!profile?.is_conquerer} />;
+            })()}
             <Text style={styles.username} numberOfLines={1}>
               {profile?.username ?? 'Explorer'}
             </Text>
             <AvatarDisplay
-              avatarId={profile?.avatar_emoji ?? '🧑'}
+              avatarId={profile?.avatar_emoji ?? 'png_explorer_male'}
               avatarFlag={profile?.avatar_flag ?? undefined}
               size={32}
+              isConqueror={profile?.is_conquerer}
             />
-            {profile?.country && (
-              <Text style={styles.countryBadge}>📍{profile.country}</Text>
-            )}
           </TouchableOpacity>
           <TouchableOpacity onPress={() => setShowGoldShop(true)}>
             <GoldDisplay />
@@ -130,18 +171,35 @@ export default function HomeScreen({ navigation }: any) {
         </View>
 
         {/* World Map */}
-        <View style={styles.mapSection}>
+        <ViewShot ref={mapCaptureRef} style={styles.mapSection}>
           <View style={styles.mapHeader}>
             <Text style={styles.sectionTitle}>Your Empire</Text>
-            <TouchableOpacity onPress={() => setShowMapNames(!showMapNames)}>
-              {showMapNames ? (
-                <Ionicons name="eye-outline" size={24} color="#aaa" style={styles.mapToggleIcon} />
-              ) : (
-                <Ionicons name="eye-off-outline" size={24} color="#666" style={styles.mapToggleIcon} />
-              )}
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <TouchableOpacity onPress={handleShareMap}>
+                <Ionicons name="share-outline" size={22} color="#aaa" style={styles.mapToggleIcon} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setMapResetKey(k => k + 1)}>
+                <Ionicons name="contract-outline" size={22} color="#aaa" style={styles.mapToggleIcon} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowMapNames(!showMapNames)}>
+                {showMapNames ? (
+                  <Ionicons name="eye-outline" size={24} color="#aaa" style={styles.mapToggleIcon} />
+                ) : (
+                  <Ionicons name="eye-off-outline" size={24} color="#666" style={styles.mapToggleIcon} />
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
-          <WorldMapView ownedCountries={ownedCountries} height={260} showNames={showMapNames} />
+          <WorldMapView ownedCountries={ownedCountries} height={260} showNames={showMapNames} resetKey={mapResetKey} />
+        </ViewShot>
+
+        {/* Progress bar */}
+        <View style={styles.progressSection}>
+          <Text style={styles.progressLabel}>World Domination Progress</Text>
+          <View style={styles.progressBar}>
+            <View style={[styles.progressFill, { width: `${progressPct}%` as any }]} />
+          </View>
+          <Text style={styles.progressText}>{progressPct}% of Earth's land area</Text>
         </View>
 
         {/* Stats row */}
@@ -160,41 +218,71 @@ export default function HomeScreen({ navigation }: any) {
           </View>
         </View>
 
-        {/* Progress bar */}
-        <View style={styles.progressSection}>
-          <Text style={styles.progressLabel}>World Domination Progress</Text>
-          <View style={styles.progressBar}>
-            <View style={[styles.progressFill, { width: `${progressPct}%` as any }]} />
+        {/* Quests + Avatars + Quizzes row */}
+        <View style={styles.statsRow}>
+          <View style={styles.statCard}>
+            <Text style={styles.statValueSmall} numberOfLines={1} adjustsFontSizeToFit>
+              {claimedCount} / {TOTAL_QUESTS}
+            </Text>
+            <Text style={styles.statLabel}>Quests Done</Text>
           </View>
-          <Text style={styles.progressText}>{progressPct}% of Earth's land area</Text>
+          <View style={styles.statCard}>
+            <Text style={styles.statValueSmall} numberOfLines={1} adjustsFontSizeToFit>
+              {ownedAvatarCount} / {TOTAL_AVATARS}
+            </Text>
+            <Text style={styles.statLabel}>Avatars Owned</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Text style={styles.statValueSmall} numberOfLines={1} adjustsFontSizeToFit>
+              {profile?.quiz_count ?? 0}
+            </Text>
+            <Text style={styles.statLabel}>Quizzes Done</Text>
+          </View>
         </View>
+
+        {/* Invite Friends */}
+        <TouchableOpacity style={styles.inviteButton} onPress={shareReferralLink}>
+          <Text style={styles.inviteText}>Invite a Friend — Both get 1,500 gold</Text>
+        </TouchableOpacity>
 
         {/* Activity Ticker */}
         <ActivityTicker />
 
         {/* Mini Leaderboard */}
         <View style={styles.leaderboardSection}>
-          <Text style={styles.sectionTitle}>🏆 Top Explorers</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Image source={require('../../assets/avatars/trophy.png')} style={{ width: 18, height: 18 }} resizeMode="contain" />
+            <Text style={styles.sectionTitle}>Top Explorers</Text>
+          </View>
           {topPlayers.length === 0 ? (
             <Text style={styles.emptyText}>Loading rankings...</Text>
           ) : (
             topPlayers.map((entry, index) => {
               const isMe = entry.id === user?.id;
-              const rankEmoji = index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉';
+              const rankImage = index === 0
+                ? require('../../assets/avatars/gold_medal.png')
+                : index === 1
+                ? require('../../assets/avatars/silver_medal.png')
+                : require('../../assets/avatars/bronze_medal.png');
               return (
                 <View key={entry.id} style={[styles.leaderRow, isMe && styles.leaderRowMe]}>
-                  <Text style={styles.leaderRank}>{rankEmoji}</Text>
+                  <Image source={rankImage} style={[styles.leaderRank, { width: 22, height: 22 }]} resizeMode="contain" />
                   <AvatarDisplay avatarId={entry.avatar_emoji} avatarFlag={entry.avatar_flag} size={30} />
                   <Text style={[styles.leaderName, isMe && styles.leaderNameMe]} numberOfLines={1}>
                     {entry.username}{isMe ? ' (You)' : ''}
                   </Text>
                   <Text style={[styles.leaderPct, styles.leaderPctTop]}>
-                    {entry.conquest_pct}%
+                    {entry.xp.toLocaleString()} XP
                   </Text>
                 </View>
               );
             })
           )}
+        </View>
+
+        <View style={styles.poweredByRow}>
+          <Text style={styles.poweredByText}>Powered by BigBrainGlob</Text>
+          <Image source={require('../../assets/bbg_logo.png')} style={styles.poweredByLogo} resizeMode="contain" />
         </View>
       </ScrollView>
 
@@ -204,13 +292,25 @@ export default function HomeScreen({ navigation }: any) {
           <View style={styles.menuContent}>
             <View style={styles.menuHeader}>
               <AvatarDisplay
-                avatarId={profile?.avatar_emoji ?? '🧑'}
+                avatarId={profile?.avatar_emoji ?? 'png_explorer_male'}
                 avatarFlag={profile?.avatar_flag ?? undefined}
                 size={44}
               />
               <Text style={styles.menuUsername}>{profile?.username ?? 'Explorer'}</Text>
               <Text style={styles.menuEmail}>{user?.email ?? ''}</Text>
-              {profile?.country && <Text style={styles.menuCountry}>📍 {profile.country}</Text>}
+              {(() => {
+                const { level, xpIntoLevel, xpForNextLevel } = getLevelInfo(profile?.xp ?? 0);
+                const pct = Math.min((xpIntoLevel / xpForNextLevel) * 100, 100);
+                return (
+                  <View style={styles.menuXpSection}>
+                    <Text style={styles.menuLevel}>Level {level}</Text>
+                    <View style={styles.menuXpBar}>
+                      <View style={[styles.menuXpFill, { width: `${pct}%` as any, backgroundColor: profile?.is_conquerer ? '#a78bfa' : '#FFD700' }]} />
+                    </View>
+                    <Text style={styles.menuXpText}>{xpIntoLevel} / {xpForNextLevel} XP</Text>
+                  </View>
+                );
+              })()}
             </View>
             <View style={styles.menuDivider} />
             <TouchableOpacity style={styles.menuItem} onPress={() => { setShowUserMenu(false); signOut(); }}>
@@ -236,7 +336,10 @@ export default function HomeScreen({ navigation }: any) {
         <View style={styles.ownedListOverlay}>
           <View style={styles.ownedListContent}>
             <View style={styles.ownedListHeader}>
-              <Text style={styles.ownedListTitle}>🌍 Owned Countries ({ownedCountries.length})</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Image source={require('../../assets/avatars/globe.png')} style={{ width: 20, height: 20 }} resizeMode="contain" />
+                <Text style={styles.ownedListTitle}>Owned Countries ({ownedCountries.length})</Text>
+              </View>
               <TouchableOpacity onPress={() => setShowOwnedList(false)}>
                 <Text style={styles.ownedListClose}>✕</Text>
               </TouchableOpacity>
@@ -371,6 +474,11 @@ const styles = StyleSheet.create({
   menuUsername: { color: '#fff', fontSize: 17, fontWeight: 'bold' },
   menuEmail: { color: '#888', fontSize: 12 },
   menuCountry: { color: '#FFD700', fontSize: 12 },
+  menuXpSection: { alignItems: 'center', gap: 4, width: '100%', marginTop: 4 },
+  menuLevel: { color: '#FFD700', fontSize: 13, fontWeight: '600' },
+  menuXpBar: { height: 4, backgroundColor: '#2a2a4e', borderRadius: 2, overflow: 'hidden', width: '80%' },
+  menuXpFill: { height: '100%', borderRadius: 2 },
+  menuXpText: { color: '#888', fontSize: 11 },
   menuDivider: { height: 1, backgroundColor: '#2a2a4e' },
   menuItem: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 },
   menuItemIcon: { fontSize: 18 },
@@ -397,4 +505,29 @@ const styles = StyleSheet.create({
   ownedFlag: { width: 36, height: 24, borderRadius: 4 },
   ownedName: { flex: 1, color: '#fff', fontSize: 14 },
   ownedRegion: { color: '#888', fontSize: 11 },
+  inviteButton: {
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: 'center' as const,
+    borderWidth: 1,
+    borderColor: '#FFD700',
+  },
+  inviteText: { color: '#FFD700', fontSize: 14, fontWeight: '600' as const },
+  poweredByRow: {
+    marginTop: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  poweredByText: {
+    color: '#6a6a8a',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  poweredByLogo: {
+    width: 22,
+    height: 22,
+    borderRadius: 5,
+  },
 });

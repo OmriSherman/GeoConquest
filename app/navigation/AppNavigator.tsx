@@ -1,7 +1,8 @@
-import React from 'react';
-import { ActivityIndicator, View, Text } from 'react-native';
+import React, { useEffect } from 'react';
+import { ActivityIndicator, Image, Linking, View } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { NavigationContainer } from '@react-navigation/native';
+import { CommonActions, createNavigationContainerRef, NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useAuth } from '../context/AuthContext';
@@ -30,19 +31,23 @@ import ShopScreen from '../screens/ShopScreen';
 import GoldShopScreen from '../screens/GoldShopScreen';
 import LeaderboardScreen from '../screens/LeaderboardScreen';
 import AchievementsScreen from '../screens/AchievementsScreen';
-import GoldDisplay from '../components/GoldDisplay';
+import PremiumScreen from '../screens/PremiumScreen';
+import QuestToastBanner from '../components/QuestToastBanner';
+import { useGame } from '../context/GameContext';
 
 // ─── Stack / Tab creators ─────────────────────────────────────────────────────
+
+const navigationRef = createNavigationContainerRef<any>();
 
 const RootStack = createStackNavigator<RootStackParamList>();
 const AuthStack = createStackNavigator<AuthStackParamList>();
 const MainTab = createBottomTabNavigator<MainTabParamList>();
 const QuizStack = createStackNavigator<QuizStackParamList>();
 
-// ─── Tab Icons (emoji-based for simplicity) ───────────────────────────────────
+// ─── Tab Icons ────────────────────────────────────────────────────────────────
 
-function TabIcon({ label, focused }: { label: string; focused: boolean }) {
-  return <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.5 }}>{label}</Text>;
+function TabIcon({ source, focused }: { source: any; focused: boolean }) {
+  return <Image source={source} style={{ width: 28, height: 28, opacity: focused ? 1 : 0.45 }} resizeMode="contain" />;
 }
 
 // ─── Auth flow ────────────────────────────────────────────────────────────────
@@ -70,7 +75,7 @@ function QuizNavigator() {
       <QuizStack.Screen
         name="QuizMenu"
         component={QuizMenuScreen}
-        options={{ title: 'Choose a Quiz', headerRight: () => <GoldDisplay /> }}
+        options={{ headerShown: false }}
       />
       <QuizStack.Screen
         name="FlagQuiz"
@@ -124,13 +129,13 @@ function MainNavigator() {
         tabBarStyle: {
           backgroundColor: '#0a0a1a',
           borderTopColor: '#1a1a2e',
-          height: 56 + bottomPadding,
+          height: 64 + bottomPadding,
           paddingBottom: bottomPadding,
           paddingTop: 6,
         },
         tabBarActiveTintColor: '#FFD700',
         tabBarInactiveTintColor: '#555',
-        tabBarLabelStyle: { fontSize: 10 },
+        tabBarLabelStyle: { fontSize: 12 },
       }}
     >
       <MainTab.Screen
@@ -138,15 +143,15 @@ function MainNavigator() {
         component={HomeScreen}
         options={{
           tabBarLabel: 'Home',
-          tabBarIcon: ({ focused }) => <TabIcon label="🏠" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon source={require('../../assets/avatars/castle.png')} focused={focused} />,
         }}
       />
       <MainTab.Screen
-        name="QuizMenu"
+        name="Quizzes"
         component={QuizNavigator}
         options={{
           tabBarLabel: 'Quizzes',
-          tabBarIcon: ({ focused }) => <TabIcon label="🧠" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon source={require('../../assets/avatars/open_scroll.png')} focused={focused} />,
         }}
       />
       <MainTab.Screen
@@ -154,15 +159,15 @@ function MainNavigator() {
         component={ShopScreen}
         options={{
           tabBarLabel: 'Shop',
-          tabBarIcon: ({ focused }) => <TabIcon label="🛒" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon source={require('../../assets/avatars/cart.png')} focused={focused} />,
         }}
       />
       <MainTab.Screen
         name="Leaderboard"
         component={LeaderboardScreen}
         options={{
-          tabBarLabel: 'Ranks',
-          tabBarIcon: ({ focused }) => <TabIcon label="🏆" focused={focused} />,
+          tabBarLabel: 'Leaderboard',
+          tabBarIcon: ({ focused }) => <TabIcon source={require('../../assets/avatars/trophy.png')} focused={focused} />,
         }}
       />
       <MainTab.Screen
@@ -170,17 +175,30 @@ function MainNavigator() {
         component={AchievementsScreen}
         options={{
           tabBarLabel: 'Quests',
-          tabBarIcon: ({ focused }) => <TabIcon label="🏅" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon source={require('../../assets/avatars/war_medal.png')} focused={focused} />,
         }}
       />
     </MainTab.Navigator>
   );
 }
 
-// ─── Root navigator ───────────────────────────────────────────────────────────
+
 
 export default function AppNavigator() {
   const { session, loading, needsUsername } = useAuth();
+  const { questToast, questHighlightId, clearQuestToast } = useGame();
+
+  useEffect(() => {
+    async function handleUrl(url: string) {
+      const match = url.match(/[?&]code=([^&]+)/);
+      if (match?.[1]) {
+        await AsyncStorage.setItem('@pending_referral_code', decodeURIComponent(match[1]));
+      }
+    }
+    Linking.getInitialURL().then(url => { if (url) handleUrl(url); });
+    const sub = Linking.addEventListener('url', ({ url }) => handleUrl(url));
+    return () => sub.remove();
+  }, []);
 
   if (loading) {
     return (
@@ -191,16 +209,42 @@ export default function AppNavigator() {
   }
 
   return (
-    <NavigationContainer>
-      <RootStack.Navigator screenOptions={{ headerShown: false }}>
-        {!session ? (
-          <RootStack.Screen name="Auth" component={AuthNavigator} />
-        ) : needsUsername ? (
-          <RootStack.Screen name="ChooseUsername" component={OnboardingScreen} />
-        ) : (
-          <RootStack.Screen name="Main" component={MainNavigator} />
+    <NavigationContainer ref={navigationRef}>
+      <View style={{ flex: 1 }}>
+        <RootStack.Navigator screenOptions={{ headerShown: false }}>
+          {!session ? (
+            <RootStack.Screen name="Auth" component={AuthNavigator} />
+          ) : needsUsername ? (
+            <RootStack.Screen name="ChooseUsername" component={OnboardingScreen} />
+          ) : (
+            <>
+              <RootStack.Screen name="Main" component={MainNavigator} />
+              <RootStack.Screen
+                name="Premium"
+                component={PremiumScreen}
+                options={{ presentation: 'modal', headerShown: false }}
+              />
+            </>
+          )}
+        </RootStack.Navigator>
+        {session && !needsUsername && (
+          <QuestToastBanner
+            message={questToast}
+            highlightId={questHighlightId}
+            onDismiss={clearQuestToast}
+            onNavigateToQuests={(hid) => {
+              if (navigationRef.isReady()) {
+                navigationRef.dispatch(
+                  CommonActions.navigate({
+                    name: 'Achievements',
+                    params: hid ? { highlightId: hid } : {},
+                  })
+                );
+              }
+            }}
+          />
         )}
-      </RootStack.Navigator>
+      </View>
     </NavigationContainer>
   );
 }

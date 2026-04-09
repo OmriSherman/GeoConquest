@@ -13,8 +13,8 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
-import ConfettiCannon from 'react-native-confetti-cannon';
 import { StackNavigationProp } from '@react-navigation/stack';
+import Svg, { Circle, Text as SvgText } from 'react-native-svg';
 import {
   MillionaireQuestion,
   MILLIONAIRE_GOLD_LADDER,
@@ -24,13 +24,13 @@ import {
 } from '../types';
 import { fetchCountries } from '../lib/countryData';
 import { buildMillionaireQuestions, buildSingleMillionaireQuestion } from '../lib/questionDifficulty';
-import { useGame } from '../context/GameContext';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import AnswerButton from '../components/AnswerButton';
 import CountryShapeView from '../components/CountryShapeView';
 import { playDing, playWrong, playTick, playTextToSpeech } from '../lib/audio';
 import * as Speech from 'expo-speech';
+import { showRewardedAd } from '../lib/rewardedAds';
 
 const AUTO_ADVANCE_DELAY_MS = 2500;
 const TIMER_SECONDS = 15;
@@ -67,9 +67,57 @@ function simulateAudienceVote(correctIndex: number, count: number): number[] {
   return votes;
 }
 
+function AudienceVoteCircle({ percentage, isCorrect }: { percentage: number; isCorrect: boolean }) {
+  const size = 38;
+  const strokeWidth = 3.5;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const progress = Math.max(0, Math.min(percentage, 100)) / 100;
+  const strokeDashoffset = circumference * (1 - progress);
+  const center = size / 2;
+  const accent = isCorrect ? '#4CAF50' : '#FFD700';
+
+  return (
+    <View style={styles.audienceCircleWrap}>
+      <Svg width={size} height={size}>
+        <Circle
+          cx={center}
+          cy={center}
+          r={radius}
+          stroke="#2a2a4e"
+          strokeWidth={strokeWidth}
+          fill="#0f1028"
+        />
+        <Circle
+          cx={center}
+          cy={center}
+          r={radius}
+          stroke={accent}
+          strokeWidth={strokeWidth}
+          fill="none"
+          strokeDasharray={`${circumference} ${circumference}`}
+          strokeDashoffset={strokeDashoffset}
+          strokeLinecap="round"
+          rotation="-90"
+          origin={`${center}, ${center}`}
+        />
+        <SvgText
+          x={center}
+          y={center + 4}
+          textAnchor="middle"
+          fill={accent}
+          fontSize={10}
+          fontWeight="bold"
+        >
+          {`${percentage}%`}
+        </SvgText>
+      </Svg>
+    </View>
+  );
+}
+
 export default function MillionaireQuizScreen({ navigation }: Props) {
-  const { addGold } = useGame();
-  const { profile, disabledUpgrades } = useAuth();
+  const { profile, disabledUpgrades, spendTicket } = useAuth();
 
   const [allCountries, setAllCountries] = useState<Country[]>([]);
   const [questions, setQuestions] = useState<MillionaireQuestion[]>([]);
@@ -95,17 +143,20 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
   // Game-over / win state
   const [gameOver, setGameOver] = useState(false);
   const [showWin, setShowWin] = useState(false);
-  const [confettiActive, setConfettiActive] = useState(false);
 
   // Walk-or-continue checkpoint modal
   const [showWalkOrContinue, setShowWalkOrContinue] = useState(false);
   const [walkOrContinuePrize, setWalkOrContinuePrize] = useState(0);
   const pendingNextIndex = useRef<number | null>(null);
+  const [showSecondChanceModal, setShowSecondChanceModal] = useState(false);
+  const [secondChanceUsed, setSecondChanceUsed] = useState(false);
+  const [secondChanceLoading, setSecondChanceLoading] = useState(false);
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const currentIndexRef = useRef(0);
   const questionsRef = useRef<MillionaireQuestion[]>([]);
   const autoAdvanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const quizStartRef = useRef<number>(0);
   const ladderScrollRef = useRef<ScrollView>(null);
   const [ladderWidth, setLadderWidth] = useState(0);
   const breathAnim = useRef(new Animated.Value(1)).current;
@@ -170,6 +221,7 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
       total: 15,
       goldEarned: prize,
       quizType: 'millionaire',
+      elapsedSeconds: Math.floor((Date.now() - quizStartRef.current) / 1000),
     });
   }
 
@@ -199,10 +251,12 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
         setQuestions(q);
         questionsRef.current = q;
         startTimer();
+        spendTicket();
       } catch (e: any) {
         setError(e.message ?? 'Failed to load questions');
       } finally {
         setLoading(false);
+        quizStartRef.current = Date.now();
       }
     })();
 
@@ -295,6 +349,10 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
     playDing();
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
+    swapCurrentQuestionAndContinue();
+  }
+
+  function swapCurrentQuestionAndContinue() {
     // Swap current question with a new one of the same tier
     const usedCca2 = new Set<string>();
     questionsRef.current.forEach(q => {
@@ -335,6 +393,32 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
     });
   }
 
+  async function handleSecondChanceAd() {
+    setSecondChanceLoading(true);
+    try {
+      const { rewarded } = await showRewardedAd();
+      if (!rewarded) {
+        setShowSecondChanceModal(false);
+        setGameOver(true);
+        setTimeout(endGameWithLoss, 1500);
+        return;
+      }
+      setSecondChanceUsed(true);
+      setShowSecondChanceModal(false);
+      setAnswered(false);
+      setGameOver(false);
+      swapCurrentQuestionAndContinue();
+    } finally {
+      setSecondChanceLoading(false);
+    }
+  }
+
+  function declineSecondChance() {
+    setShowSecondChanceModal(false);
+    setGameOver(true);
+    setTimeout(endGameWithLoss, 1500);
+  }
+
   // ── Answer handling ────────────────────────────────────────────────────────
 
   function handleAnswer(selectedIndex: number) {
@@ -362,8 +446,6 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
 
       // Final question — jackpot!
       if (idx === 14) {
-        addGold(MILLIONAIRE_GOLD_LADDER[14]);
-        setConfettiActive(true);
         setShowWin(true);
         return;
       }
@@ -372,6 +454,10 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
     } else {
       playWrong();
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      if (!secondChanceUsed) {
+        setShowSecondChanceModal(true);
+        return;
+      }
       setGameOver(true);
       setTimeout(endGameWithLoss, 2000);
     }
@@ -425,12 +511,12 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
   function walkAwayFromCheckpoint() {
     setShowWalkOrContinue(false);
     const prize = walkOrContinuePrize;
-    if (prize > 0) addGold(prize);
     navigation.replace('QuizResults', {
       score: currentIndexRef.current + 1,
       total: 15,
       goldEarned: prize,
       quizType: 'millionaire',
+      elapsedSeconds: Math.floor((Date.now() - quizStartRef.current) / 1000),
     });
   }
 
@@ -449,6 +535,7 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
       total: 15,
       goldEarned: MILLIONAIRE_GOLD_LADDER[14],
       quizType: 'millionaire',
+      elapsedSeconds: Math.floor((Date.now() - quizStartRef.current) / 1000),
     });
   }
 
@@ -481,8 +568,8 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      {/* Timer bar */}
-      {!answered && (
+      {/* Timer bar — stays visible (frozen) after answering */}
+      {!gameOver && !showWin && (
         <View style={styles.timerContainer}>
           <View style={styles.timerBarTrack}>
             <View
@@ -495,7 +582,6 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
           <Text style={[styles.timerText, { color: timerColor }]}>{timeLeft}s</Text>
         </View>
       )}
-
       {/* Prize Ladder Strip */}
       <ScrollView
         ref={ladderScrollRef}
@@ -508,6 +594,7 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
           const isCurrent = i === currentIndex;
           const isPast = i < currentIndex;
           const isSafe = MILLIONAIRE_SAFE_ZONES.includes(i);
+          const isExitPoint = i === 11; // 3k walk-away checkpoint
           return (
             <View
               key={i}
@@ -515,11 +602,13 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
                 styles.ladderItem,
                 isCurrent && styles.ladderItemCurrent,
                 isPast && styles.ladderItemPast,
-                isSafe && !isCurrent && styles.ladderItemSafe,
+                (isSafe || isExitPoint) && !isCurrent && styles.ladderItemSafe,
               ]}
             >
+              {isSafe && (
+                <Image source={require('../../assets/avatars/lock.png')} style={{ width: 9, height: 9, marginBottom: 1 }} resizeMode="contain" />
+              )}
               <Text style={[styles.ladderText, isCurrent && styles.ladderTextCurrent]}>
-                {isSafe ? '🔒' : ''}
                 {amount >= 1000 ? `${amount / 1000}K` : String(amount)}
               </Text>
             </View>
@@ -527,11 +616,8 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
         })}
       </ScrollView>
 
-      {/* Scrollable question area */}
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
+      {/* Question area */}
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <TouchableOpacity style={styles.touchArea} onPress={skipToNext} activeOpacity={1}>
           <Animated.View style={{ opacity: fadeAnim }}>
             {/* Flag image (flag-type questions) */}
@@ -566,7 +652,7 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
                         playTextToSpeech(question.subjectCountry.capital || '');
                       }}
                     >
-                      <Text style={styles.speakerEmoji}>🔊</Text>
+                      <Text style={styles.speakerEmoji}>▶</Text>
                     </TouchableOpacity>
                   </View>
                 ) : (
@@ -611,7 +697,10 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
                     onPress={useSkipLifeline}
                     disabled={skipUsed || answered || !isSkipEnabled}
                   >
-                    <Text style={[styles.lifelineBtnText, !isSkipEnabled && { color: '#666' }]}>⏭️ Skip</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <Image source={require('../../assets/avatars/swap.png')} style={{ width: 14, height: 14, opacity: isSkipEnabled ? 1 : 0.4 }} resizeMode="contain" />
+                      <Text style={[styles.lifelineBtnText, !isSkipEnabled && { color: '#666' }]}>Skip</Text>
+                    </View>
                   </TouchableOpacity>
                 );
               })()}
@@ -620,11 +709,14 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
                 onPress={useAudienceLifeline}
                 disabled={audienceUsed || answered}
               >
-                <Text style={styles.lifelineBtnText}>👥 Audience</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Image source={require('../../assets/avatars/hand_shake.png')} style={{ width: 14, height: 14 }} resizeMode="contain" />
+                  <Text style={styles.lifelineBtnText}>Audience</Text>
+                </View>
               </TouchableOpacity>
             </View>
 
-            {/* Answer buttons + audience bars */}
+            {/* Answer buttons + audience percentages */}
             <View style={styles.answers}>
               {question.options.map((option, i) => {
                 if (hiddenOptions.has(i)) {
@@ -632,26 +724,20 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
                 }
                 let detail;
                 return (
-                  <View key={i}>
-                    <AnswerButton
-                      label={option}
-                      state={buttonStates[i]}
-                      onPress={() => handleAnswer(i)}
-                      detail={detail}
-                    />
+                  <View key={i} style={styles.answerRow}>
+                    <View style={styles.answerBtnWrap}>
+                      <AnswerButton
+                        label={option}
+                        state={buttonStates[i]}
+                        onPress={() => handleAnswer(i)}
+                        detail={detail}
+                      />
+                    </View>
                     {audienceVotes && (
-                      <View style={styles.audienceBarRow}>
-                        <View style={styles.audienceBarTrack}>
-                          <View
-                            style={[
-                              styles.audienceBarFill,
-                              { width: `${audienceVotes[i]}%` as any },
-                              i === question.correctIndex && styles.audienceBarCorrect,
-                            ]}
-                          />
-                        </View>
-                        <Text style={styles.audiencePct}>{audienceVotes[i]}%</Text>
-                      </View>
+                      <AudienceVoteCircle
+                        percentage={audienceVotes[i]}
+                        isCorrect={i === question.correctIndex}
+                      />
                     )}
                   </View>
                 );
@@ -665,22 +751,11 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
         </TouchableOpacity>
       </ScrollView>
 
-      {/* Jackpot confetti */}
-      {confettiActive && (
-        <ConfettiCannon
-          count={120}
-          origin={{ x: -10, y: 0 }}
-          explosionSpeed={350}
-          fallSpeed={2500}
-          fadeOut
-        />
-      )}
-
       {/* Walk-or-Continue checkpoint modal */}
       <Modal visible={showWalkOrContinue} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalEmoji}>🔥</Text>
+            <Image source={require('../../assets/avatars/flame.png')} style={{ width: 48, height: 48 }} resizeMode="contain" />
             <Text style={styles.modalTitle}>You're on Fire!</Text>
             <Text style={styles.modalBody}>
               You're so close to the next tier. One more correct answer could change everything.
@@ -688,20 +763,27 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
             <View style={styles.prizeCompare}>
               <View style={styles.prizeCompareItem}>
                 <Text style={styles.prizeCompareLabel}>Now</Text>
-                <Text style={styles.prizeCompareAmount}>💰 {walkOrContinuePrize.toLocaleString()}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 16, height: 16 }} resizeMode="contain" />
+                  <Text style={styles.prizeCompareAmount}>{walkOrContinuePrize.toLocaleString()}</Text>
+                </View>
               </View>
               <Text style={styles.prizeCompareArrow}>→</Text>
               <View style={styles.prizeCompareItem}>
                 <Text style={styles.prizeCompareLabel}>Next</Text>
-                <Text style={[styles.prizeCompareAmount, { color: '#4CAF50' }]}>
-                  💰 {(MILLIONAIRE_GOLD_LADDER[pendingNextIndex.current ?? (currentIndexRef.current + 1)] ?? 0).toLocaleString()}
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 16, height: 16 }} resizeMode="contain" />
+                  <Text style={[styles.prizeCompareAmount, { color: '#4CAF50' }]}>
+                    {(MILLIONAIRE_GOLD_LADDER[pendingNextIndex.current ?? (currentIndexRef.current + 1)] ?? 0).toLocaleString()}
+                  </Text>
+                </View>
               </View>
             </View>
             <TouchableOpacity style={styles.primaryBtn} onPress={continueFromCheckpoint}>
-              <Animated.Text style={[styles.primaryBtnText, { transform: [{ scale: breathAnim }] }]}>
-                🚀 Push Forward!
-              </Animated.Text>
+              <Animated.View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, transform: [{ scale: breathAnim }] }}>
+                <Image source={require('../../assets/avatars/lightning.png')} style={{ width: 18, height: 18 }} resizeMode="contain" />
+                <Text style={styles.primaryBtnText}>Push Forward!</Text>
+              </Animated.View>
             </TouchableOpacity>
             <TouchableOpacity style={styles.dimBtn} onPress={walkAwayFromCheckpoint}>
               <Text style={styles.dimBtnText}>Take my {walkOrContinuePrize.toLocaleString()} gold</Text>
@@ -714,16 +796,35 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
       <Modal visible={showWin} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalEmoji}>👑</Text>
+            <Image source={require('../../assets/avatars/crown.png')} style={{ width: 48, height: 48 }} resizeMode="contain" />
             <Text style={styles.modalTitle}>JACKPOT!</Text>
             <Text style={styles.modalBody}>
               You've conquered all 15 questions!
             </Text>
-            <Text style={styles.modalGoldLarge}>
-              💰 {MILLIONAIRE_GOLD_LADDER[14].toLocaleString()}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Image source={require('../../assets/avatars/gold_bag.png')} style={{ width: 32, height: 32 }} resizeMode="contain" />
+              <Text style={styles.modalGoldLarge}>{MILLIONAIRE_GOLD_LADDER[14].toLocaleString()}</Text>
+            </View>
             <TouchableOpacity style={styles.primaryBtn} onPress={handleWinContinue}>
-              <Text style={styles.primaryBtnText}>Claim Your Gold 👑</Text>
+              <Text style={styles.primaryBtnText}>Claim Your Gold</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showSecondChanceModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Image source={require('../../assets/avatars/raffle_ticket.png')} style={{ width: 44, height: 44 }} resizeMode="contain" />
+            <Text style={styles.modalTitle}>Second Chance?</Text>
+            <Text style={styles.modalBody}>
+              Watch an ad to replace this question and keep going.
+            </Text>
+            <TouchableOpacity style={styles.primaryBtn} onPress={handleSecondChanceAd} disabled={secondChanceLoading}>
+              <Text style={styles.primaryBtnText}>{secondChanceLoading ? 'Loading ad…' : 'Watch ad'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.dimBtn} onPress={declineSecondChance} disabled={secondChanceLoading}>
+              <Text style={styles.dimBtnText}>No thanks</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -797,6 +898,7 @@ const styles = StyleSheet.create({
     width: 26,
     textAlign: 'right',
   },
+  elapsedTimerText: { color: '#aaa', fontSize: 13, fontWeight: '600', textAlign: 'right', paddingHorizontal: 16, paddingBottom: 4 },
 
   // Ladder strip
   ladderStrip: {
@@ -829,7 +931,7 @@ const styles = StyleSheet.create({
   ladderTextCurrent: { color: '#FFD700' },
 
   // Scrollable content
-  scrollContent: { flexGrow: 1, paddingBottom: 16 },
+  scrollContent: { flexGrow: 1, paddingBottom: 8 },
   touchArea: { flex: 1, paddingHorizontal: 12 },
 
   // Shape display (no alignItems so WebView stretches to full width)
@@ -852,9 +954,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#2a2a4e',
-    height: 160,
-    marginTop: 10,
-    marginBottom: 8,
+    height: 130,
+    marginTop: 6,
+    marginBottom: 4,
   },
   flag: { width: '100%', height: '100%' },
 
@@ -862,15 +964,15 @@ const styles = StyleSheet.create({
   questionCard: {
     backgroundColor: '#1a1a2e',
     borderRadius: 16,
-    padding: 20,
+    padding: 14,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#2a2a4e',
-    marginTop: 10,
-    marginBottom: 8,
-    gap: 12,
-    minHeight: 140,
+    marginTop: 6,
+    marginBottom: 4,
+    gap: 8,
+    minHeight: 90,
   },
   subjectFlag: { width: 80, height: 50, borderRadius: 6 },
   questionCardText: {
@@ -915,8 +1017,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 16,
-    marginVertical: 12,
-    gap: 12,
+    marginVertical: 6,
+    gap: 10,
   },
 
   lifelineBtn: {
@@ -936,37 +1038,22 @@ const styles = StyleSheet.create({
 
   // Answers
   answers: { gap: 2, marginBottom: 4 },
-  hiddenSlot: { height: 48, marginVertical: 4 },
-
-  // Audience bars
-  audienceBarRow: {
+  answerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginTop: -4,
-    marginBottom: 4,
-    paddingHorizontal: 4,
   },
-  audienceBarTrack: {
+  answerBtnWrap: {
     flex: 1,
-    height: 6,
-    backgroundColor: '#1a1a2e',
-    borderRadius: 3,
-    overflow: 'hidden',
   },
-  audienceBarFill: {
-    height: '100%',
-    backgroundColor: '#FFD700',
-    borderRadius: 3,
-  },
-  audienceBarCorrect: {
-    backgroundColor: '#4CAF50',
-  },
-  audiencePct: {
-    color: '#aaa',
-    fontSize: 10,
-    width: 28,
-    textAlign: 'right',
+  hiddenSlot: { height: 48, marginVertical: 4 },
+
+  // Audience percentage circle
+  audienceCircleWrap: {
+    width: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 2,
   },
 
   tapHint: {
@@ -1031,6 +1118,6 @@ const styles = StyleSheet.create({
   prizeCompareLabel: { color: '#888', fontSize: 11, textTransform: 'uppercase', letterSpacing: 1 },
   prizeCompareAmount: { color: '#FFD700', fontSize: 18, fontWeight: 'bold' },
   prizeCompareArrow: { color: '#4CAF50', fontSize: 22, fontWeight: 'bold' },
-  dimBtn: { paddingVertical: 10, paddingHorizontal: 20, alignItems: 'center' },
-  dimBtnText: { color: '#555', fontSize: 13 },
+  dimBtn: { paddingVertical: 12, paddingHorizontal: 20, alignItems: 'center', borderWidth: 1, borderColor: '#3a3a5e', borderRadius: 10, width: '100%' },
+  dimBtnText: { color: '#ccc', fontSize: 15, fontWeight: '500' },
 });

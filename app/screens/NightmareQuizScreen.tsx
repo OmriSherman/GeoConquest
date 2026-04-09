@@ -22,15 +22,19 @@ import {
 import { fetchCountries } from '../lib/countryData';
 import { buildNightmareQuestions } from '../lib/questionDifficulty';
 import { useGame } from '../context/GameContext';
+import { useAuth } from '../context/AuthContext';
 import AnswerButton from '../components/AnswerButton';
 import CountryShapeView from '../components/CountryShapeView';
 import { playDing, playWrong, playTick, playTextToSpeech } from '../lib/audio';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Speech from 'expo-speech';
+
+const NIGHTMARE_LOSS_KEY = 'nightmare_loss_count';
 
 const AUTO_ADVANCE_DELAY_MS = 2500;
 const TIMER_SECONDS = 15;
 const TOTAL_QUESTIONS = 10;
-const PRIZE_GOLD = 100000;
+const PRIZE_GOLD = 50000;
 
 type Props = {
   navigation: StackNavigationProp<QuizStackParamList, 'NightmareQuiz'>;
@@ -40,6 +44,7 @@ type AnswerState = 'default' | 'correct' | 'wrong' | 'disabled';
 
 export default function NightmareQuizScreen({ navigation }: Props) {
   const { addGold } = useGame();
+  const { addGold: deductGold, profile } = useAuth();
 
   const [allCountries, setAllCountries] = useState<Country[]>([]);
   const [questions, setQuestions] = useState<MillionaireQuestion[]>([]);
@@ -55,7 +60,6 @@ export default function NightmareQuizScreen({ navigation }: Props) {
   const timeLeftRef = useRef(TIMER_SECONDS);
 
   // Game-over / win state
-  const [showLoss, setShowLoss] = useState(false);
   const [showWin, setShowWin] = useState(false);
   const [confettiActive, setConfettiActive] = useState(false);
 
@@ -63,6 +67,9 @@ export default function NightmareQuizScreen({ navigation }: Props) {
   const currentIndexRef = useRef(0);
   const questionsRef = useRef<MillionaireQuestion[]>([]);
   const autoAdvanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const quizStartRef = useRef<number>(0);
+  const elapsedIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [elapsedSec, setElapsedSec] = useState(0);
 
   // ── Timer ──────────────────────────────────────────────────────────────────
 
@@ -91,12 +98,19 @@ export default function NightmareQuizScreen({ navigation }: Props) {
     }, 1000);
   }
 
-  function endGameWithLoss() {
+  async function endGameWithLoss() {
+    if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current);
+    const stored = await AsyncStorage.getItem(NIGHTMARE_LOSS_KEY);
+    const lossCount = parseInt(stored ?? '0', 10);
+    const toll = 200 + lossCount * 20;
+    await AsyncStorage.setItem(NIGHTMARE_LOSS_KEY, String(lossCount + 1));
+    deductGold(-toll);
     navigation.replace('QuizResults', {
-      score: currentIndexRef.current, // number of correct answers
+      score: currentIndexRef.current,
       total: TOTAL_QUESTIONS,
-      goldEarned: 0,
+      goldEarned: -toll,
       quizType: 'nightmare',
+      elapsedSeconds: Math.floor((Date.now() - quizStartRef.current) / 1000),
     });
   }
 
@@ -111,15 +125,23 @@ export default function NightmareQuizScreen({ navigation }: Props) {
     setAnswered(true);
     stopTimer();
     
-    // Show loss modal
-    setShowLoss(true);
+    endGameWithLoss();
   }
 
   // ── Load questions ─────────────────────────────────────────────────────────
 
   useEffect(() => {
+    if (!profile?.id) return;
     (async () => {
       try {
+        const stored = await AsyncStorage.getItem(NIGHTMARE_LOSS_KEY);
+        const lossCount = parseInt(stored ?? '0', 10);
+        const toll = 200 + lossCount * 20;
+        if ((profile.gold_balance ?? 0) < toll) {
+          setError(`You need at least ${toll.toLocaleString()} gold to enter Nightmare (penalty on failure).`);
+          return;
+        }
+
         const countries = await fetchCountries();
         setAllCountries(countries);
         const q = buildNightmareQuestions(countries);
@@ -130,23 +152,28 @@ export default function NightmareQuizScreen({ navigation }: Props) {
         setError(e.message ?? 'Failed to load questions');
       } finally {
         setLoading(false);
+        quizStartRef.current = Date.now();
+        elapsedIntervalRef.current = setInterval(() => {
+          setElapsedSec(Math.floor((Date.now() - quizStartRef.current) / 1000));
+        }, 1000);
       }
     })();
 
     return () => {
       if (autoAdvanceTimer.current) clearTimeout(autoAdvanceTimer.current);
+      if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current);
       stopTimer();
       Speech.stop();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [profile?.id]);
 
   // Handle app background/foreground
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active') {
         // App has come to the foreground
-        if (!answered && !showLoss && !showWin && !loading && !error) {
+        if (!answered && !showWin && !loading && !error) {
           // Resume timer
           startTimer();
         }
@@ -160,7 +187,7 @@ export default function NightmareQuizScreen({ navigation }: Props) {
     return () => {
       subscription.remove();
     };
-  }, [answered, showLoss, showWin, loading, error, timeLeft]);
+  }, [answered, showWin, loading, error, timeLeft]);
 
   // ── Answer handling ────────────────────────────────────────────────────────
 
@@ -199,7 +226,7 @@ export default function NightmareQuizScreen({ navigation }: Props) {
     } else {
       playWrong();
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      setShowLoss(true);
+      endGameWithLoss();
     }
   }
 
@@ -221,18 +248,20 @@ export default function NightmareQuizScreen({ navigation }: Props) {
   }
 
   function skipToNext() {
-    if (!answered || showWin || showLoss) return;
+    if (!answered || showWin) return;
     advanceQuestion();
   }
 
   // ── End game handlers ──────────────────────────────────────────────────────
 
   function handleWinContinue() {
+    if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current);
     navigation.replace('QuizResults', {
       score: TOTAL_QUESTIONS,
       total: TOTAL_QUESTIONS,
       goldEarned: PRIZE_GOLD,
       quizType: 'nightmare',
+      elapsedSeconds: Math.floor((Date.now() - quizStartRef.current) / 1000),
     });
   }
 
@@ -268,7 +297,7 @@ export default function NightmareQuizScreen({ navigation }: Props) {
         <Text style={styles.progressText}>
           {currentIndex + 1} / {TOTAL_QUESTIONS}
         </Text>
-        <Text style={styles.prizeHeader}>Prize: 💰 100k</Text>
+        <Text style={styles.elapsedTimerText}>⏱ {String(Math.floor(elapsedSec / 60)).padStart(2, '0')}:{String(elapsedSec % 60).padStart(2, '0')}</Text>
       </View>
 
       {!answered && (
@@ -361,17 +390,14 @@ export default function NightmareQuizScreen({ navigation }: Props) {
             {question.type === 'shape' && (
               <View>
                 <Text style={styles.prompt}>{question.questionText}</Text>
-                <View 
-                  style={[
-                    styles.shapeContainer,
-                    question.rotation ? { transform: [{ rotate: `${question.rotation}deg` }] } : undefined,
-                  ]}
-                >
-                  <CountryShapeView
-                    countryCode={question.subjectCountry.cca2}
-                    height={150}
-                    color="#FF4444"
-                  />
+                <View style={styles.shapeContainer}>
+                  <View style={question.rotation ? { transform: [{ rotate: `${question.rotation}deg` }] } : undefined}>
+                    <CountryShapeView
+                      countryCode={question.subjectCountry.cca2}
+                      height={150}
+                      color="#FF4444"
+                    />
+                  </View>
                 </View>
               </View>
             )}
@@ -402,13 +428,14 @@ export default function NightmareQuizScreen({ navigation }: Props) {
                       state={buttonStates[i]}
                       onPress={() => handleAnswer(i)}
                       detail={detail}
+                      variant="nightmare"
                     />
                   </View>
                 );
               })}
             </View>
 
-            {answered && !showWin && !showLoss && (
+            {answered && !showWin && (
               <Text style={styles.tapHint}>Tap anywhere to continue →</Text>
             )}
           </Animated.View>
@@ -426,37 +453,20 @@ export default function NightmareQuizScreen({ navigation }: Props) {
         />
       )}
 
-      {/* Loss Modal */}
-      <Modal visible={showLoss} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalEmoji}>💀</Text>
-            <Text style={styles.modalTitle}>Nightmare Over</Text>
-            <Text style={styles.modalBody}>
-              One mistake is all it takes. Better luck next time.
-            </Text>
-            <Text style={styles.modalGoldLarge}>💰 0</Text>
-            <TouchableOpacity style={styles.primaryBtnLoss} onPress={endGameWithLoss}>
-              <Text style={styles.primaryBtnText}>Accept Defeat</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
       {/* Win Modal */}
-      <Modal visible={showWin} transparent animationType="slide">
+      <Modal visible={showWin} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalEmoji}>🏆</Text>
-            <Text style={styles.modalTitle}>NIGHTMARE CONQUERED!</Text>
+            <Image source={require('../../assets/avatars/evil_vanquished.png')} style={styles.modalImage} resizeMode="contain" />
+            <Text style={styles.modalTitle}>you... survived.</Text>
             <Text style={styles.modalBody}>
-              You survived the ultimate test of geographical knowledge!
+              The nightmare did not want you to.
             </Text>
             <Text style={styles.modalGoldLarge}>
               💰 {PRIZE_GOLD.toLocaleString()}
             </Text>
-            <TouchableOpacity style={styles.primaryBtn} onPress={handleWinContinue}>
-              <Text style={styles.primaryBtnText}>Claim Your Prize 🏆</Text>
+            <TouchableOpacity style={styles.primaryBtnWin} onPress={handleWinContinue}>
+              <Text style={styles.primaryBtnWinText}>Take What Is Owed</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -486,7 +496,7 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   progressText: { color: '#ff8888', fontWeight: 'bold', fontSize: 16 },
-  prizeHeader: { color: '#FFD700', fontWeight: 'bold', fontSize: 16 },
+  elapsedTimerText: { color: '#aaa', fontSize: 13, fontWeight: '600' },
 
   // Timer
   timerContainer: {
@@ -621,17 +631,11 @@ const styles = StyleSheet.create({
     borderColor: '#ff4444',
   },
   modalEmoji: { fontSize: 64, marginBottom: 12 },
+  modalImage: { width: 120, height: 120, marginBottom: 12 },
   modalTitle: { color: '#fff', fontSize: 24, fontWeight: 'bold', marginBottom: 12, textAlign: 'center' },
   modalBody: { color: '#ff8888', fontSize: 15, textAlign: 'center', marginBottom: 20, lineHeight: 22 },
   modalGoldLarge: { color: '#FFD700', fontSize: 32, fontWeight: 'bold', marginBottom: 24 },
   
-  primaryBtn: {
-    backgroundColor: '#FFD700',
-    borderRadius: 16,
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    width: '100%',
-  },
   primaryBtnLoss: {
     backgroundColor: '#ff4444',
     borderRadius: 16,
@@ -639,8 +643,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     width: '100%',
   },
+  primaryBtnWin: {
+    backgroundColor: '#3a0000',
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#8b0000',
+  },
   primaryBtnText: {
     color: '#1a0000',
+    fontWeight: 'bold',
+    fontSize: 18,
+    textAlign: 'center',
+  },
+  primaryBtnWinText: {
+    color: '#ff8888',
     fontWeight: 'bold',
     fontSize: 18,
     textAlign: 'center',

@@ -1,5 +1,20 @@
+import { Image } from 'react-native';
 import { Country } from '../types';
 import { supabase } from './supabase';
+
+// ─── Local flag overrides (for countries whose remote flags are wrong/unavailable) ──
+// Resolved lazily to avoid boot-time issues
+const LOCAL_FLAG_OVERRIDES: Record<string, () => string> = {
+  AF: () => Image.resolveAssetSource(require('../../assets/flags/afghanistan.png')).uri,
+};
+
+function getLocalFlagUri(cca2: string): string | null {
+  try {
+    return LOCAL_FLAG_OVERRIDES[cca2]?.() ?? null;
+  } catch {
+    return null;
+  }
+}
 
 // ─── Types (RestCountries API shape) ─────────────────────────────────────────
 
@@ -47,8 +62,10 @@ export async function fetchCountries(): Promise<Country[]> {
     // Check if cache has the new cca3 field — if not, it's stale
     const hasNewFields = cached.some((c: any) => c.cca3 && c.cca3.length > 0);
     const hasAfghanistan = cached.some((c: any) => c.cca2 === 'AF' && c.flag_url);
+    // ccn3 (ISO numeric) is required for WorldMapView feature ID lookups
+    const hasCcn3 = cached.some((c: any) => c.ccn3 && c.ccn3.length > 0);
 
-    if (!hasNewFields || !hasAfghanistan) {
+    if (!hasNewFields || !hasAfghanistan || !hasCcn3) {
       // console.log(`[Countries] Cache stale (missing cca3: ${!hasNewFields}, missing AF: ${!hasAfghanistan}), re-fetching from API...`);
       // Fall through to API fetch below
     } else {
@@ -57,7 +74,7 @@ export async function fetchCountries(): Promise<Country[]> {
         cca2: c.cca2,
         cca3: c.cca3 || '',
         ccn3: c.ccn3 || '',
-        flagUrl: c.flag_url,
+        flagUrl: getLocalFlagUri(c.cca2) ?? c.flag_url,
         borders: c.borders ?? [],
         region: c.region,
         population: c.population ?? 0,
@@ -132,6 +149,60 @@ async function seedSupabaseCache(countries: Country[]) {
     const batch = rows.slice(i, i + 50);
     await supabase.from('countries').upsert(batch, { onConflict: 'cca2' });
   }
+}
+
+// ─── Offline Fallbacks ───────────────────────────────────────────────────────
+
+const _flagsOffline = require('../assets/data/flags-offline.json') as Array<{ name: string; cca2: string }>;
+const _countriesOffline = require('../assets/data/countries-offline.json') as Array<{
+  name: string; cca2: string; cca3: string; ccn3: string;
+  flagUrl: string; borders: string[]; region: string;
+  population: number; area: number; capital: string;
+}>;
+
+/**
+ * Returns minimal country list from the bundled flags-offline.json.
+ * flagUrl is empty — quiz screens should show the flag emoji instead.
+ * Available to ALL users when offline.
+ */
+export function getOfflineFlagCountries(): Country[] {
+  return _flagsOffline.map(c => ({
+    name: c.name,
+    cca2: c.cca2,
+    cca3: '',
+    ccn3: '',
+    flagUrl: '',        // not available offline for free tier
+    borders: [],
+    region: '',
+    population: 0,
+    area: 0,
+    capital: '',
+  }));
+}
+
+/**
+ * Returns full country list from the bundled countries-offline.json.
+ * Includes capitals, borders, region, area — enough for all quizzes.
+ * Only offered to Conqueror's Pass (premium) users when offline.
+ */
+export function getOfflineFullCountries(): Country[] {
+  // Populate the lookup maps so WorldMapView & quiz screens work correctly
+  for (const c of _countriesOffline) {
+    if (c.cca3) _cca3ToCca2[c.cca3] = c.cca2;
+    if (c.ccn3) _ccn3ToCca2[c.ccn3] = c.cca2;
+  }
+  return _countriesOffline.map(c => ({
+    name:       c.name,
+    cca2:       c.cca2,
+    cca3:       c.cca3,
+    ccn3:       c.ccn3,
+    flagUrl:    c.flagUrl,
+    borders:    c.borders,
+    region:     c.region,
+    population: c.population,
+    area:       c.area,
+    capital:    c.capital,
+  }));
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

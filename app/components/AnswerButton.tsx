@@ -8,14 +8,19 @@ interface Props {
   detail?: string;
   state?: State;
   onPress: () => void;
+  variant?: 'nightmare';
 }
 
-export default function AnswerButton({ label, detail, state = 'default', onPress }: Props) {
+export default function AnswerButton({ label, detail, state = 'default', onPress, variant }: Props) {
   const isDisabled = state === 'disabled' || state === 'correct' || state === 'wrong';
+
+  const buttonStyle = state === 'correct' && variant === 'nightmare'
+    ? styles.nightmareCorrect
+    : styles[state];
 
   return (
     <TouchableOpacity
-      style={[styles.button, styles[state]]}
+      style={[styles.button, buttonStyle]}
       onPress={onPress}
       disabled={isDisabled}
       activeOpacity={0.8}
@@ -47,6 +52,10 @@ const styles = StyleSheet.create({
   correct: {
     backgroundColor: '#1a3a1a',
     borderColor: '#4CAF50',
+  },
+  nightmareCorrect: {
+    backgroundColor: '#2a0000',
+    borderColor: '#8b0000',
   },
   wrong: {
     backgroundColor: '#3a1a1a',

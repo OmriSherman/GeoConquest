@@ -5,22 +5,23 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import ConfettiCannon from 'react-native-confetti-cannon';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { QuizStackParamList, QuizQuestion } from '../types';
-import { buildBordersQuizQuestions, fetchCountries, getCca3ToCca2Map } from '../lib/countryData';
+import { buildBordersQuizQuestions, fetchCountries, getOfflineFullCountries, getCca3ToCca2Map } from '../lib/countryData';
 import { useGame } from '../context/GameContext';
 import { useAuth } from '../context/AuthContext';
 import AnswerButton from '../components/AnswerButton';
 import BordersMapView from '../components/BordersMapView';
 import { playDingStreak, playWrong } from '../lib/audio';
 import HeatStreakBadge from '../components/HeatStreakBadge';
+import ConfettiCannon from 'react-native-confetti-cannon';
 
-const GOLD_PER_CORRECT = 15;
+const GOLD_PER_CORRECT = 18;
 const AUTO_ADVANCE_DELAY_MS = 2500;
 
 type Props = {
@@ -52,23 +53,42 @@ export default function BordersQuizScreen({ navigation }: Props) {
   const comboRef = useRef(0);
   const questionsRef = useRef<QuizQuestion[]>([]);
   const autoAdvanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const quizStartRef = useRef<number>(0);
+  const elapsedIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [elapsedSec, setElapsedSec] = useState(0);
 
   useEffect(() => {
     (async () => {
       try {
-        const countries = await fetchCountries();
+        let countries;
+        try {
+          countries = await fetchCountries();
+        } catch {
+          if (profile?.is_conquerer) {
+            countries = getOfflineFullCountries();
+          } else {
+            throw new Error('OFFLINE_NO_PREMIUM');
+          }
+        }
         const q = buildBordersQuizQuestions(countries, TOTAL_QUESTIONS);
         setQuestions(q);
         questionsRef.current = q;
       } catch (e: any) {
-        setError(e.message ?? 'Failed to load countries');
+        setError(e.message === 'OFFLINE_NO_PREMIUM'
+          ? 'offline_upgrade'
+          : (e.message ?? 'Failed to load countries'));
       } finally {
         setLoading(false);
+        quizStartRef.current = Date.now();
+        elapsedIntervalRef.current = setInterval(() => {
+          setElapsedSec(Math.floor((Date.now() - quizStartRef.current) / 1000));
+        }, 1000);
       }
     })();
 
     return () => {
       if (autoAdvanceTimer.current) clearTimeout(autoAdvanceTimer.current);
+      if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current);
     };
   }, []);
 
@@ -90,13 +110,11 @@ export default function BordersQuizScreen({ navigation }: Props) {
     if (isCorrect) {
       comboRef.current += 1;
       setCurrentCombo(comboRef.current);
-      setShowConfetti(true);
       playDingStreak(comboRef.current);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
       scoreRef.current += 1;
-      const comboBonus = comboRef.current > 1 ? comboRef.current - 1 : 0;
-      const totalEarned = GOLD_PER_CORRECT + comboBonus;
+      const totalEarned = Math.round(GOLD_PER_CORRECT * (1 + (comboRef.current - 1) * 0.1));
       
       goldRef.current += totalEarned;
       setScore(scoreRef.current);
@@ -124,11 +142,13 @@ export default function BordersQuizScreen({ navigation }: Props) {
   function advanceQuestion() {
     const nextIndex = currentIndexRef.current + 1;
     if (nextIndex >= TOTAL_QUESTIONS) {
+      if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current);
       navigation.replace('QuizResults', {
         score: scoreRef.current,
         total: TOTAL_QUESTIONS,
         goldEarned: goldRef.current,
         quizType: 'borders',
+        elapsedSeconds: Math.floor((Date.now() - quizStartRef.current) / 1000),
       });
       return;
     }
@@ -141,7 +161,6 @@ export default function BordersQuizScreen({ navigation }: Props) {
       currentIndexRef.current = nextIndex;
       setCurrentIndex(nextIndex);
       setAnswered(false);
-      setShowConfetti(false);
       setButtonStates(['default', 'default', 'default', 'default']);
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -161,6 +180,23 @@ export default function BordersQuizScreen({ navigation }: Props) {
   }
 
   if (error || questions.length === 0) {
+    if (error === 'offline_upgrade') {
+      return (
+        <View style={styles.centered}>
+          <Text style={{ fontSize: 40, marginBottom: 12 }}>📡</Text>
+          <Text style={[styles.errorText, { color: '#FFD700', fontWeight: 'bold' }]}>You're Offline</Text>
+          <Text style={[styles.errorText, { color: '#aaa', fontSize: 14, marginTop: 8 }]}>
+            Upgrade to Conqueror's Pass to play all quizzes without an internet connection.
+          </Text>
+          <TouchableOpacity
+            onPress={() => navigation.getParent()?.navigate('Premium')}
+            style={{ marginTop: 20, backgroundColor: '#7B2FBE', paddingHorizontal: 28, paddingVertical: 12, borderRadius: 12 }}
+          >
+            <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>Upgrade</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
     return (
       <View style={styles.centered}>
         <Text style={styles.errorText}>{error ?? 'No questions available'}</Text>
@@ -182,6 +218,7 @@ export default function BordersQuizScreen({ navigation }: Props) {
             <View style={styles.progressBarWrapper}>
               <View style={[styles.scoreFill, { width: `${(currentIndex / TOTAL_QUESTIONS) * 100}%` as any }]} />
             </View>
+            <Text style={styles.timerText}>⏱ {String(Math.floor(elapsedSec / 60)).padStart(2, '0')}:{String(elapsedSec % 60).padStart(2, '0')}</Text>
             <HeatStreakBadge combo={currentCombo} />
           </View>
 
@@ -227,6 +264,7 @@ const styles = StyleSheet.create({
   errorText: { color: '#f44336', fontSize: 16, textAlign: 'center', padding: 24 },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8, gap: 8 },
   progress: { color: '#aaa', fontSize: 14, fontWeight: '600' },
+  timerText: { color: '#aaa', fontSize: 13, fontWeight: '600' },
   progressBarWrapper: { flex: 1, height: 4, backgroundColor: '#1a1a2e', borderRadius: 2, overflow: 'hidden' },
   comboBadge: { backgroundColor: '#3a0000', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: '#ff4444' },
   comboText: { color: '#ff8888', fontWeight: 'bold', fontSize: 13 },

@@ -43,7 +43,7 @@ export default function WorldMapScreen() {
 
     Alert.alert(
       `Purchase ${country.name}?`,
-      `This will cost 🪙 ${price} Gold.`,
+      `This will cost ${price} Gold.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {

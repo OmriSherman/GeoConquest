@@ -4,11 +4,9 @@ import Svg, { Path, G, Text as SvgText } from 'react-native-svg';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
-  useAnimatedStyle,
-  withSpring,
+  useAnimatedProps,
   withTiming,
   Easing,
-  SharedValue,
 } from 'react-native-reanimated';
 import { getMapFeatures } from '../lib/mapData';
 import { fetchCountries, getCcn3ToCca2Map, getCca3ToCca2Map } from '../lib/countryData';
@@ -21,6 +19,7 @@ interface WorldMapViewProps {
   height?: number;
   interactive?: boolean;
   showNames?: boolean;
+  resetKey?: number;
 }
 
 const OWNED_COLORS = [
@@ -85,6 +84,7 @@ export default function WorldMapView({
   height = 200,
   interactive = true,
   showNames = true,
+  resetKey,
 }: WorldMapViewProps) {
   const [loading, setLoading] = useState(true);
   const [nameToCca2Map, setNameToCca2Map] = useState<Record<string, string>>({});
@@ -106,6 +106,19 @@ export default function WorldMapView({
     }
   }, []);
 
+  // Memoize owned set — only rebuilt when ownedCountries changes
+  const ownedSet = useMemo(() => new Set(ownedCountries), [ownedCountries]);
+
+  // Memoize CCA2 lookups for all features — recomputed only when features/nameToCca2Map changes
+  const featureCca2List = useMemo(() => {
+    if (!features) return [];
+    const ccn3Map = getCcn3ToCca2Map();
+    const cca3Map = getCca3ToCca2Map();
+    return (features as any[]).map((f: any) =>
+      ccn3Map[f.rawFeature.id] || cca3Map[f.rawFeature.id] || nameToCca2Map[f.name] || ''
+    );
+  }, [features, nameToCca2Map]);
+
   useEffect(() => {
     // We must ensure countries are fetched so maps are populated
     fetchCountries().then((countries) => {
@@ -119,52 +132,51 @@ export default function WorldMapView({
     });
   }, []);
 
-  const getCountryCca2 = (featureId: string, featureName: string) => {
-    const ccn3Map = getCcn3ToCca2Map();
-    const cca3Map = getCca3ToCca2Map();
-    // Some features use strings like "716", some might use "ZWE" (CCA3/A3), some rely on name fallback
-    return ccn3Map[featureId] || cca3Map[featureId] || nameToCca2Map[featureName] || '';
-  };
-
   useEffect(() => {
     if (!loading) {
       if (focusCountry) {
-        // Find feature
-        const f = (features || []).find(
-          (feat: any) => getCountryCca2(feat.rawFeature.id, feat.name) === focusCountry
-        );
-        if (f && f.bounds) {
+        const fIdx = featureCca2List.findIndex((cca2: string) => cca2 === focusCountry);
+        const f = fIdx >= 0 ? (features || [])[fIdx] : undefined;
+        if (f && f.bounds && f.centroid && !Number.isNaN(f.centroid[0])) {
           const [[xmin, ymin], [xmax, ymax]] = f.bounds;
           const dx = xmax - xmin;
           const dy = ymax - ymin;
-          // compute scale so it fits nicely
-          let s = 1.0 / Math.max(dx / VIEWBOX_W, dy / VIEWBOX_H);
-          // clamp to a reasonable max zoom
-          if (s > 10) s = 10;
-          if (s < 1) s = 1;
 
-          // compute center translation
-          const cx = (xmin + xmax) / 2;
-          const cy = (ymin + ymax) / 2;
+          // Scale so the country occupies the center 1/9 of a 3×3 grid (1/3 width, 1/3 height).
+          // Antimeridian countries (e.g. Russia) have inflated bounding boxes — use a fixed zoom.
+          let s: number;
+          if (dx > VIEWBOX_W * 0.7) {
+            s = 1.5;
+          } else {
+            s = (1 / 3) / Math.max(dx / VIEWBOX_W, dy / VIEWBOX_H);
+            // Cap scale so micro-states don't get an extreme zoom
+            if (s > 12) s = 12;
+            if (s < 1) s = 1;
+          }
 
-          // Our styling centers scaling via VIEWBOX_W/2, so tx just needs to move cx to the center
-          let tx = VIEWBOX_W / 2 - cx;
-          let ty = VIEWBOX_H / 2 - cy;
+          const [cx, cy] = f.centroid;
+          let tx = s * (400 - cx);
+          let ty = s * (300 - cy);
 
-          // Pre-clamp tx and ty so the initial zoom-in doesn't fly out of bounds
-          // Which would cause onUpdate to glitch when the user first touches it
           const boundX = (s - 1) * (VIEWBOX_W / 2);
           const boundY = (s - 1) * (VIEWBOX_H / 2);
           tx = Math.min(Math.max(tx, -boundX), boundX);
           ty = Math.min(Math.max(ty, -boundY), boundY);
 
-          scale.value = withTiming(s, { duration: 600, easing: Easing.out(Easing.cubic) });
-          translateX.value = withTiming(tx, { duration: 600, easing: Easing.out(Easing.cubic) });
-          translateY.value = withTiming(ty, { duration: 600, easing: Easing.out(Easing.cubic) });
-          
+          scale.value = withTiming(s, { duration: 1800, easing: Easing.out(Easing.cubic) });
+          translateX.value = withTiming(tx, { duration: 1800, easing: Easing.out(Easing.cubic) });
+          translateY.value = withTiming(ty, { duration: 1800, easing: Easing.out(Easing.cubic) });
           savedScale.value = s;
           savedTranslateX.value = tx;
           savedTranslateY.value = ty;
+        } else {
+          // Country not found in GeoJSON — reset to world view
+          scale.value = 1;
+          translateX.value = 0;
+          translateY.value = 0;
+          savedScale.value = 1;
+          savedTranslateX.value = 0;
+          savedTranslateY.value = 0;
         }
       } else {
         // Reset to world view
@@ -176,7 +188,18 @@ export default function WorldMapView({
         savedTranslateY.value = 0;
       }
     }
-  }, [loading, focusCountry, features]);
+  }, [loading, focusCountry, featureCca2List, features]);
+
+  useEffect(() => {
+    if (!loading && resetKey !== undefined) {
+      scale.value = withTiming(1, { duration: 600, easing: Easing.out(Easing.cubic) });
+      translateX.value = withTiming(0, { duration: 600, easing: Easing.out(Easing.cubic) });
+      translateY.value = withTiming(0, { duration: 600, easing: Easing.out(Easing.cubic) });
+      savedScale.value = 1;
+      savedTranslateX.value = 0;
+      savedTranslateY.value = 0;
+    }
+  }, [resetKey]);
 
   const canInteract = interactive && !focusCountry;
 
@@ -218,20 +241,18 @@ export default function WorldMapView({
 
   const composed = Gesture.Simultaneous(pan, pinch);
 
-  const cx = VIEWBOX_W / 2;
-  const cy = VIEWBOX_H / 2;
-
-  const stylez = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: translateX.value },
-      { translateY: translateY.value },
-      { translateX: cx },
-      { translateY: cy },
-      { scale: scale.value },
-      { translateX: -cx },
-      { translateY: -cy },
-    ],
-  }));
+  // useAnimatedProps with `matrix` avoids the Android ClassCastException caused by
+  // passing a String to a native prop that expects ReadableArray. The `matrix` prop
+  // takes [a,b,c,d,e,f] where the transform is: x'=s*x+e, y'=s*y+f.
+  // At tx=ty=0 this scales around the viewbox center (400,300).
+  const animatedProps = useAnimatedProps(() => {
+    const s = scale.value;
+    const tx = translateX.value;
+    const ty = translateY.value;
+    const e = tx + 400 * (1 - s);
+    const f = ty + 300 * (1 - s);
+    return { matrix: [s, 0, 0, s, e, f] };
+  });
 
   if (loading) {
     return (
@@ -241,8 +262,6 @@ export default function WorldMapView({
       </View>
     );
   }
-
-  const ownedSet = new Set(ownedCountries);
 
   return (
     <View style={[styles.container, { height }]}>
@@ -254,16 +273,16 @@ export default function WorldMapView({
             viewBox={`0 0 ${VIEWBOX_W} ${VIEWBOX_H}`}
             preserveAspectRatio="xMidYMid meet"
           >
-            <AnimatedG style={stylez}>
-              {(features || []).map((f: any) => {
-                const cca2 = getCountryCca2(f.rawFeature.id, f.name);
+            <AnimatedG animatedProps={animatedProps}>
+              {(features || []).map((f: any, i: number) => {
+                const cca2 = featureCca2List[i] || '';
                 const isOwn = ownedSet.has(cca2);
                 const isFoc = cca2 === focusCountry;
 
-                const fillColor = isFoc 
-                  ? '#FFD700' 
+                const fillColor = isFoc
+                  ? '#FFD700'
                   : (isOwn ? getCountryColor(cca2) : '#1a1a2e');
-                
+
                 const fillOpacity = isFoc ? 0.9 : (isOwn ? 0.75 : 0.35);
                 const color = isFoc ? '#FFD700' : '#7a7a9c';
                 const weight = isFoc ? 1.25 : 0.25;
@@ -279,10 +298,10 @@ export default function WorldMapView({
                   />
                 );
               })}
-              
+
               {/* Render labels on top of all paths */}
-              {(features || []).map((f: any) => {
-                const cca2 = getCountryCca2(f.rawFeature.id, f.name);
+              {(features || []).map((f: any, i: number) => {
+                const cca2 = featureCca2List[i] || '';
                 const isOwn = ownedSet.has(cca2);
                 const isFoc = cca2 === focusCountry;
 

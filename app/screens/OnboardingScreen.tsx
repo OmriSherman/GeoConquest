@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Alert,
   FlatList,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Text,
@@ -19,21 +20,42 @@ import {
   isValidUsername,
 } from '../lib/avatarData';
 import { StyleSheet } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Country flags only (for onboarding flag step)
 const COUNTRY_FLAGS = FLAG_OPTIONS.filter(f => f.category === 'country');
+
+/** Decode cca2 from a standard ISO regional-indicator flag emoji (e.g. 🇮🇱 → 'IL') */
+function flagEmojiToCca2(emoji: string): string | null {
+  try {
+    const chars = [...emoji];
+    if (chars.length !== 2) return null;
+    const code = chars.map(c => String.fromCharCode(c.codePointAt(0)! - 127397)).join('');
+    if (/^[A-Z]{2}$/.test(code)) return code;
+  } catch {}
+  return null;
+}
 
 type Step = 'username' | 'avatar' | 'flag';
 
 export default function OnboardingScreen() {
   const { setUsername: commitProfile } = useAuth();
-  const [step, setStep] = useState<Step>('username');
+  const [step, setStep] = useState<Step | 'referral'>('username');
   const [username, setUsernameInput] = useState('');
-  const [selectedAvatar, setSelectedAvatar] = useState('🧑');
+  const [selectedAvatar, setSelectedAvatar] = useState('png_explorer_male');
   const [selectedFlag, setSelectedFlag] = useState('🏴‍☠️');
   const [loading, setLoading] = useState(false);
   const [usernameError, setUsernameError] = useState('');
   const [flagSearch, setFlagSearch] = useState('');
+  const [referralCode, setReferralCode] = useState('');
+  const [referralStatus, setReferralStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [referralMessage, setReferralMessage] = useState('');
+
+  useEffect(() => {
+    AsyncStorage.getItem('@pending_referral_code').then(code => {
+      if (code) setReferralCode(code);
+    });
+  }, []);
 
   const filteredFlags = flagSearch.trim()
     ? COUNTRY_FLAGS.filter(f =>
@@ -71,15 +93,58 @@ export default function OnboardingScreen() {
 
   // ── Final Submit ───────────────────────────────────────────────────────────
 
+  async function verifyReferralCode(): Promise<string | null> {
+    const code = referralCode.trim();
+    if (!code) {
+      setReferralStatus('idle');
+      setReferralMessage('');
+      return null;
+    }
+
+    if (code.toLowerCase() === username.trim().toLowerCase()) {
+      setReferralStatus('error');
+      setReferralMessage("You can't use your own username as a referral code.");
+      return null;
+    }
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('username')
+      .ilike('username', code)
+      .limit(1);
+
+    if (error || !data || data.length === 0) {
+      setReferralStatus('error');
+      setReferralMessage('Referral code not found. Please check and try again.');
+      return null;
+    }
+
+    const canonical = data[0].username as string;
+    setReferralStatus('success');
+    setReferralMessage('Referral accepted! You and your friend each get 1,500 gold after your first completed quiz.');
+    return canonical;
+  }
+
   async function handleFinish() {
     setLoading(true);
     try {
+      let code = referralCode.trim() || null;
+      if (code) {
+        const validated = await verifyReferralCode();
+        if (!validated) {
+          setLoading(false);
+          return;
+        }
+        code = validated;
+      }
       await commitProfile(
         username.trim(),
         selectedAvatar,
         selectedFlag,
-        null
+        flagEmojiToCca2(selectedFlag),
+        code
       );
+      if (code) await AsyncStorage.removeItem('@pending_referral_code');
     } catch (err: any) {
       Alert.alert('Error', err.message ?? 'Failed to create profile');
     } finally {
@@ -89,7 +154,7 @@ export default function OnboardingScreen() {
 
   // ── Progress dots ──────────────────────────────────────────────────────────
 
-  const steps: Step[] = ['username', 'avatar', 'flag'];
+  const steps: Array<Step | 'referral'> = ['username', 'avatar', 'flag', 'referral'];
   const currentIndex = steps.indexOf(step);
 
   return (
@@ -153,7 +218,7 @@ export default function OnboardingScreen() {
         {/* ── Avatar Step ───────────────────────────────────────────────────── */}
         {step === 'avatar' && (
           <View style={styles.stepContainer}>
-            <Text style={styles.stepEmoji}>{selectedAvatar}</Text>
+            <AvatarDisplay avatarId={selectedAvatar} size={80} />
             <Text style={styles.stepTitle}>Choose Your Avatar</Text>
             <Text style={styles.stepSubtitle}>
               This will represent you in the game
@@ -169,7 +234,7 @@ export default function OnboardingScreen() {
                   ]}
                   onPress={() => setSelectedAvatar(av.emoji)}
                 >
-                  <Text style={styles.gridEmoji}>{av.emoji}</Text>
+                  <AvatarDisplay avatarId={av.emoji} size={52} />
                   <Text style={styles.gridLabel}>{av.label}</Text>
                 </TouchableOpacity>
               ))}
@@ -229,12 +294,63 @@ export default function OnboardingScreen() {
                 <Text style={styles.backButtonText}>← Back</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.nextButton, styles.navNextButton, styles.finishButton, loading && styles.buttonDisabled]}
+                style={[styles.nextButton, styles.navNextButton]}
+                onPress={() => setStep('referral')}
+              >
+                <Text style={styles.nextButtonText}>Next →</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {step === 'referral' && (
+          <View style={styles.stepContainerUsername}>
+            <Image source={require('../../assets/avatars/compass.png')} style={{ width: 72, height: 72 }} resizeMode="contain" />
+            <Text style={styles.stepTitle}>Got a Referral Code?</Text>
+            <Text style={styles.stepSubtitle}>
+              If a friend invited you to the conquest, enter their username below.
+            </Text>
+
+            <View style={styles.referralRow}>
+              <TextInput
+                style={[
+                  styles.referralInputProminent,
+                  referralStatus === 'success' && styles.referralInputSuccess,
+                  referralStatus === 'error' && styles.referralInputError,
+                ]}
+                placeholder="Referral code (optional)"
+                placeholderTextColor="#666"
+                value={referralCode}
+                onChangeText={(value) => {
+                  setReferralCode(value);
+                  setReferralStatus('idle');
+                  setReferralMessage('');
+                }}
+                autoCapitalize="none"
+                maxLength={20}
+              />
+              <TouchableOpacity style={styles.verifyReferralButton} onPress={verifyReferralCode} disabled={loading}>
+                <Text style={styles.verifyReferralText}>Verify</Text>
+              </TouchableOpacity>
+            </View>
+
+            {referralStatus !== 'idle' && (
+              <Text style={[styles.referralStatusText, referralStatus === 'success' ? styles.referralStatusSuccess : styles.referralStatusError]}>
+                {referralMessage}
+              </Text>
+            )}
+
+            <View style={styles.navRow}>
+              <TouchableOpacity style={styles.backButton} onPress={() => setStep('flag')}>
+                <Text style={styles.backButtonText}>← Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.nextButton, styles.navNextButton, loading && styles.buttonDisabled]}
                 onPress={handleFinish}
                 disabled={loading}
               >
                 <Text style={styles.nextButtonText}>
-                  {loading ? 'Creating…' : 'Start Exploring 🚀'}
+                  {loading ? 'Creating…' : "I'm ready"}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -335,28 +451,28 @@ const styles = StyleSheet.create({
     width: '100%',
     marginTop: 4,
   },
-  // Avatar grid (3x3 for 9 items)
+  // Avatar grid (2x2 for 4 explorer items)
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
-    gap: 10,
+    gap: 14,
     width: '100%',
   },
   gridItem: {
-    width: 80,
-    height: 80,
+    width: 100,
+    height: 110,
     borderRadius: 16,
     backgroundColor: '#1a1a2e',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: '#2a2a4e',
-    gap: 2,
+    gap: 6,
   },
   gridItemSelected: { borderColor: '#FFD700', backgroundColor: '#1a1a30' },
   gridEmoji: { fontSize: 32 },
-  gridLabel: { color: '#888', fontSize: 9 },
+  gridLabel: { color: '#888', fontSize: 11 },
   // Search
   searchInput: {
     backgroundColor: '#1a1a2e',
@@ -385,6 +501,60 @@ const styles = StyleSheet.create({
   },
   flagItemSelected: { borderColor: '#FFD700', backgroundColor: '#1a1a30' },
   flagEmoji: { fontSize: 26 },
+  referralInput: {
+    backgroundColor: '#111122',
+    color: '#888',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    fontSize: 13,
+    borderWidth: 1,
+    borderColor: '#1e1e3a',
+    width: '100%',
+    textAlign: 'center',
+  },
+  referralInputProminent: {
+    backgroundColor: '#151530',
+    color: '#fff',
+    borderRadius: 14,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    fontSize: 16,
+    borderWidth: 2,
+    borderColor: '#2a2a4e',
+    flex: 1,
+    textAlign: 'center',
+  },
+  referralRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  referralInputSuccess: { borderColor: '#34d399' },
+  referralInputError: { borderColor: '#f87171' },
+  referralStatusText: {
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: -4,
+    marginBottom: 2,
+    lineHeight: 18,
+  },
+  referralStatusSuccess: { color: '#34d399' },
+  referralStatusError: { color: '#f87171' },
+  verifyReferralButton: {
+    borderWidth: 1,
+    borderColor: '#4a9eff',
+    borderRadius: 12,
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+    backgroundColor: '#0d1b2a',
+  },
+  verifyReferralText: {
+    color: '#4a9eff',
+    fontWeight: '700',
+    fontSize: 13,
+  },
   // Preview
   previewRow: {
     flexDirection: 'row',

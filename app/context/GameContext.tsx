@@ -1,7 +1,20 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { Country, getCountryPrice } from '../types';
-import { useAuth } from './AuthContext';
+import { useAuth, enqueueMutation, PROFILE_CACHE_KEY } from './AuthContext';
+import { ACHIEVEMENTS_DATA } from '../lib/achievementsData';
+
+const OWNED_KEY = (uid: string) => `@geoquest/owned_countries_${uid}`;
+
+// Empire thresholds that trigger a quest-complete toast
+const EMPIRE_THRESHOLDS: Record<number, string> = {
+  1: 'First Conquest',
+  5: 'Growing Empire',
+  10: 'Imperial Ambitions',
+  25: 'World Power',
+  50: 'Global Hegemon',
+};
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -9,10 +22,14 @@ interface GameContextValue {
   goldBalance: number;
   ownedCountries: string[]; // array of cca2 codes
   loadingGame: boolean;
+  questToast: string | null;
+  questHighlightId: string | null;
   addGold: (amount: number) => Promise<void>;
   purchaseCountry: (country: Country) => Promise<void>;
   isOwned: (cca2: string) => boolean;
   canAfford: (price: number) => boolean;
+  clearQuestToast: () => void;
+  triggerQuestToast: (message: string, achievementId?: string) => void;
 }
 
 // ─── Context ──────────────────────────────────────────────────────────────────
@@ -27,6 +44,17 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [goldBalance, setGoldBalance] = useState(0);
   const [ownedCountries, setOwnedCountries] = useState<string[]>([]);
   const [loadingGame, setLoadingGame] = useState(true);
+  const [questToast, setQuestToast] = useState<string | null>(null);
+  const [questHighlightId, setQuestHighlightId] = useState<string | null>(null);
+  const clearQuestToast = useCallback(() => { setQuestToast(null); setQuestHighlightId(null); }, []);
+  const triggerQuestToast = useCallback((message: string, achievementId?: string) => {
+    setQuestToast(message);
+    setQuestHighlightId(achievementId ?? null);
+  }, []);
+
+  // Track which empire thresholds we've already toasted this session
+  const toastedThresholds = useRef<Set<number>>(new Set());
+  const prevOwnedCountRef = useRef(0);
 
   // ── Bootstrap ──────────────────────────────────────────────────────────────
 
@@ -47,6 +75,28 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
   }, [profile]);
 
+  // Check empire thresholds whenever ownedCountries grows
+  useEffect(() => {
+    const newCount = ownedCountries.length;
+    const prevCount = prevOwnedCountRef.current;
+    prevOwnedCountRef.current = newCount;
+
+    if (newCount <= prevCount) return; // no new purchase
+
+    for (const [threshold, title] of Object.entries(EMPIRE_THRESHOLDS)) {
+      const t = Number(threshold);
+      if (newCount >= t && !toastedThresholds.current.has(t)) {
+        toastedThresholds.current.add(t);
+        const ach = ACHIEVEMENTS_DATA.find(a => a.title === title);
+        triggerQuestToast(
+          ach ? `${ach.title} — claim your reward in Quests!` : `${title} quest complete!`,
+          ach?.id,
+        );
+        break;
+      }
+    }
+  }, [ownedCountries.length]);
+
   async function loadGameData() {
     if (!user) return;
     setLoadingGame(true);
@@ -57,8 +107,31 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         .eq('user_id', user.id);
 
       if (!error && owned) {
-        setOwnedCountries(owned.map((r: { country_code: string }) => r.country_code));
+        const codes = owned.map((r: { country_code: string }) => r.country_code);
+        setOwnedCountries(codes);
+        // Cache for offline use
+        AsyncStorage.setItem(OWNED_KEY(user.id), JSON.stringify(codes)).catch(() => {});
+        // Pre-seed already-crossed thresholds so we don't toast on load
+        for (const threshold of Object.keys(EMPIRE_THRESHOLDS).map(Number)) {
+          if (codes.length >= threshold) {
+            toastedThresholds.current.add(threshold);
+          }
+        }
+      } else {
+        throw error ?? new Error('Failed to load owned countries');
       }
+    } catch {
+      // Network failure — load from cache
+      try {
+        const raw = await AsyncStorage.getItem(OWNED_KEY(user.id));
+        if (raw) {
+          const codes: string[] = JSON.parse(raw);
+          setOwnedCountries(codes);
+          for (const threshold of Object.keys(EMPIRE_THRESHOLDS).map(Number)) {
+            if (codes.length >= threshold) toastedThresholds.current.add(threshold);
+          }
+        }
+      } catch {}
     } finally {
       setLoadingGame(false);
     }
@@ -72,13 +145,22 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
       const newBalance = goldBalance + amount;
 
+      // Optimistic — always update display immediately
+      setGoldBalance(newBalance);
+
       const { error } = await supabase
         .from('profiles')
         .update({ gold_balance: newBalance })
         .eq('id', user.id);
 
-      if (!error) {
-        setGoldBalance(newBalance);
+      if (error) {
+        // Offline — queue delta for sync on reconnect and persist to profile cache
+        await enqueueMutation(user.id, { type: 'add_gold', delta: amount });
+        const raw = await AsyncStorage.getItem(PROFILE_CACHE_KEY(user.id));
+        if (raw) {
+          const cached = JSON.parse(raw);
+          AsyncStorage.setItem(PROFILE_CACHE_KEY(user.id), JSON.stringify({ ...cached, gold_balance: newBalance })).catch(() => {});
+        }
       }
     },
     [user, goldBalance]
@@ -109,7 +191,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       if (purchaseRes.error) throw purchaseRes.error;
 
       setGoldBalance(newBalance);
-      setOwnedCountries((prev) => [...prev, country.cca2]);
+      setOwnedCountries(prev => [...prev, country.cca2]);
     },
     [user, goldBalance, ownedCountries]
   );
@@ -130,7 +212,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <GameContext.Provider
-      value={{ goldBalance, ownedCountries, loadingGame, addGold, purchaseCountry, isOwned, canAfford }}
+      value={{
+        goldBalance, ownedCountries, loadingGame,
+        addGold, purchaseCountry, isOwned, canAfford,
+        questToast, questHighlightId, clearQuestToast, triggerQuestToast,
+      }}
     >
       {children}
     </GameContext.Provider>

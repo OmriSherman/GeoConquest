@@ -27,14 +27,25 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.geoconquest.app"
+      "package": "com.geoconquest.app",
+      "permissions": [
+        "com.google.android.gms.permission.AD_ID"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-web-browser",
-      "react-native-iap"
+      "react-native-iap",
+      "expo-secure-store",
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-7734903998169254~4543896223"
+        }
+      ],
+      "./plugins/withAdIdPermission"
     ],
     "extra": {
       "eas": {

@@ -12,10 +12,9 @@ import {
   View,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import ConfettiCannon from 'react-native-confetti-cannon';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { QuizStackParamList, QuizQuestion, Country, cca2ToFlagEmoji } from '../types';
-import { buildQuizQuestions, fetchCountries, getCca3ToCca2Map } from '../lib/countryData';
+import { buildQuizQuestions, fetchCountries, getOfflineFlagCountries, getCca3ToCca2Map } from '../lib/countryData';
 import { useGame } from '../context/GameContext';
 import AnswerButton from '../components/AnswerButton';
 import WorldMapView from '../components/WorldMapView';
@@ -46,7 +45,6 @@ export default function FlagQuizScreen({ navigation }: Props) {
     'default', 'default', 'default', 'default',
   ]);
   const [currentCombo, setCurrentCombo] = useState(0);
-  const [showConfetti, setShowConfetti] = useState(false);
   const [answered, setAnswered] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -60,24 +58,41 @@ export default function FlagQuizScreen({ navigation }: Props) {
   const comboRef = useRef(0);
   const questionsRef = useRef<QuizQuestion[]>([]);
   const autoAdvanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const quizStartRef = useRef<number>(0);
+  const elapsedIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [elapsedSec, setElapsedSec] = useState(0);
+  const [flagLoadError, setFlagLoadError] = useState(false);
 
   useEffect(() => {
     (async () => {
       try {
-        const countries = await fetchCountries();
+        let countries: Country[];
+        try {
+          countries = await fetchCountries();
+        } catch {
+          // Network unavailable — fall back to bundled flag data (free for all users)
+          countries = getOfflineFlagCountries();
+        }
         const withoutAF = countries.filter(c => c.cca2 !== 'AF');
         const q = buildQuizQuestions(withoutAF, TOTAL_QUESTIONS);
+        // Prefetch flag images (no-op if flagUrl is empty in offline mode)
+        await Promise.allSettled(q.filter(q => q.country.flagUrl).map(q => Image.prefetch(q.country.flagUrl)));
         setQuestions(q);
         questionsRef.current = q;
       } catch (e: any) {
         setError(e.message ?? 'Failed to load countries');
       } finally {
         setLoading(false);
+        quizStartRef.current = Date.now();
+        elapsedIntervalRef.current = setInterval(() => {
+          setElapsedSec(Math.floor((Date.now() - quizStartRef.current) / 1000));
+        }, 1000);
       }
     })();
 
     return () => {
       if (autoAdvanceTimer.current) clearTimeout(autoAdvanceTimer.current);
+      if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current);
     };
   }, []);
 
@@ -99,14 +114,11 @@ export default function FlagQuizScreen({ navigation }: Props) {
     if (isCorrect) {
       comboRef.current += 1;
       setCurrentCombo(comboRef.current);
-      setShowConfetti(true);
       playDingStreak(comboRef.current);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
       scoreRef.current += 1;
-      // Extra +1 gold for every combination
-      const comboBonus = comboRef.current > 1 ? comboRef.current - 1 : 0;
-      const totalEarned = GOLD_PER_CORRECT + comboBonus;
+      const totalEarned = Math.round(GOLD_PER_CORRECT * (1 + (comboRef.current - 1) * 0.1));
       
       goldRef.current += totalEarned;
       setScore(scoreRef.current);
@@ -141,11 +153,13 @@ export default function FlagQuizScreen({ navigation }: Props) {
 
     const nextIndex = currentIndexRef.current + 1;
     if (nextIndex >= TOTAL_QUESTIONS) {
+      if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current);
       navigation.replace('QuizResults', {
         score: scoreRef.current,
         total: TOTAL_QUESTIONS,
         goldEarned: goldRef.current,
         quizType: 'flag',
+        elapsedSeconds: Math.floor((Date.now() - quizStartRef.current) / 1000),
       });
       return;
     }
@@ -158,7 +172,7 @@ export default function FlagQuizScreen({ navigation }: Props) {
       currentIndexRef.current = nextIndex;
       setCurrentIndex(nextIndex);
       setAnswered(false);
-      setShowConfetti(false);
+      setFlagLoadError(false);
       setButtonStates(['default', 'default', 'default', 'default']);
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -193,7 +207,7 @@ export default function FlagQuizScreen({ navigation }: Props) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#FFD700" />
-        <Text style={styles.loadingText}>Loading countries…</Text>
+        <Text style={styles.loadingText}>Preparing flags…</Text>
       </View>
     );
   }
@@ -223,6 +237,7 @@ export default function FlagQuizScreen({ navigation }: Props) {
             <View style={styles.progressBarWrapper}>
               <View style={[styles.scoreFill, { width: `${((currentIndex) / TOTAL_QUESTIONS) * 100}%` as any }]} />
             </View>
+            <Text style={styles.timerText}>⏱ {String(Math.floor(elapsedSec / 60)).padStart(2, '0')}:{String(elapsedSec % 60).padStart(2, '0')}</Text>
             <HeatStreakBadge combo={currentCombo} />
           </View>
 
@@ -231,11 +246,16 @@ export default function FlagQuizScreen({ navigation }: Props) {
             <Text style={styles.prompt}>Which country does this flag belong to?</Text>
 
             <View style={styles.flagContainer}>
-              <Image
-                source={{ uri: question.country.flagUrl }}
-                style={styles.flag}
-                resizeMode="contain"
-              />
+              {question.country.flagUrl && !flagLoadError ? (
+                <Image
+                  source={{ uri: question.country.flagUrl }}
+                  style={styles.flag}
+                  resizeMode="contain"
+                  onError={() => setFlagLoadError(true)}
+                />
+              ) : (
+                <Text style={styles.flagEmoji}>{cca2ToFlagEmoji(question.country.cca2)}</Text>
+              )}
               
               {/* Info button — floating strictly inside the flag area */}
               {answered && (
@@ -263,16 +283,6 @@ export default function FlagQuizScreen({ navigation }: Props) {
               <Text style={styles.tapHint}>Tap anywhere to continue →</Text>
             )}
             
-            {/* Pop Confetti! */}
-            {showConfetti && (
-              <ConfettiCannon 
-                count={40} 
-                origin={{ x: -10, y: 0 }} 
-                explosionSpeed={350} 
-                fallSpeed={2000} 
-                fadeOut 
-              />
-            )}
           </Animated.View>
         </ScrollView>
 
@@ -297,6 +307,7 @@ export default function FlagQuizScreen({ navigation }: Props) {
                     ownedCountries={[infoCountry.cca2]}
                     focusCountry={infoCountry.cca2}
                     height={180}
+                    showNames={false}
                   />
 
                   {/* Facts */}
@@ -373,6 +384,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   progress: { color: '#aaa', fontSize: 14, fontWeight: '600' },
+  timerText: { color: '#aaa', fontSize: 13, fontWeight: '600' },
   progressBarWrapper: { flex: 1, height: 4, backgroundColor: '#1a1a2e', borderRadius: 2, overflow: 'hidden' },
   comboBadge: {
     backgroundColor: '#3a0000',
@@ -404,6 +416,7 @@ const styles = StyleSheet.create({
     height: 140,
   },
   flag: { width: '100%', height: '100%' },
+  flagEmoji: { fontSize: 96, textAlign: 'center' },
   // Info button — nested absolute to save UI height
   infoBadge: {
     position: 'absolute',
