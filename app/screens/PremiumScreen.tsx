@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Alert,
   Dimensions,
   Image,
   Platform,
@@ -14,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useGame } from '../context/GameContext';
 import { useAuth } from '../context/AuthContext';
+import { useAlert } from '../context/AlertContext';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -171,6 +171,7 @@ const FAQ_ITEMS = [
 export default function PremiumScreen({ navigation }: { navigation?: any }) {
   const { ownedCountries } = useGame();
   const { profile, purchaseConqueror } = useAuth();
+  const { showAlert } = useAlert();
   const insets = useSafeAreaInsets();
   const countdown = useCountdown(3 * 3600 + 47 * 60 + 22);
 
@@ -207,15 +208,64 @@ export default function PremiumScreen({ navigation }: { navigation?: any }) {
               console.warn('[IAP] Acknowledge error:', ackErr);
             }
 
-            Alert.alert(
-              '🎉 Welcome, Conqueror!',
-              purchasedPlan === 'unlimited'
-                ? 'You now have permanent Conqueror access plus 100,000 gold and 30 tickets!'
-                : 'Your monthly Conqueror subscription is active!',
-              [{ text: 'Awesome!', onPress: () => navigation?.goBack() }]
-            );
+            showAlert({
+              variant: 'premium',
+              title: 'Welcome Conqueror',
+              titleNode: (
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                  <Image
+                    source={require('../../assets/avatars/star2.png')}
+                    style={{ width: 20, height: 20 }}
+                    resizeMode="contain"
+                  />
+                  <Text style={{ color: '#9B59B6', fontSize: 20, fontWeight: 'bold', textAlign: 'center' }}>
+                    Welcome Conqueror
+                  </Text>
+                  <Image
+                    source={require('../../assets/avatars/star2.png')}
+                    style={{ width: 20, height: 20 }}
+                    resizeMode="contain"
+                  />
+                </View>
+              ),
+              contentNode:
+                purchasedPlan === 'unlimited' ? (
+                  <View style={{ gap: 10 }}>
+                    <Text style={{ color: '#ddd', fontSize: 15, textAlign: 'center', lineHeight: 22 }}>
+                      You are now a permanent conqueror - the world is at your feet! Also you got:
+                    </Text>
+
+                    <View style={{ gap: 8, alignSelf: 'center' }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Text style={{ color: '#ddd', fontSize: 16, fontWeight: '600' }}>- 100,000</Text>
+                        <Image
+                          source={require('../../assets/avatars/gold_coin.png')}
+                          style={{ width: 18, height: 18 }}
+                          resizeMode="contain"
+                        />
+                      </View>
+
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Text style={{ color: '#ddd', fontSize: 16, fontWeight: '600' }}>- 30</Text>
+                        <Image
+                          source={require('../../assets/avatars/raffle_ticket.png')}
+                          style={{ width: 18, height: 18 }}
+                          resizeMode="contain"
+                        />
+                      </View>
+                    </View>
+                  </View>
+                ) : (
+                  <View>
+                    <Text style={{ color: '#ddd', fontSize: 15, textAlign: 'center', lineHeight: 22 }}>
+                      Your monthly Conqueror subscription is active!
+                    </Text>
+                  </View>
+                ),
+              buttons: [{ text: 'Awesome!', style: 'cta', onPress: () => navigation?.goBack?.() }],
+            });
           } catch (err: any) {
-            Alert.alert('Error', err.message ?? 'Failed to activate Conqueror status');
+            showAlert({ title: 'Error', message: err.message ?? 'Failed to activate Conqueror status' });
           } finally {
             setPurchasing(false);
           }
@@ -223,7 +273,7 @@ export default function PremiumScreen({ navigation }: { navigation?: any }) {
 
         purchaseErrorListener = IAP.purchaseErrorListener((err: any) => {
           if (err?.code !== 'E_USER_CANCELLED') {
-            Alert.alert('Purchase Failed', err?.message ?? 'Please try again.');
+            showAlert({ title: 'Purchase Failed', message: err?.message ?? 'Please try again.' });
           }
           setPurchasing(false);
         });
@@ -237,7 +287,7 @@ export default function PremiumScreen({ navigation }: { navigation?: any }) {
         IAP.endConnection?.();
       }
     };
-  }, [purchaseConqueror, navigation]);
+  }, [purchaseConqueror, navigation, showAlert]);
 
   const countriesOwned = ownedCountries.length;
   const hookStat =
@@ -254,16 +304,18 @@ export default function PremiumScreen({ navigation }: { navigation?: any }) {
     try {
       if (!iapReady) {
         // IAP not available — show development message
-        Alert.alert(
-          'In-App Purchases',
-          'In-app subscriptions are only available in production builds.\n\n' +
-          'To test:\n' +
-          '1. Build with EAS: npx eas build\n' +
-          '2. Configure subscriptions in App Store Connect / Google Play Console\n\n' +
-          `Plan: ${plan === 'unlimited' ? 'Lifetime' : 'Monthly'}\n` +
-          `Price: ${plan === 'unlimited' ? '$39.99 once' : '$2.49 first month, then $4.99/mo'}`,
-          [{ text: 'OK', onPress: () => setPurchasing(false) }]
-        );
+        showAlert({
+          title: 'In-App Purchases',
+          message:
+            'In-app subscriptions are only available in production builds.\n\n' +
+            'To test:\n' +
+            '1. Build with EAS: npx eas build\n' +
+            '2. Configure subscriptions in App Store Connect / Google Play Console\n\n' +
+            `Plan: ${plan === 'unlimited' ? 'Lifetime' : 'Monthly'}\n` +
+            `Price: ${plan === 'unlimited' ? '$39.99 once' : '$2.49 first month, then $4.99/mo'}`,
+          messageAlign: 'left',
+          buttons: [{ text: 'OK', onPress: () => setPurchasing(false) }],
+        });
         return;
       }
 
@@ -275,28 +327,37 @@ export default function PremiumScreen({ navigation }: { navigation?: any }) {
         ? 'Lifetime ($39.99 once) + 100K Gold + 30 Tickets'
         : 'Monthly ($2.49 first month, then $4.99/mo)';
 
-      Alert.alert(
-        'Become a Conqueror',
-        `${planDetails}\n\nReady to claim your premium status?`,
-        [
+      showAlert({
+        variant: 'premium',
+        icon: (
+          <Image
+            source={require('../../assets/avatars/conqueror.png')}
+            style={{ width: 120, height: 120 }}
+            resizeMode="contain"
+          />
+        ),
+        title: 'Become a Conqueror',
+        message: `${planDetails}\n\nReady to claim your premium status?`,
+        buttons: [
           { text: 'Cancel', style: 'cancel', onPress: () => setPurchasing(false) },
           {
-            text: 'Purchase',
+            text: 'Buy',
+            style: 'cta',
             onPress: async () => {
               try {
                 const started = await requestSubscription(productId);
                 if (!started) setPurchasing(false);
                 // Purchase listener will handle activation
               } catch (err: any) {
-                Alert.alert('Purchase Failed', err.message ?? 'Please try again.');
+                showAlert({ title: 'Purchase Failed', message: err.message ?? 'Please try again.' });
                 setPurchasing(false);
               }
             },
           },
-        ]
-      );
+        ],
+      });
     } catch (err: any) {
-      Alert.alert('Error', err.message ?? 'Something went wrong.');
+      showAlert({ title: 'Error', message: err.message ?? 'Something went wrong.' });
       setPurchasing(false);
     }
   }

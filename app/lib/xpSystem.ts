@@ -1,12 +1,11 @@
 import { QuizType } from '../types';
 
 // ─── Level Curve ──────────────────────────────────────────────────────────────
-// xpToNextLevel(n) = round(100 * 1.06^(n-1))  — +6% per level
-// Level 1→2: 100 XP, Level 49→50: ~1,639 XP, Level 99→100: ~30,200 XP
-// Total XP to reach level 100: ~532k XP
+// xpToNextLevel(n) = round((100 * 1.06^(n-1)) * 1.25)  — +25% tougher level-up curve
+// Level 1→2: 125 XP, Level 49→50: ~2,049 XP, Level 99→100: ~37,750 XP
 
 export function xpToNextLevel(n: number): number {
-  return Math.round(100 * Math.pow(1.06, n - 1));
+  return Math.round(100 * Math.pow(1.06, n - 1) * 1.25);
 }
 
 /** Given accumulated total XP, return current level, XP into that level, and XP needed for next. */
@@ -35,8 +34,9 @@ export function getLevelInfo(totalXP: number): {
 const XP_PER_CORRECT: Partial<Record<QuizType, number>> = {
   flag: 5,
   shape: 7,
-  capitals: 8,
-  borders: 10,
+  capitals: 12,
+  borders: 15,
+  trail: 16,
 };
 
 /**
@@ -45,7 +45,7 @@ const XP_PER_CORRECT: Partial<Record<QuizType, number>> = {
  * Standard quizzes: score * xpPerCorrect, then apply accuracy multiplier.
  *   >85% accuracy → ×1.5 | 100% accuracy → ×2.0
  *
- * Millionaire: 1000 XP base if 15/15, ×2.0 for perfect = 2000 XP, else 0.
+ * Millionaire: 1000 XP on 15/15, else 0.
  *
  * Nightmare: 20000 XP if first-ever win (one-time), else 0.
  */
@@ -61,8 +61,7 @@ export function calcQuizXP(
 
   if (quizType === 'millionaire') {
     if (score < total) return 0;
-    // 15/15 is always 100% → ×2.0 multiplier applied
-    return 2000;
+    return 1000;
   }
 
   const xpPerCorrect = XP_PER_CORRECT[quizType] ?? 5;

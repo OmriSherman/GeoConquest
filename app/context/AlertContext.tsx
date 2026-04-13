@@ -18,7 +18,9 @@ export interface AlertButton {
 
 export interface AlertConfig {
   title: string;
+  titleNode?: React.ReactNode;
   message?: string;
+  contentNode?: React.ReactNode;
   buttons?: AlertButton[];
   icon?: React.ReactNode;
   messageAlign?: 'left' | 'center';
@@ -208,17 +210,24 @@ export function AlertProvider({ children }: { children: React.ReactNode }) {
             {config?.icon && (
               <View style={styles.iconRow}>{config.icon}</View>
             )}
-            <Text
-              style={[
-                styles.title,
-                isPremium && styles.titlePremium,
-                isLeveled && styles.titleLeveled,
-                isUnique && styles.titleUnique,
-                isTicket && styles.titleTicket,
-              ]}
-            >
-              {config?.title ?? ''}
-            </Text>
+            {config?.titleNode ? (
+              <View style={styles.titleNodeWrap}>{config.titleNode}</View>
+            ) : (
+              <Text
+                style={[
+                  styles.title,
+                  isPremium && styles.titlePremium,
+                  isLeveled && styles.titleLeveled,
+                  isUnique && styles.titleUnique,
+                  isTicket && styles.titleTicket,
+                ]}
+              >
+                {config?.title ?? ''}
+              </Text>
+            )}
+            {!!config?.contentNode && (
+              <View style={styles.contentNodeWrap}>{config.contentNode}</View>
+            )}
             {!!config?.message && (
               <Text
                 style={[
@@ -386,6 +395,10 @@ const styles = StyleSheet.create({
   titleTicket: {
     color: '#e05353',
   },
+  titleNodeWrap: {
+    alignSelf: 'stretch',
+    marginBottom: 8,
+  },
   message: {
     color: '#ccc',
     fontSize: 14,
@@ -396,6 +409,10 @@ const styles = StyleSheet.create({
   messageLeft: {
     textAlign: 'left',
     alignSelf: 'stretch',
+  },
+  contentNodeWrap: {
+    alignSelf: 'stretch',
+    marginBottom: 20,
   },
   buttonRow: {
     flexDirection: 'row',

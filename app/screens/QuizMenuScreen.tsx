@@ -12,6 +12,7 @@ import { useToast } from '../context/ToastContext';
 import { playPurchasedItem } from '../lib/audio';
 import * as Haptics from 'expo-haptics';
 import { showRewardedAd } from '../lib/rewardedAds';
+import { getLevelInfo } from '../lib/xpSystem';
 
 type Props = {
   navigation: StackNavigationProp<QuizStackParamList, 'QuizMenu'>;
@@ -22,6 +23,7 @@ const QUIZ_ICON_IMAGES: Record<string, any> = {
   '🗺️': require('../../assets/avatars/shape.png'),
   '🏛️': require('../../assets/avatars/building.png'),
   '🧩': require('../../assets/avatars/border.png'),
+  '🧭': require('../../assets/avatars/compass.png'),
   '💰': require('../../assets/avatars/gold_bag.png'),
 };
 
@@ -55,23 +57,31 @@ const QUIZZES = [
     title: 'Capitals Quiz',
     description: 'Match the capital city to its country',
     goldAmount: '18',
-    goldSuffix: '/ 8 XP per correct',
+    goldSuffix: '/ 12 XP per correct',
     emoji: '🏛️',
   },
   {
     screen: 'BordersQuiz' as const,
     title: 'Borders Quiz',
     description: 'Find the country that does NOT share a border',
-    goldAmount: '18',
-    goldSuffix: '/ 10 XP per correct',
+    goldAmount: '20',
+    goldSuffix: '/ 15 XP per correct',
     emoji: '🧩',
+  },
+  {
+    screen: 'TrailQuiz' as const,
+    title: 'Trail Quiz',
+    description: 'Hop across neighboring countries by name/capital',
+    goldAmount: '22',
+    goldSuffix: '/ 16 XP per correct',
+    emoji: '🧭',
   },
   {
     screen: 'MillionaireQuiz' as const,
     title: 'Millionaire Quiz',
     description: 'Answer 15 questions for the grand prize!',
     goldAmount: '10,000',
-    goldSuffix: '/ 2,000 XP max prize',
+    goldSuffix: '/ 1,000 XP max prize',
     emoji: '💰',
   },
 ];
@@ -86,6 +96,7 @@ export default function QuizMenuScreen({ navigation }: Props) {
   const [actionLoading, setActionLoading] = useState(false);
   const tickets = profile?.tickets ?? 0;
   const gold = profile?.gold_balance ?? 0;
+  const playerLevel = getLevelInfo(profile?.xp ?? 0).level;
 
   const TICKET_COST = 2000;
   const PACK_COST = 8500;
@@ -155,9 +166,14 @@ export default function QuizMenuScreen({ navigation }: Props) {
 
   function showRewardsInfo() {
     showAlert({
-      title: 'XP Multipliers',
+      title: 'Multipliers',
       messageAlign: 'left',
       message:
+        'Gold scales by combo streak:\n\n' +
+        '×1.0 — combo 1\n' +
+        '×1.1 — combo 2\n' +
+        '×1.2 — combo 3\n' +
+        '... (+10% per extra streak)\n\n' +
         'XP scales by accuracy:\n\n' +
         '×1.0 — any score\n' +
         '×1.5 — above 85% accuracy\n' +
@@ -199,11 +215,17 @@ export default function QuizMenuScreen({ navigation }: Props) {
       <ScrollView contentContainerStyle={styles.container}>
         {QUIZZES.map((quiz) => {
           let isLocked = false;
+          let lockReason: 'upgrade_capitals' | 'upgrade_borders' | 'trail_level' | null = null;
 
           if (quiz.screen === 'CapitalsQuiz') {
             isLocked = !unlockedItems.has('upgrade_capitals');
+            if (isLocked) lockReason = 'upgrade_capitals';
           } else if (quiz.screen === 'BordersQuiz') {
             isLocked = !unlockedItems.has('upgrade_borders');
+            if (isLocked) lockReason = 'upgrade_borders';
+          } else if (quiz.screen === 'TrailQuiz') {
+            isLocked = playerLevel < 50;
+            if (isLocked) lockReason = 'trail_level';
           }
 
           const isMillionaire = quiz.screen === 'MillionaireQuiz';
@@ -225,28 +247,38 @@ export default function QuizMenuScreen({ navigation }: Props) {
               iconNode={QUIZ_ICON_IMAGES[quiz.emoji] ? <Image source={QUIZ_ICON_IMAGES[quiz.emoji]} style={{ width: 32, height: 32 }} resizeMode="contain" /> : undefined}
               emoji={QUIZ_ICON_IMAGES[quiz.emoji] ? undefined : quiz.emoji}
               isLocked={isLocked}
-              cardState={isLocked ? 'unique' : undefined}
+              cardState={lockReason === 'trail_level' ? 'leveled' : (isLocked ? 'unique' : undefined)}
               costBadge={isMillionaire ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                   <Image source={require('../../assets/avatars/raffle_ticket.png')} style={{ width: 13, height: 13 }} resizeMode="contain" />
                   <Text style={{ color: '#aaa', fontSize: 12 }}>1 ticket</Text>
                 </View>
+              ) : lockReason === 'trail_level' ? (
+                <Text style={{ color: '#8ab4ff', fontSize: 12, fontWeight: '700' }}>🔒 Lvl 50</Text>
               ) : undefined}
               shouldBlink={shouldBlink}
               onPress={() => {
                 if (isLocked) {
-                  const isCapitals = quiz.screen === 'CapitalsQuiz';
-                  showAlert({
-                    variant: 'unique',
-                    title: 'Quiz Locked',
-                    message: isCapitals
-                      ? 'Unlock the Capitals Quiz in the Shop.'
-                      : 'Unlock the Borders Quiz in the Shop.',
-                    buttons: [
-                      { text: 'Display in Shop', style: 'cta', onPress: () => navigation.getParent()?.navigate('Shop', { initialTab: 'upgrades' }) },
-                      { text: 'Got it', style: 'cancel' },
-                    ],
-                  });
+                  if (lockReason === 'trail_level') {
+                    showAlert({
+                      variant: 'leveled',
+                      title: 'Trail Quiz Locked',
+                      message: `Reach Level 50 to unlock Trail Quiz.\n\nCurrent level: ${playerLevel}`,
+                    });
+                  } else {
+                    const isCapitals = quiz.screen === 'CapitalsQuiz';
+                    showAlert({
+                      variant: 'unique',
+                      title: 'Quiz Locked',
+                      message: isCapitals
+                        ? 'Unlock the Capitals Quiz in the Shop.'
+                        : 'Unlock the Borders Quiz in the Shop.',
+                      buttons: [
+                        { text: 'Display in Shop', style: 'cta', onPress: () => navigation.getParent()?.navigate('Shop', { initialTab: 'upgrades' }) },
+                        { text: 'Got it', style: 'cancel' },
+                      ],
+                    });
+                  }
                 } else if (isMillionaire && tickets < 1) {
                   showAlert({
                     variant: 'ticket',

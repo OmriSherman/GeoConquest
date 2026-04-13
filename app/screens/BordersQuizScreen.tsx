@@ -21,7 +21,7 @@ import { playDingStreak, playWrong } from '../lib/audio';
 import HeatStreakBadge from '../components/HeatStreakBadge';
 import ConfettiCannon from 'react-native-confetti-cannon';
 
-const GOLD_PER_CORRECT = 18;
+const GOLD_PER_CORRECT = 20;
 const AUTO_ADVANCE_DELAY_MS = 2500;
 
 type Props = {

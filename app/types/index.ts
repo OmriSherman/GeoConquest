@@ -62,7 +62,7 @@ export interface OwnedCountry {
 
 // ─── Quiz ─────────────────────────────────────────────────────────────────────
 
-export type QuizType = 'flag' | 'shape' | 'borders' | 'millionaire' | 'capitals' | 'nightmare';
+export type QuizType = 'flag' | 'shape' | 'borders' | 'millionaire' | 'capitals' | 'nightmare' | 'trail';
 
 export interface QuizResult {
   id: string;
@@ -129,6 +129,7 @@ export type QuizStackParamList = {
   ShapeQuiz: undefined;
   BordersQuiz: undefined;
   CapitalsQuiz: undefined;
+  TrailQuiz: undefined;
   MillionaireQuiz: undefined;
   NightmareQuiz: undefined;
   QuizResults: {
@@ -169,8 +170,9 @@ export const MILLIONAIRE_SAFE_ZONES: number[] = [4, 9];
 export const GOLD_REWARDS: Record<QuizType, number> = {
   flag: 10,
   shape: 15,
-  borders: 18,
+  borders: 20,
   capitals: 18,
+  trail: 22,
   millionaire: 25, // base; scales per level
   nightmare: 50000,
 };

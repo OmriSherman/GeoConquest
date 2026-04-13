@@ -35,6 +35,16 @@ const RESULT_ICON_IMAGES: Record<string, any> = {
   png_evil_vanquished: require('../../assets/avatars/evil_vanquished.png'),
   png_crossed_swords: require('../../assets/avatars/crossed_swords.png'),
 };
+const SHARE_QUIZ_ICON_IMAGES: Record<string, any> = {
+  flag: require('../../assets/avatars/flags.png'),
+  shape: require('../../assets/avatars/shape.png'),
+  capitals: require('../../assets/avatars/building.png'),
+  borders: require('../../assets/avatars/border.png'),
+  trail: require('../../assets/avatars/compass.png'),
+  millionaire: require('../../assets/avatars/gold_bag.png'),
+  nightmare: require('../../assets/avatars/skull.png'),
+};
+const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.geoconquest.app';
 
 let ViewShot: any = FallbackView;
 let captureRef: ((ref: any, opts?: any) => Promise<string>) | null = null;
@@ -85,6 +95,7 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
   const [displayXpTotal, setDisplayXpTotal] = useState(initialXpTotal);
 
   const cardCaptureRef = useRef<any>(null);
+  const shareCaptureRef = useRef<any>(null);
   const animationFrameRef = useRef<number | null>(null);
   const isUnmountedRef = useRef(false);
   const animatedLevelRef = useRef(getLevelInfo(initialXpTotal).level);
@@ -102,30 +113,37 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
     shape: 'Shape Quiz',
     capitals: 'Capitals Quiz',
     borders: 'Borders Quiz',
+    trail: 'Trail Quiz',
     millionaire: 'Millionaire Quiz',
     nightmare: 'Nightmare Mode',
   };
 
+  function buildShareMessage() {
+    return `This is how much I scored in the quiz, think you can do better?\nGeoConquest - find us on Google Play\n${PLAY_STORE_URL}`;
+  }
+
   async function handleShare() {
-    if (!captureRef || !cardCaptureRef.current) {
-      await Share.share({
-        message: `I scored ${score}/${total} on ${QUIZ_LABELS[quizType] ?? quizType} in GeoConquest!\n\nCan you beat me? Download GeoConquest and prove your geography knowledge!`,
-      });
+    const shareMessage = buildShareMessage();
+    if (!captureRef || !shareCaptureRef.current) {
+      await Share.share({ message: shareMessage });
       return;
     }
 
     try {
-      const uri = await captureRef(cardCaptureRef, { format: 'png', quality: 0.95 });
+      const uri = await captureRef(shareCaptureRef, { format: 'png', quality: 0.95 });
       const isAvailable = Sharing ? await Sharing.isAvailableAsync() : false;
-      if (!isAvailable) {
-        await Share.share({
-          message: `I scored ${score}/${total} on ${QUIZ_LABELS[quizType] ?? quizType} in GeoConquest!\n\nCan you beat me? Download GeoConquest and prove your geography knowledge!`,
-        });
+      if (isAvailable) {
+        await Sharing?.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share Your Result' });
         return;
       }
-      await Sharing?.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share Your Result' });
+      await Share.share({ message: `${shareMessage}\n${uri}` });
     } catch (e) {
       console.warn('Share failed:', e);
+      try {
+        await Share.share({ message: shareMessage });
+      } catch (fallbackErr) {
+        console.warn('Share fallback failed:', fallbackErr);
+      }
     }
   }
 
@@ -261,10 +279,13 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
     await xpTickSound;
   }
 
-  async function playResultSound() {
+  async function playResultSound(skipPerfectMillionaire: boolean = false) {
     if (quizType === 'millionaire') {
-      if (score === total) await playMillionairePrize();
-      else if (score >= 5) await playFail();
+      if (score === total) {
+        if (!skipPerfectMillionaire) await playMillionairePrize();
+        return;
+      }
+      if (score >= 5) await playFail();
       else await playBoo();
       return;
     }
@@ -282,20 +303,23 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
 
   useEffect(() => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    const millionairePerfectWin = quizType === 'millionaire' && score === total;
+    if (millionairePerfectWin) {
+      void playMillionairePrize();
+    }
 
     if (percentage === 100) {
       setTimeout(() => setShowConfetti(true), 350);
     }
 
-    incrementQuizCount().then((bonusClaimed) => {
-      if (bonusClaimed) {
-        showToast({
-          title: 'Referral Bonus!',
-          message: 'You and your friend both received 1,500 gold!',
-          icon: <Text style={{ fontSize: 20 }}>💰</Text>,
-          duration: 4000,
-        });
-      }
+    incrementQuizCount().then(({ claimed, goldAwarded }) => {
+      if (!claimed) return;
+      showAlert({
+        variant: 'unique',
+        title: 'Referral Reward!',
+        message: `You and your friend both received ${goldAwarded.toLocaleString()} gold.`,
+        icon: <Text style={{ fontSize: 54 }}>💰</Text>,
+      });
     });
 
     recordQuizCompletion({
@@ -341,7 +365,7 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
       }
 
       const xp = calcQuizXP(quizType, score, total, newlyCompletedNightmare);
-      const isBoostEligibleQuiz = ['flag', 'shape', 'capitals', 'borders'].includes(quizType);
+      const isBoostEligibleQuiz = ['flag', 'shape', 'capitals', 'borders', 'trail'].includes(quizType);
       const shouldApplyBoost = isBoostEligibleQuiz && nextQuizBoostActive;
       const effectiveXp = shouldApplyBoost ? xp * 2 : xp;
 
@@ -410,7 +434,7 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
 
       setDisplayGoldGain(quizGoldDelta);
 
-      await playResultSound();
+      await playResultSound(millionairePerfectWin);
       await animateXpDelta(effectiveXp, levelUpGoldBonus, () => {
         setDisplayGoldGain((prev) => prev + levelUpGoldBonus);
       });
@@ -426,7 +450,7 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
       }
     });
 
-    const isBoostOfferQuiz = ['flag', 'shape', 'capitals', 'borders'].includes(quizType);
+    const isBoostOfferQuiz = ['flag', 'shape', 'capitals', 'borders', 'trail'].includes(quizType);
     if (isBoostOfferQuiz && !nextQuizBoostActive && Math.random() < 0.07) {
       showAlert({
         title: 'Double Rewards Next Quiz?',
@@ -480,12 +504,15 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
   }
 
   const rating = getRating();
+  const shareBadgeSource = rating.imageSource;
+  const shareQuizIcon = SHARE_QUIZ_ICON_IMAGES[quizType] ?? require('../../assets/icon.png');
   const isNightmare = quizType === 'nightmare';
   const animatedLevelInfo = getLevelInfo(displayXpTotal);
   const xpProgressPct =
     animatedLevelInfo.xpForNextLevel > 0
       ? Math.min((animatedLevelInfo.xpIntoLevel / animatedLevelInfo.xpForNextLevel) * 100, 100)
       : 100;
+  const xpProgressFillColor = profile?.is_conquerer ? '#a78bfa' : '#FFD700';
 
   const showGoldTransfer = displayGoldGain !== 0;
 
@@ -516,7 +543,7 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
           </View>
 
           <View style={styles.xpProgressTrack}>
-            <View style={[styles.xpProgressFill, { width: `${xpProgressPct}%` as any }]} />
+            <View style={[styles.xpProgressFill, { width: `${xpProgressPct}%` as any, backgroundColor: xpProgressFillColor }]} />
           </View>
 
           <Animated.View style={[styles.levelBonusChip, { opacity: levelBonusOpacity, transform: [{ scale: levelBonusScale }] }]}>
@@ -545,6 +572,28 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
           }
         />
       </ViewShot>
+
+      {/* Hidden capture card for sharing only (not shown in summary UI) */}
+      <View style={styles.shareCaptureContainer} pointerEvents="none">
+        <ViewShot ref={shareCaptureRef} style={styles.shareCaptureCard}>
+          <View style={styles.shareCaptureBrandRow}>
+            <Image source={require('../../assets/icon.png')} style={styles.shareCaptureBrandLogo} resizeMode="contain" />
+          </View>
+          <View style={styles.shareCaptureHeader}>
+            <Image source={shareQuizIcon} style={styles.shareCaptureIcon} resizeMode="contain" />
+            <Text style={styles.shareCaptureHeadline}>
+              This is how much I scored in the quiz,{'\n'}think you can do better?
+            </Text>
+          </View>
+          <View style={styles.shareCaptureStoreRow}>
+            <Image source={require('../../assets/icon.png')} style={styles.shareCaptureStoreIcon} resizeMode="contain" />
+            <Text style={styles.shareCaptureStoreText}>Live on Google Play</Text>
+          </View>
+          <Image source={shareBadgeSource} style={styles.shareCaptureHero} resizeMode="contain" />
+          <Text style={styles.shareCaptureQuiz}>{QUIZ_LABELS[quizType] ?? quizType}</Text>
+          <Text style={styles.shareCaptureScore}>{score}/{total} ({percentage}%)</Text>
+        </ViewShot>
+      </View>
 
       <TouchableOpacity
         style={styles.playAgainButton}
@@ -575,6 +624,7 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
           else if (quizType === 'shape') navigation.replace('ShapeQuiz');
           else if (quizType === 'borders') navigation.replace('BordersQuiz');
           else if (quizType === 'capitals') navigation.replace('CapitalsQuiz');
+          else if (quizType === 'trail') navigation.replace('TrailQuiz' as any);
           else if (quizType === 'nightmare') navigation.replace('NightmareQuiz' as any);
         }}
       >
@@ -712,6 +762,76 @@ const styles = StyleSheet.create({
   cardNightmare: {
     backgroundColor: '#1a0000',
     borderColor: '#ff4444',
+  },
+  shareCaptureContainer: {
+    position: 'absolute',
+    left: -1200,
+    top: -1200,
+    width: 360,
+  },
+  shareCaptureCard: {
+    width: 340,
+    backgroundColor: '#10162b',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#3a4f7a',
+    padding: 16,
+    alignItems: 'center',
+    gap: 8,
+  },
+  shareCaptureBrandRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  shareCaptureBrandLogo: {
+    width: 30,
+    height: 30,
+  },
+  shareCaptureHeader: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  shareCaptureIcon: { width: 22, height: 22 },
+  shareCaptureHeadline: {
+    flex: 1,
+    color: '#e2e8f0',
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 18,
+  },
+  shareCaptureStoreRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 2,
+  },
+  shareCaptureStoreIcon: {
+    width: 18,
+    height: 18,
+  },
+  shareCaptureStoreText: {
+    color: '#b7d4ff',
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  shareCaptureHero: { width: 86, height: 86, marginTop: 2 },
+  shareCaptureQuiz: {
+    color: '#bcd2ff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  shareCaptureScore: {
+    color: '#FFD700',
+    fontSize: 28,
+    fontWeight: '800',
   },
   row: {
     flexDirection: 'row',

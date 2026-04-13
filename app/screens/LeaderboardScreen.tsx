@@ -78,6 +78,7 @@ interface UserProfile {
   avatar_flag: string;
   gold_balance: number;
   xp: number;
+  quiz_count?: number;
   login_streak: number;
   created_at: string;
   is_conquerer?: boolean;
@@ -111,7 +112,7 @@ interface DailyXpRow {
 }
 
 export default function LeaderboardScreen() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [leaderboardType, setLeaderboardType] = useState<'alltime' | 'daily'>('daily');
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [dailyXpEntries, setDailyXpEntries] = useState<(LeaderboardEntry & { daily_xp: number })[]>([]);
@@ -326,8 +327,8 @@ export default function LeaderboardScreen() {
           if (typeof result.xp_earned === 'number') {
             xp = result.xp_earned;
           } else if (result.quiz_type === 'millionaire') {
-            xp = result.score >= 15 ? 2000 : 0;
-          } else if (['flag', 'shape', 'capitals', 'borders'].includes(result.quiz_type)) {
+            xp = result.score >= 15 ? 1000 : 0;
+          } else if (['flag', 'shape', 'capitals', 'borders', 'trail'].includes(result.quiz_type)) {
             const totalQuestions = Math.max(1, Number(result.total_questions) || 10);
             xp = calcQuizXP(result.quiz_type, Number(result.score) || 0, totalQuestions, false);
           } else if (result.quiz_type === 'nightmare') {
@@ -380,7 +381,7 @@ export default function LeaderboardScreen() {
 
     try {
       const [profileRes, ownedRes, itemsRes, achievementsRes] = await Promise.all([
-        supabase.from('profiles').select('id, username, avatar_emoji, avatar_flag, gold_balance, xp, login_streak, created_at, is_conquerer').eq('id', entry.id).single(),
+        supabase.from('profiles').select('id, username, avatar_emoji, avatar_flag, gold_balance, xp, quiz_count, login_streak, created_at, is_conquerer').eq('id', entry.id).single(),
         supabase.from('owned_countries').select('country_code').eq('user_id', entry.id),
         supabase.from('user_unlocked_items').select('item_id').eq('user_id', entry.id),
         supabase.from('user_achievements').select('achievement_id').eq('user_id', entry.id),
@@ -491,6 +492,13 @@ export default function LeaderboardScreen() {
   const activeEntries = leaderboardType === 'alltime' ? entries : dailyXpEntries;
   const displayEntries = getDisplayEntries(activeEntries);
 
+  function isConquerorEntry(item: any): boolean {
+    if (typeof item?.is_conquerer === 'boolean') return item.is_conquerer;
+    if (typeof item?.is_conqueror === 'boolean') return item.is_conqueror;
+    if (item?.id && item.id === user?.id) return !!profile?.is_conquerer;
+    return false;
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -596,7 +604,12 @@ export default function LeaderboardScreen() {
                 )}
               </View>
 
-              <AvatarDisplay avatarId={item.avatar_emoji} avatarFlag={item.avatar_flag} size={36} isConqueror={item.is_conquerer} />
+              <AvatarDisplay
+                avatarId={item.avatar_emoji}
+                avatarFlag={item.avatar_flag}
+                size={36}
+                isConqueror={isConquerorEntry(item)}
+              />
 
               <View style={styles.userInfo}>
                 <Text style={[styles.username, isCurrentUser && styles.usernameHighlight]} numberOfLines={1}>
@@ -720,7 +733,7 @@ function ProfileModalContent({
           <View style={modal.section}>
             <Text style={modal.sectionTitle}>World Domination</Text>
             <View style={modal.conquestBar}>
-              <View style={[modal.conquestFill, { width: `${Math.min(conquestPct * 5, 100)}%` as any }]} />
+              <View style={[modal.conquestFill, { width: `${Math.max(0, Math.min(conquestPct, 100))}%` as any }]} />
             </View>
             <Text style={modal.conquestLabel}>
               {conquestPct}% of Earth's land · {(ownedArea / 1_000_000).toFixed(1)}M km²
@@ -742,9 +755,9 @@ function ProfileModalContent({
           <View style={modal.statsRow}>
             <View style={modal.statBox}>
               <Text style={modal.statValue}>
-                {formatNumberShort(profile?.gold_balance)}
+                {formatNumberShort(profile?.quiz_count ?? 0)}
               </Text>
-              <Text style={modal.statLabel}>Gold</Text>
+              <Text style={modal.statLabel}>Quizzes</Text>
             </View>
             <View style={modal.statBox}>
               <Text style={modal.statValue}>{formatNumberShort(profile?.xp)}</Text>

@@ -15,7 +15,7 @@ import { QuizStackParamList, QuizQuestion, Country } from '../types';
 import { buildQuizQuestions, fetchCountries, getOfflineFullCountries } from '../lib/countryData';
 import { useGame } from '../context/GameContext';
 import AnswerButton from '../components/AnswerButton';
-import CountryShapeView from '../components/CountryShapeView';
+import CountryShapeView, { hasCountryShape } from '../components/CountryShapeView';
 import { playDingStreak, playWrong } from '../lib/audio';
 import HeatStreakBadge from '../components/HeatStreakBadge';
 import { useAuth } from '../context/AuthContext';
@@ -71,10 +71,11 @@ export default function ShapeQuizScreen({ navigation }: Props) {
             throw new Error('OFFLINE_NO_PREMIUM');
           }
         }
-        // Territories missing from world-atlas TopoJSON (no shape data available)
-        const NO_SHAPE = new Set(['GP', 'MQ', 'YT', 'RE', 'PM', 'BL', 'MF', 'CX', 'CC', 'HM', 'NF', 'CK', 'NU', 'TK', 'WF', 'AX', 'SJ', 'BV', 'TF', 'UM', 'GG', 'JE', 'IM', 'GI', 'FK', 'AQ', 'RU']);
-        // Filter to countries that have area > 1000 km² and have a shape available
-        const bigCountries = countries.filter(c => c.area > 1000 && !NO_SHAPE.has(c.cca2));
+        // Filter to countries that are large enough and have confirmed silhouette geometry.
+        const bigCountries = countries.filter((c) => c.area > 1000 && hasCountryShape(c.cca2));
+        if (bigCountries.length < 4) {
+          throw new Error('Not enough silhouette-ready countries available.');
+        }
         const q = buildQuizQuestions(bigCountries, TOTAL_QUESTIONS);
         setQuestions(q);
         questionsRef.current = q;
