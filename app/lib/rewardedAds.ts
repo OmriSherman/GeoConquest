@@ -1,6 +1,8 @@
 import { Platform } from 'react-native';
 
 let Ads: any = null;
+let sdkInitialized = false;
+let sdkInitializationPromise: Promise<boolean> | null = null;
 
 function getAdsModule(): any | null {
   if (Ads) return Ads;
@@ -13,10 +15,42 @@ function getAdsModule(): any | null {
   }
 }
 
+async function ensureInitialized(): Promise<boolean> {
+  if (sdkInitialized) return true;
+  if (sdkInitializationPromise) return sdkInitializationPromise;
+
+  sdkInitializationPromise = (async () => {
+    try {
+      const mod = getAdsModule();
+      if (!mod) return false;
+      const mobileAds = mod.default ?? mod.mobileAds ?? mod.MobileAds;
+      if (!mobileAds) return false;
+      await mobileAds().initialize();
+      sdkInitialized = true;
+      return true;
+    } catch {
+      return false;
+    }
+  })();
+
+  try {
+    const ok = await sdkInitializationPromise;
+    if (!ok) {
+      sdkInitializationPromise = null;
+    }
+    return ok;
+  } catch {
+    sdkInitializationPromise = null;
+    return false;
+  }
+}
+
 export async function showRewardedAd(opts?: { adUnitId?: string }): Promise<{ rewarded: boolean }> {
   try {
-    const mod = getAdsModule();
-    if (!mod) return { rewarded: false };
+    const initialized = await ensureInitialized();
+    if (!initialized) return { rewarded: false };
+
+    const mod = getAdsModule()!;
 
     const AdEventType = mod.AdEventType;
     const RewardedAdEventType = mod.RewardedAdEventType;
@@ -78,3 +112,6 @@ export async function showRewardedAd(opts?: { adUnitId?: string }): Promise<{ re
     return { rewarded: false };
   }
 }
+
+// Warm up Mobile Ads SDK eagerly so first ad request doesn't race initialization.
+void ensureInitialized();

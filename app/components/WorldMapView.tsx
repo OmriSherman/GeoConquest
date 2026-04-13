@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { StyleSheet, View, Text as RNText, ActivityIndicator, Dimensions } from 'react-native';
-import Svg, { Path, G, Text as SvgText } from 'react-native-svg';
+import Svg, { Path, G, Text as SvgText, Line, Circle } from 'react-native-svg';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
@@ -12,6 +12,7 @@ import { getMapFeatures } from '../lib/mapData';
 import { fetchCountries, getCcn3ToCca2Map, getCca3ToCca2Map } from '../lib/countryData';
 
 const AnimatedG = Animated.createAnimatedComponent(G) as any;
+const AnimatedLine = Animated.createAnimatedComponent(Line) as any;
 
 interface WorldMapViewProps {
   ownedCountries: string[];
@@ -20,6 +21,10 @@ interface WorldMapViewProps {
   interactive?: boolean;
   showNames?: boolean;
   resetKey?: number;
+  zoomToFocusCountry?: boolean;
+  focusScaleOverride?: number;
+  trailPath?: string[]; // ordered cca2 list for drawing a visible route
+  trailColor?: string;
 }
 
 const OWNED_COLORS = [
@@ -42,6 +47,7 @@ const VIEWBOX_W = 800;
 const VIEWBOX_H = 600;
 const screenW = Dimensions.get('window').width;
 const RATIO = VIEWBOX_W / screenW;
+const FOCUS_ANIMATION_MS = 520;
 
 const CountryLabel = React.memo(({ f, showNames }: { f: any, showNames: boolean }) => {
   const [cx, cy] = f.centroid || [0, 0];
@@ -78,6 +84,44 @@ const CountryLabel = React.memo(({ f, showNames }: { f: any, showNames: boolean 
   );
 });
 
+function AnimatedTrailSegment({
+  from,
+  to,
+  index,
+  progress,
+  color,
+}: {
+  from: [number, number];
+  to: [number, number];
+  index: number;
+  progress: { value: number };
+  color: string;
+}) {
+  const length = Math.max(1, Math.hypot(to[0] - from[0], to[1] - from[1]));
+  const animatedProps = useAnimatedProps(() => {
+    const segmentProgress = Math.max(0, Math.min(1, progress.value - index));
+    const strokeDashoffset = length * (1 - segmentProgress);
+    return {
+      strokeDasharray: `${length} ${length}`,
+      strokeDashoffset,
+      opacity: segmentProgress > 0 ? 0.88 : 0,
+    };
+  });
+
+  return (
+    <AnimatedLine
+      x1={from[0]}
+      y1={from[1]}
+      x2={to[0]}
+      y2={to[1]}
+      stroke={color}
+      strokeWidth={2.4}
+      strokeLinecap="round"
+      animatedProps={animatedProps}
+    />
+  );
+}
+
 export default function WorldMapView({
   ownedCountries,
   focusCountry,
@@ -85,6 +129,10 @@ export default function WorldMapView({
   interactive = true,
   showNames = true,
   resetKey,
+  zoomToFocusCountry = true,
+  focusScaleOverride,
+  trailPath = [],
+  trailColor = '#6BCBFF',
 }: WorldMapViewProps) {
   const [loading, setLoading] = useState(true);
   const [nameToCca2Map, setNameToCca2Map] = useState<Record<string, string>>({});
@@ -95,6 +143,7 @@ export default function WorldMapView({
   const translateY = useSharedValue(0);
   const savedTranslateX = useSharedValue(0);
   const savedTranslateY = useSharedValue(0);
+  const trailDrawProgress = useSharedValue(0);
 
   // Load features safely
   const features = useMemo(() => {
@@ -108,6 +157,11 @@ export default function WorldMapView({
 
   // Memoize owned set — only rebuilt when ownedCountries changes
   const ownedSet = useMemo(() => new Set(ownedCountries), [ownedCountries]);
+  const trailPathSafe = useMemo(
+    () => (trailPath || []).filter((code) => !!code && typeof code === 'string'),
+    [trailPath],
+  );
+  const trailSet = useMemo(() => new Set(trailPathSafe), [trailPathSafe]);
 
   // Memoize CCA2 lookups for all features — recomputed only when features/nameToCca2Map changes
   const featureCca2List = useMemo(() => {
@@ -118,6 +172,46 @@ export default function WorldMapView({
       ccn3Map[f.rawFeature.id] || cca3Map[f.rawFeature.id] || nameToCca2Map[f.name] || ''
     );
   }, [features, nameToCca2Map]);
+
+  const centroidByCca2 = useMemo(() => {
+    const out: Record<string, [number, number]> = {};
+    (features as any[]).forEach((f: any, i: number) => {
+      const cca2 = featureCca2List[i];
+      const c = f?.centroid;
+      if (!cca2 || !c || Number.isNaN(c[0]) || Number.isNaN(c[1])) return;
+      out[cca2] = [c[0], c[1]];
+    });
+    return out;
+  }, [features, featureCca2List]);
+
+  const trailSegments = useMemo(() => {
+    const segments: { from: [number, number]; to: [number, number] }[] = [];
+    for (let i = 1; i < trailPathSafe.length; i++) {
+      const from = centroidByCca2[trailPathSafe[i - 1]];
+      const to = centroidByCca2[trailPathSafe[i]];
+      if (!from || !to) continue;
+      segments.push({ from, to });
+    }
+    return segments;
+  }, [trailPathSafe, centroidByCca2]);
+
+  useEffect(() => {
+    const target = trailSegments.length;
+    if (target <= 0) {
+      trailDrawProgress.value = 0;
+      return;
+    }
+
+    if (target > trailDrawProgress.value) {
+      trailDrawProgress.value = withTiming(target, {
+        duration: 360,
+        easing: Easing.out(Easing.cubic),
+      });
+      return;
+    }
+
+    trailDrawProgress.value = target;
+  }, [trailSegments.length, trailDrawProgress]);
 
   useEffect(() => {
     // We must ensure countries are fetched so maps are populated
@@ -134,7 +228,7 @@ export default function WorldMapView({
 
   useEffect(() => {
     if (!loading) {
-      if (focusCountry) {
+      if (focusCountry && zoomToFocusCountry) {
         const fIdx = featureCca2List.findIndex((cca2: string) => cca2 === focusCountry);
         const f = fIdx >= 0 ? (features || [])[fIdx] : undefined;
         if (f && f.bounds && f.centroid && !Number.isNaN(f.centroid[0])) {
@@ -145,7 +239,9 @@ export default function WorldMapView({
           // Scale so the country occupies the center 1/9 of a 3×3 grid (1/3 width, 1/3 height).
           // Antimeridian countries (e.g. Russia) have inflated bounding boxes — use a fixed zoom.
           let s: number;
-          if (dx > VIEWBOX_W * 0.7) {
+          if (typeof focusScaleOverride === 'number' && Number.isFinite(focusScaleOverride)) {
+            s = Math.min(Math.max(focusScaleOverride, 1), 12);
+          } else if (dx > VIEWBOX_W * 0.7) {
             s = 1.5;
           } else {
             s = (1 / 3) / Math.max(dx / VIEWBOX_W, dy / VIEWBOX_H);
@@ -163,9 +259,9 @@ export default function WorldMapView({
           tx = Math.min(Math.max(tx, -boundX), boundX);
           ty = Math.min(Math.max(ty, -boundY), boundY);
 
-          scale.value = withTiming(s, { duration: 1800, easing: Easing.out(Easing.cubic) });
-          translateX.value = withTiming(tx, { duration: 1800, easing: Easing.out(Easing.cubic) });
-          translateY.value = withTiming(ty, { duration: 1800, easing: Easing.out(Easing.cubic) });
+          scale.value = withTiming(s, { duration: FOCUS_ANIMATION_MS, easing: Easing.out(Easing.cubic) });
+          translateX.value = withTiming(tx, { duration: FOCUS_ANIMATION_MS, easing: Easing.out(Easing.cubic) });
+          translateY.value = withTiming(ty, { duration: FOCUS_ANIMATION_MS, easing: Easing.out(Easing.cubic) });
           savedScale.value = s;
           savedTranslateX.value = tx;
           savedTranslateY.value = ty;
@@ -188,7 +284,7 @@ export default function WorldMapView({
         savedTranslateY.value = 0;
       }
     }
-  }, [loading, focusCountry, featureCca2List, features]);
+  }, [loading, focusCountry, zoomToFocusCountry, focusScaleOverride, featureCca2List, features]);
 
   useEffect(() => {
     if (!loading && resetKey !== undefined) {
@@ -201,7 +297,7 @@ export default function WorldMapView({
     }
   }, [resetKey]);
 
-  const canInteract = interactive && !focusCountry;
+  const canInteract = interactive && (!focusCountry || !zoomToFocusCountry);
 
   const pinch = Gesture.Pinch()
     .enabled(canInteract)
@@ -283,7 +379,7 @@ export default function WorldMapView({
                   ? '#FFD700'
                   : (isOwn ? getCountryColor(cca2) : '#1a1a2e');
 
-                const fillOpacity = isFoc ? 0.9 : (isOwn ? 0.75 : 0.35);
+                const fillOpacity = isFoc ? 0.475 : (isOwn ? 0.75 : 0.35);
                 const color = isFoc ? '#FFD700' : '#7a7a9c';
                 const weight = isFoc ? 1.25 : 0.25;
 
@@ -299,17 +395,47 @@ export default function WorldMapView({
                 );
               })}
 
-              {/* Render labels on top of all paths */}
-              {(features || []).map((f: any, i: number) => {
-                const cca2 = featureCca2List[i] || '';
-                const isOwn = ownedSet.has(cca2);
-                const isFoc = cca2 === focusCountry;
-
-                if (isOwn || isFoc) {
-                  return <CountryLabel key={`lbl-${f.name}`} f={f} showNames={showNames} />;
-                }
-                return null;
+              {/* Trail route overlay */}
+              {trailSegments.map((segment, i) => (
+                <AnimatedTrailSegment
+                  key={`trail-segment-${i}`}
+                  from={segment.from}
+                  to={segment.to}
+                  index={i}
+                  progress={trailDrawProgress}
+                  color={trailColor}
+                />
+              ))}
+              {trailPathSafe.map((code, i) => {
+                const pt = centroidByCca2[code];
+                if (!pt) return null;
+                const isCurrent = code === focusCountry;
+                return (
+                  <Circle
+                    key={`trail-node-${code}-${i}`}
+                    cx={pt[0]}
+                    cy={pt[1]}
+                    r={isCurrent ? 3.7 : 2.4}
+                    fill={isCurrent ? '#FFD700' : trailColor}
+                    opacity={isCurrent ? 0.49 : 0.88}
+                  />
+                );
               })}
+
+              {/* Render labels on top of all paths only when enabled */}
+              {showNames
+                ? (features || []).map((f: any, i: number) => {
+                    const cca2 = featureCca2List[i] || '';
+                    const isOwn = ownedSet.has(cca2);
+                    const isFoc = cca2 === focusCountry;
+                    const isTrail = trailSet.has(cca2);
+
+                    if (isOwn || isFoc || isTrail) {
+                      return <CountryLabel key={`lbl-${f.name}`} f={f} showNames={showNames} />;
+                    }
+                    return null;
+                  })
+                : null}
             </AnimatedG>
           </Svg>
         </View>

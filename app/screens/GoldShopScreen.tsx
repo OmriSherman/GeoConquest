@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Alert,
   Image,
   Platform,
   ScrollView,
@@ -10,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import { useGame } from '../context/GameContext';
+import { useAlert } from '../context/AlertContext';
 import GoldDisplay from '../components/GoldDisplay';
 
 const GOLD_IMAGES = {
@@ -126,6 +126,7 @@ async function purchaseProduct(productId: string): Promise<boolean> {
 
 export default function GoldShopScreen() {
   const { addGold } = useGame();
+  const { showAlert } = useAlert();
   const [purchasing, setPurchasing] = useState<string | null>(null);
   const [storeProducts, setStoreProducts] = useState<any[]>([]);
   const [iapReady, setIapReady] = useState(false);
@@ -151,10 +152,10 @@ export default function GoldShopScreen() {
           const pkg = GOLD_PACKAGES.find(p => p.productId === purchase.productId);
             if (pkg) {
               addGold(pkg.gold);
-              Alert.alert(
-                'Purchase Complete! 🎉',
-                `You received ${pkg.gold.toLocaleString()} Gold!`
-              );
+              showAlert({
+                title: 'Purchase Complete! 🎉',
+                message: `You received ${pkg.gold.toLocaleString()} Gold!`,
+              });
             }
 
           // Acknowledge/finish the purchase
@@ -169,7 +170,7 @@ export default function GoldShopScreen() {
 
         purchaseErrorListener = IAP.purchaseErrorListener((err: any) => {
           if (err?.code !== 'E_USER_CANCELLED') {
-            Alert.alert('Purchase Failed', err?.message ?? 'Please try again.');
+            showAlert({ title: 'Purchase Failed', message: err?.message ?? 'Please try again.' });
           }
           setPurchasing(null);
         });
@@ -183,7 +184,7 @@ export default function GoldShopScreen() {
         IAP.endConnection?.();
       }
     };
-  }, []);
+  }, [addGold, showAlert]);
 
   function getStorePrice(productId: string): string | null {
     const product = storeProducts.find((p: any) => p.productId === productId);
@@ -195,39 +196,42 @@ export default function GoldShopScreen() {
 
     if (!iapReady) {
       // IAP not available — show info
-      Alert.alert(
-        'In-App Purchases',
-        'In-app purchases are only available in production builds.\n\n' +
-        'To test:\n' +
-        '1. Build with EAS: npx eas build\n' +
-        '2. Configure products in App Store Connect / Google Play Console\n\n' +
-        `Package: ${pkg.title}\n` +
-        `Gold: ${pkg.gold.toLocaleString()}\n` +
-        `Price: ${pkg.price}`,
-      );
+      showAlert({
+        title: 'In-App Purchases',
+        message:
+          'In-app purchases are only available in production builds.\n\n' +
+          'To test:\n' +
+          '1. Build with EAS: npx eas build\n' +
+          '2. Configure products in App Store Connect / Google Play Console\n\n' +
+          `Package: ${pkg.title}\n` +
+          `Gold: ${pkg.gold.toLocaleString()}\n` +
+          `Price: ${pkg.price}`,
+        messageAlign: 'left',
+      });
       return;
     }
 
-    Alert.alert(
-      `Buy ${pkg.title}?`,
-      `You'll receive ${pkg.gold.toLocaleString()} Gold for ${getStorePrice(pkg.productId) || pkg.price}`,
-      [
+    showAlert({
+      title: `Buy ${pkg.title}?`,
+      message: `You'll receive ${pkg.gold.toLocaleString()} Gold for ${getStorePrice(pkg.productId) || pkg.price}`,
+      buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Purchase',
+          text: 'Buy',
+          style: 'cta',
           onPress: async () => {
             setPurchasing(pkg.id);
             try {
               const started = await purchaseProduct(pkg.productId);
               if (!started) setPurchasing(null);
             } catch (err: any) {
-              Alert.alert('Purchase Failed', err.message ?? 'Please try again.');
+              showAlert({ title: 'Purchase Failed', message: err.message ?? 'Please try again.' });
               setPurchasing(null);
             }
           },
         },
-      ]
-    );
+      ],
+    });
   }
 
   return (

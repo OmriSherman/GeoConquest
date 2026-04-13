@@ -62,6 +62,11 @@ export function playPurchasedItem() {
   return playSfx(require('../assets/sfx/purchased_item.wav'));
 }
 
+/** Millionaire swap lifeline SFX */
+export function playMillionaireSwap() {
+  return playSfx(require('../assets/sfx/millionaire_swap.wav'));
+}
+
 /** Demonic laugh — nightmare quiz loss */
 export function playDevilLaugh() {
   return playSfx(require('../assets/sfx/devil_laugh.m4a'));

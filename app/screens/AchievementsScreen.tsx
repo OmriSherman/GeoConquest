@@ -114,6 +114,36 @@ export async function recordQuizCompletion(opts: {
   userId?: string;
 }): Promise<{ newlyCompletedSpeedDemon: boolean; newlyCompletedNightmare: boolean; newlyCompletedCapitalsMastery: boolean }> {
   try {
+    let dbAlreadySpeedDemon = false;
+    let dbAlreadyCapitalsMastery = false;
+    if (opts.userId) {
+      try {
+        const [{ data: profileData }, { data: achievementRows }] = await Promise.all([
+          supabase
+            .from('profiles')
+            .select('completed_speed_detective, completed_ground_invasion')
+            .eq('id', opts.userId)
+            .single(),
+          supabase
+            .from('user_achievements')
+            .select('achievement_id')
+            .eq('user_id', opts.userId)
+            .in('achievement_id', ['flag_mastery_30s', 'ground_invasion']),
+        ]);
+
+        dbAlreadySpeedDemon = Boolean(
+          profileData?.completed_speed_detective ||
+          (achievementRows ?? []).some((r: any) => r.achievement_id === 'flag_mastery_30s')
+        );
+        dbAlreadyCapitalsMastery = Boolean(
+          profileData?.completed_ground_invasion ||
+          (achievementRows ?? []).some((r: any) => r.achievement_id === 'ground_invasion')
+        );
+      } catch {
+        // Best effort only; local-state checks still apply below.
+      }
+    }
+
     const keys = opts.userId ? getUserAchievementKeys(opts.userId) : ACHIEVEMENT_KEYS;
     const [flagStr, perfectStr, speedStr, goldStr, fastFlagStr, fastCapitalsStr, nightmareStr] = await AsyncStorage.multiGet([
       keys.flagQuizzesCompleted,
@@ -129,8 +159,8 @@ export async function recordQuizCompletion(opts: {
     const perfects = parseInt(perfectStr[1] ?? '0', 10);
     const speeds = parseInt(speedStr[1] ?? '0', 10);
     const gold = parseInt(goldStr[1] ?? '0', 10);
-    const wasAlreadySpeedDemon = fastFlagStr[1] === 'true';
-    const wasAlreadyCapitalsMastery = fastCapitalsStr[1] === 'true';
+    const wasAlreadySpeedDemon = fastFlagStr[1] === 'true' || dbAlreadySpeedDemon;
+    const wasAlreadyCapitalsMastery = fastCapitalsStr[1] === 'true' || dbAlreadyCapitalsMastery;
     const wasAlreadyNightmare = nightmareStr[1] === 'true';
     const meetsSpeedDemon = opts.quizType === 'flag' && (opts.scorePercentage ?? 0) >= 90 && opts.durationSeconds < 30;
     const meetsCapitalsMastery = opts.quizType === 'capitals' && (opts.scorePercentage ?? 0) >= 90 && opts.durationSeconds < 30;

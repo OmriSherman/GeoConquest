@@ -26,6 +26,18 @@ const REWARDS_CYCLE = [
   { day: 6, gold: 400, tickets: 3 },
   { day: 7, gold: 500, tickets: 5, isMilestone: true },
 ];
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function utcDateKey(date: Date): string {
+  return date.toISOString().split('T')[0];
+}
+
+function effectiveStreak(loginStreak: number, lastRewardClaim?: string | null): number {
+  if (!lastRewardClaim) return loginStreak;
+  const claimDateKey = utcDateKey(new Date(lastRewardClaim));
+  const yesterdayKey = utcDateKey(new Date(Date.now() - DAY_MS));
+  return claimDateKey < yesterdayKey ? 0 : loginStreak;
+}
 
 export default function DailyRewardModal() {
   const { profile, dailyRewardAvailable, claimDailyReward } = useAuth();
@@ -59,7 +71,7 @@ export default function DailyRewardModal() {
     return null;
   }
 
-  const prevStreak = profile.login_streak ?? 0;
+  const prevStreak = effectiveStreak(profile.login_streak ?? 0, profile.last_reward_claim);
   const previewStreak = dailyRewardAvailable ? prevStreak + 1 : prevStreak;
   const cycleDay = ((previewStreak - 1) % 7) + 1;
   const rewardMultiplier = profile.is_conquerer ? 3 : 1;

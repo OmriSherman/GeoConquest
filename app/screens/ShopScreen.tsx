@@ -336,7 +336,7 @@ export default function ShopScreen() {
           title: `Buy ${label}?`,
           message: `${price.toLocaleString()} gold`,
           buttons: [
-            { text: 'Confirm Purchase', style: 'default', onPress: () => doPurchaseItem(itemType, itemId, price) },
+            { text: 'Buy', style: 'default', onPress: () => doPurchaseItem(itemType, itemId, price) },
             { text: 'Cancel', style: 'cancel' },
           ],
         });
@@ -864,7 +864,7 @@ export default function ShopScreen() {
                 const isEquipped = profile?.avatar_emoji === id;
                 const cs = resolveCardState({
                   isUnlocked,
-                  isSubscriptionLocked: !!item.isPremiumSubscription,
+                  isSubscriptionLocked: !!item.isPremiumSubscription && !profile?.is_conquerer,
                   requiredLevel: item.requiresLevel,
                   playerLevel,
                 });

@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { WebView } from 'react-native-webview';
+import worldAtlas from '../assets/map/countries-50m.json';
 
 interface CountryShapeViewProps {
   countryCode: string;
@@ -16,6 +17,17 @@ for (const [num, a2] of Object.entries(NUM_TO_A2)) {
 // Manually map Svalbard and Jan Mayen (SJ) and others without separate geometries to their sovereigns
 A2_TO_NUM['SJ'] = '578'; // Norway
 A2_TO_NUM['XK'] = '688'; // Kosovo -> Serbia
+
+const ATLAS_NUMERIC_IDS = new Set<string>(
+  ((worldAtlas as any)?.objects?.countries?.geometries ?? []).map((g: any) => String(g.id)),
+);
+const HARDCODED_NUMERIC_IDS = new Set<string>(['254']); // French Guiana
+
+export function hasCountryShape(countryCode: string): boolean {
+  const numericId = A2_TO_NUM[countryCode];
+  if (!numericId) return false;
+  return ATLAS_NUMERIC_IDS.has(numericId) || HARDCODED_NUMERIC_IDS.has(numericId);
+}
 
 /**
  * Renders a 2D country silhouette using Leaflet + TopoJSON.

@@ -24,6 +24,7 @@ import FlagQuizScreen from '../screens/FlagQuizScreen';
 import ShapeQuizScreen from '../screens/ShapeQuizScreen';
 import BordersQuizScreen from '../screens/BordersQuizScreen';
 import CapitalsQuizScreen from '../screens/CapitalsQuizScreen';
+import TrailQuizScreen from '../screens/TrailQuizScreen';
 import MillionaireQuizScreen from '../screens/MillionaireQuizScreen';
 import NightmareQuizScreen from '../screens/NightmareQuizScreen';
 import QuizResultsScreen from '../screens/QuizResultsScreen';
@@ -96,6 +97,11 @@ function QuizNavigator() {
         name="CapitalsQuiz"
         component={CapitalsQuizScreen}
         options={{ title: 'Capitals Quiz' }}
+      />
+      <QuizStack.Screen
+        name="TrailQuiz"
+        component={TrailQuizScreen}
+        options={{ title: 'Trail Quiz' }}
       />
       <QuizStack.Screen
         name="MillionaireQuiz"

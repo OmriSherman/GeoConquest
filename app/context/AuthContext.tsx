@@ -13,6 +13,7 @@ import { ACHIEVEMENTS_DATA } from '../lib/achievementsData';
 export const PROFILE_CACHE_KEY = (uid: string) => `@geoquest/profile_cache_${uid}`;
 const MUTATIONS_KEY = (uid: string) => `@geoquest/pending_mutations_${uid}`;
 const NEXT_QUIZ_BOOST_KEY = (uid: string) => `@geoquest/next_quiz_boost_${uid}`;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 type PendingMutation =
   | { type: 'add_gold'; delta: number }
@@ -91,6 +92,31 @@ async function processPendingMutations(userId: string, fresh: Profile): Promise<
   }
 }
 
+function utcDateKey(date: Date): string {
+  return date.toISOString().split('T')[0];
+}
+
+function shouldResetLoginStreak(lastRewardClaim?: string | null): boolean {
+  if (!lastRewardClaim) return false;
+  const claimDateKey = utcDateKey(new Date(lastRewardClaim));
+  const yesterdayKey = utcDateKey(new Date(Date.now() - DAY_MS));
+  // If last claim is older than yesterday, at least one full UTC day was missed.
+  return claimDateKey < yesterdayKey;
+}
+
+function normalizeMissedDayStreak(profile: Profile): { normalized: Profile; changed: boolean } {
+  if (!shouldResetLoginStreak(profile.last_reward_claim ?? null)) {
+    return { normalized: profile, changed: false };
+  }
+  if ((profile.login_streak ?? 0) === 0) {
+    return { normalized: profile, changed: false };
+  }
+  return {
+    normalized: { ...profile, login_streak: 0 },
+    changed: true,
+  };
+}
+
 async function reconcileQuestRewardAvatarOwnership(userId: string, unlockedItemIds: Set<string>): Promise<Set<string>> {
   if (unlockedItemIds.size === 0 || QUEST_REWARD_AVATAR_TO_ACHIEVEMENT_IDS.size === 0) {
     return unlockedItemIds;
@@ -163,7 +189,7 @@ interface AuthContextValue {
   claimDailyReward: () => Promise<{ gold: number; tickets: number }>;
   addXP: (amount: number) => Promise<void>;
   addGold: (amount: number) => Promise<void>;
-  incrementQuizCount: () => Promise<boolean>;
+  incrementQuizCount: () => Promise<{ claimed: boolean; goldAwarded: number }>;
   shareReferralLink: () => Promise<void>;
   unlockedItems: Set<string>;
   refreshUnlockedItems: () => Promise<void>;
@@ -261,6 +287,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .catch(() => setNextQuizBoostActiveState(false));
   }, [session?.user?.id]);
 
+  useEffect(() => {
+    if (!profile?.id) return;
+
+    const run = async () => {
+      await consumeReferralBonusNotifications(true);
+    };
+
+    const initialTimer = setTimeout(run, 1200);
+    const intervalId = setInterval(run, 60000);
+
+    return () => {
+      clearTimeout(initialTimer);
+      clearInterval(intervalId);
+    };
+  }, [profile?.id]);
+
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   function applyProfileToState(p: Profile) {
@@ -285,6 +327,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!error && data) {
       // Apply any queued offline mutations onto the fresh DB values
       let p = await processPendingMutations(userId, data as Profile);
+
+      // Reset streak immediately when a day was missed (don't wait for next claim call).
+      const { normalized, changed } = normalizeMissedDayStreak(p);
+      p = normalized;
+      if (changed) {
+        supabase
+          .from('profiles')
+          .update({ login_streak: 0 })
+          .eq('id', userId)
+          .then(({ error: streakError }) => {
+            if (streakError) console.warn('[Auth] Failed to persist streak reset:', streakError.message);
+          });
+      }
 
       // Persist updated profile to cache
       AsyncStorage.setItem(PROFILE_CACHE_KEY(userId), JSON.stringify(p)).catch(() => {});
@@ -647,7 +702,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Network error (no DB error code) — claim locally and queue sync
     if (error && !error.code) {
-      const prevStreak = profile.login_streak ?? 0;
+      const prevStreak = shouldResetLoginStreak(profile.last_reward_claim ?? null)
+        ? 0
+        : (profile.login_streak ?? 0);
       const newStreak = prevStreak + 1;
       const cycleDay = ((newStreak - 1) % 7) + 1;
       const gold = DAILY_GOLD_BY_DAY[cycleDay - 1] * rewardMultiplier;
@@ -848,14 +905,61 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  async function claimReferralBonus(): Promise<boolean> {
+  function referralPopupMessage(totalGold: number, rewardsCount: number): string {
+    if (rewardsCount <= 1) {
+      return `You received ${totalGold.toLocaleString()} gold from a referral reward.`;
+    }
+    return `You received ${totalGold.toLocaleString()} gold from ${rewardsCount} referral rewards.`;
+  }
+
+  async function syncReferralBonusGold(userId: string) {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('gold_balance, referral_bonus_claimed')
+      .eq('id', userId)
+      .single();
+
+    if (!error && data) {
+      setProfile((prev) =>
+        prev
+          ? {
+              ...prev,
+              gold_balance: Number((data as any).gold_balance ?? prev.gold_balance),
+              referral_bonus_claimed: !!(data as any).referral_bonus_claimed,
+            }
+          : prev
+      );
+    }
+  }
+
+  async function consumeReferralBonusNotifications(showPopup: boolean): Promise<void> {
+    const userId = profile?.id ?? session?.user?.id;
+    if (!userId) return;
+
+    const { data, error } = await supabase.rpc('consume_referral_bonus_notifications');
+    if (error) return;
+
+    const row = Array.isArray(data) ? data[0] : data;
+    const totalGold = Number((row as any)?.total_gold ?? 0);
+    const rewardsCount = Number((row as any)?.rewards_count ?? 0);
+
+    if (rewardsCount <= 0 || totalGold <= 0) return;
+
+    await syncReferralBonusGold(userId);
+
+    if (showPopup) {
+      Alert.alert('Referral Reward!', referralPopupMessage(totalGold, rewardsCount));
+    }
+  }
+
+  async function claimReferralBonus(): Promise<{ claimed: boolean; goldAwarded: number }> {
     const { data, error } = await supabase.rpc('claim_referral_bonus');
     if (error) {
       console.warn('[Auth] Referral bonus RPC failed:', error.message);
-      return false;
+      return { claimed: false, goldAwarded: 0 };
     }
     if (!data?.[0]?.success) {
-      return false;
+      return { claimed: false, goldAwarded: 0 };
     }
     const goldAwarded = data[0].gold_awarded as number;
     setProfile(prev => prev ? {
@@ -863,12 +967,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       gold_balance: prev.gold_balance + goldAwarded,
       referral_bonus_claimed: true,
     } : prev);
-    return true;
+    return { claimed: true, goldAwarded };
   }
 
-  async function incrementQuizCount(): Promise<boolean> {
+  async function incrementQuizCount(): Promise<{ claimed: boolean; goldAwarded: number }> {
     const userId = profile?.id ?? session?.user?.id;
-    if (!userId) return false;
+    if (!userId) return { claimed: false, goldAwarded: 0 };
 
     let quizCount = profile?.quiz_count ?? 0;
     let referralBonusClaimed = !!profile?.referral_bonus_claimed;
@@ -896,14 +1000,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!referralBonusClaimed && referredBy) {
         return claimReferralBonus();
       }
-      return false;
+      return { claimed: false, goldAwarded: 0 };
     }
 
     setProfile(prev => prev ? { ...prev, quiz_count: newCount } : prev);
     if (!referralBonusClaimed && referredBy) {
       return claimReferralBonus();
     }
-    return false;
+    return { claimed: false, goldAwarded: 0 };
   }
 
   async function shareReferralLink() {
@@ -914,7 +1018,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await Share.share({
         message:
           `Join me on GeoConquest! Use code ${code} when you sign up — we both get 1500 gold! 🌍\n\n` +
-          `Download: https://apps.apple.com/app/geoconquest/id0000000000\n\n` +
+          `Download on Google Play: https://play.google.com/store/apps/details?id=com.geoconquest.app\n\n` +
           `Already installed? ${link}`,
       });
     } catch {}

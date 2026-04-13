@@ -18,26 +18,26 @@ import Svg, { Circle, Text as SvgText } from 'react-native-svg';
 import {
   MillionaireQuestion,
   MILLIONAIRE_GOLD_LADDER,
-  MILLIONAIRE_SAFE_ZONES,
   QuizStackParamList,
   Country,
 } from '../types';
 import { fetchCountries } from '../lib/countryData';
 import { buildMillionaireQuestions, buildSingleMillionaireQuestion } from '../lib/questionDifficulty';
 import { useAuth } from '../context/AuthContext';
+import { useAlert } from '../context/AlertContext';
 import { supabase } from '../lib/supabase';
 import AnswerButton from '../components/AnswerButton';
 import CountryShapeView from '../components/CountryShapeView';
-import { playDing, playWrong, playTick, playTextToSpeech } from '../lib/audio';
+import { playDing, playWrong, playTick, playTextToSpeech, playMillionaireSwap } from '../lib/audio';
 import * as Speech from 'expo-speech';
 import { showRewardedAd } from '../lib/rewardedAds';
 
 const AUTO_ADVANCE_DELAY_MS = 2500;
 const TIMER_SECONDS = 15;
 
-// Show walk-or-continue checkpoint before these 0-indexed questions
-// (i.e. before Q7, Q9, Q11, Q13, Q15 in 1-indexed)
-const WALK_AWAY_CHECKPOINT_INDICES = [6, 9, 12];
+// Show walk-or-continue checkpoint before these 0-indexed next-question indices:
+// after answering Q5 (250), Q10 (1.5k), Q13 (4k).
+const WALK_AWAY_CHECKPOINT_INDICES = [5, 10, 13];
 
 type Props = {
   navigation: StackNavigationProp<QuizStackParamList, 'MillionaireQuiz'>;
@@ -118,6 +118,7 @@ function AudienceVoteCircle({ percentage, isCorrect }: { percentage: number; isC
 
 export default function MillionaireQuizScreen({ navigation }: Props) {
   const { profile, disabledUpgrades, spendTicket } = useAuth();
+  const { showAlert } = useAlert();
 
   const [allCountries, setAllCountries] = useState<Country[]>([]);
   const [questions, setQuestions] = useState<MillionaireQuestion[]>([]);
@@ -346,10 +347,29 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
     if (!isSkipEnabled) return;
 
     setSkipUsed(true);
-    playDing();
+    playMillionaireSwap();
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
     swapCurrentQuestionAndContinue();
+  }
+
+  function handleSkipPress() {
+    if (skipUsed || answered) return;
+    const isSkipEnabled = ownsSkip && !disabledUpgrades.has('upgrade_millionaire_skip');
+    if (isSkipEnabled) {
+      useSkipLifeline();
+      return;
+    }
+
+    showAlert({
+      variant: 'unique',
+      title: 'Power-Up Locked',
+      message: 'This power-up needs to be purchased from the Upgrades shop.',
+      buttons: [
+        { text: 'Display in Shop', style: 'cta', onPress: () => navigation.getParent()?.navigate('Shop', { initialTab: 'upgrades' }) },
+        { text: 'Got it', style: 'cancel' },
+      ],
+    });
   }
 
   function swapCurrentQuestionAndContinue() {
@@ -561,8 +581,6 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
   // ── Main render ────────────────────────────────────────────────────────────
 
   const question = questions[currentIndex];
-  const isSafeZone = MILLIONAIRE_SAFE_ZONES.includes(currentIndex);
-  const currentPrize = MILLIONAIRE_GOLD_LADDER[currentIndex];
   const timerPct = timeLeft / TIMER_SECONDS;
   const timerColor = timeLeft <= 3 ? '#f44336' : timeLeft <= 6 ? '#FF9800' : '#FFD700';
 
@@ -593,8 +611,8 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
         {MILLIONAIRE_GOLD_LADDER.map((amount, i) => {
           const isCurrent = i === currentIndex;
           const isPast = i < currentIndex;
-          const isSafe = MILLIONAIRE_SAFE_ZONES.includes(i);
-          const isExitPoint = i === 11; // 3k walk-away checkpoint
+          const isWalkCheckpointQuestion = WALK_AWAY_CHECKPOINT_INDICES.includes(i + 1);
+          const isJackpot = i === 14;
           return (
             <View
               key={i}
@@ -602,12 +620,10 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
                 styles.ladderItem,
                 isCurrent && styles.ladderItemCurrent,
                 isPast && styles.ladderItemPast,
-                (isSafe || isExitPoint) && !isCurrent && styles.ladderItemSafe,
+                (isWalkCheckpointQuestion || isJackpot) && !isCurrent && styles.ladderItemCheckpoint,
+                isJackpot && styles.ladderItemJackpot,
               ]}
             >
-              {isSafe && (
-                <Image source={require('../../assets/avatars/lock.png')} style={{ width: 9, height: 9, marginBottom: 1 }} resizeMode="contain" />
-              )}
               <Text style={[styles.ladderText, isCurrent && styles.ladderTextCurrent]}>
                 {amount >= 1000 ? `${amount / 1000}K` : String(amount)}
               </Text>
@@ -652,7 +668,7 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
                         playTextToSpeech(question.subjectCountry.capital || '');
                       }}
                     >
-                      <Text style={styles.speakerEmoji}>▶</Text>
+                      <Text style={styles.speakerEmoji}>🔊</Text>
                     </TouchableOpacity>
                   </View>
                 ) : (
@@ -694,8 +710,8 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
                 return (
                   <TouchableOpacity
                     style={[styles.lifelineBtn, (skipUsed || answered || !isSkipEnabled) && styles.lifelineBtnUsed]}
-                    onPress={useSkipLifeline}
-                    disabled={skipUsed || answered || !isSkipEnabled}
+                    onPress={handleSkipPress}
+                    disabled={skipUsed || answered}
                   >
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                       <Image source={require('../../assets/avatars/swap.png')} style={{ width: 14, height: 14, opacity: isSkipEnabled ? 1 : 0.4 }} resizeMode="contain" />
@@ -924,8 +940,15 @@ const styles = StyleSheet.create({
   ladderItemPast: {
     opacity: 0.4,
   },
-  ladderItemSafe: {
-    borderColor: '#4CAF50',
+  ladderItemCheckpoint: {
+    borderColor: '#FFD700',
+  },
+  ladderItemJackpot: {
+    shadowColor: '#FFD700',
+    shadowOpacity: 0.95,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 8,
   },
   ladderText: { color: '#666', fontSize: 10, fontWeight: '600' },
   ladderTextCurrent: { color: '#FFD700' },
