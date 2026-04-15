@@ -30,7 +30,7 @@ import AnswerButton from '../components/AnswerButton';
 import CountryShapeView from '../components/CountryShapeView';
 import { playDing, playWrong, playTick, playTextToSpeech, playMillionaireSwap } from '../lib/audio';
 import * as Speech from 'expo-speech';
-import { showRewardedAd } from '../lib/rewardedAds';
+import { getRewardedAdFailureHint, showRewardedAd } from '../lib/rewardedAds';
 
 const AUTO_ADVANCE_DELAY_MS = 2500;
 const TIMER_SECONDS = 15;
@@ -416,8 +416,12 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
   async function handleSecondChanceAd() {
     setSecondChanceLoading(true);
     try {
-      const { rewarded } = await showRewardedAd();
-      if (!rewarded) {
+      const adResult = await showRewardedAd();
+      if (!adResult.rewarded) {
+        showAlert({
+          title: 'Ad Unavailable',
+          message: `Could not load a second-chance ad.${getRewardedAdFailureHint(adResult)}`,
+        });
         setShowSecondChanceModal(false);
         setGameOver(true);
         setTimeout(endGameWithLoss, 1500);

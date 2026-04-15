@@ -18,7 +18,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import TopFallConfetti from '../components/TopFallConfetti';
-import { showRewardedAd } from '../lib/rewardedAds';
+import { getRewardedAdFailureHint, showRewardedAd } from '../lib/rewardedAds';
 import { Country, getCountryPrice } from '../types';
 import { fetchCountries } from '../lib/countryData';
 import { playDing, playPurchasedItem, playReject } from '../lib/audio';
@@ -519,9 +519,12 @@ export default function ShopScreen() {
     if (!profile) return;
     setActionLoading(true);
     try {
-      const { rewarded } = await showRewardedAd();
-      if (!rewarded) {
-        showAlert({ title: 'Ad Unavailable', message: 'Could not load a rewarded ad right now. Please try again.' });
+      const adResult = await showRewardedAd();
+      if (!adResult.rewarded) {
+        showAlert({
+          title: 'Ad Unavailable',
+          message: `Could not load a rewarded ad right now. Please try again.${getRewardedAdFailureHint(adResult)}`,
+        });
         return;
       }
       await purchaseTickets(1, 0);

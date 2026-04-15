@@ -11,7 +11,7 @@ import { useAlert } from '../context/AlertContext';
 import { useToast } from '../context/ToastContext';
 import { playPurchasedItem } from '../lib/audio';
 import * as Haptics from 'expo-haptics';
-import { showRewardedAd } from '../lib/rewardedAds';
+import { getRewardedAdFailureHint, showRewardedAd } from '../lib/rewardedAds';
 import { getLevelInfo } from '../lib/xpSystem';
 
 type Props = {
@@ -147,9 +147,12 @@ export default function QuizMenuScreen({ navigation }: Props) {
     if (!profile) return;
     setActionLoading(true);
     try {
-      const { rewarded } = await showRewardedAd();
-      if (!rewarded) {
-        showAlert({ title: 'Ad Unavailable', message: 'Could not load a rewarded ad right now. Please try again.' });
+      const adResult = await showRewardedAd();
+      if (!adResult.rewarded) {
+        showAlert({
+          title: 'Ad Unavailable',
+          message: `Could not load a rewarded ad right now. Please try again.${getRewardedAdFailureHint(adResult)}`,
+        });
         return;
       }
       await purchaseTickets(1, 0);

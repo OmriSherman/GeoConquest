@@ -10,6 +10,15 @@ type RewardedAdResult = {
   errorMessage?: string;
 };
 
+export function getRewardedAdFailureHint(result: RewardedAdResult): string {
+  if (result.rewarded) return '';
+  const code = result.errorCode?.trim();
+  if (code) return ` (code: ${code})`;
+  const reason = result.reason?.trim();
+  if (reason) return ` (reason: ${reason})`;
+  return '';
+}
+
 function getAdsModule(): any | null {
   if (Ads) return Ads;
   try {
@@ -96,7 +105,7 @@ async function loadAndShowRewardedAd(unitId: string): Promise<RewardedAdResult> 
       resolve(result);
     };
 
-    addSub(rewarded.addAdEventListener(AdEventType.LOADED, () => {
+    addSub(rewarded.addAdEventListener(RewardedAdEventType.LOADED, () => {
       rewarded.show().catch((err: any) =>
         cleanup({
           rewarded: false,

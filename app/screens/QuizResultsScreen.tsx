@@ -22,7 +22,7 @@ import { useGame } from '../context/GameContext';
 import { ACHIEVEMENTS_DATA } from '../lib/achievementsData';
 import { calcQuizXP, getLevelInfo } from '../lib/xpSystem';
 import TopFallConfetti from '../components/TopFallConfetti';
-import { showRewardedAd } from '../lib/rewardedAds';
+import { getRewardedAdFailureHint, showRewardedAd } from '../lib/rewardedAds';
 import { supabase } from '../lib/supabase';
 
 type Props = {
@@ -460,9 +460,12 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
             text: 'Watch Ad',
             style: 'cta',
             onPress: async () => {
-              const { rewarded } = await showRewardedAd();
-              if (!rewarded) {
-                showAlert({ title: 'Ad Unavailable', message: 'Could not load an ad right now. Try again later.' });
+              const adResult = await showRewardedAd();
+              if (!adResult.rewarded) {
+                showAlert({
+                  title: 'Ad Unavailable',
+                  message: `Could not load an ad right now. Try again later.${getRewardedAdFailureHint(adResult)}`,
+                });
                 return;
               }
               await setNextQuizBoostActive(true);

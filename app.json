@@ -4,7 +4,7 @@
     "slug": "geoconquest",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/icon-android.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "updates": {
@@ -22,8 +22,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/adaptive-icon-foreground.png",
+        "backgroundColor": "#0E2B47"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
