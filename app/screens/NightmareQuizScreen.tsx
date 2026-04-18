@@ -28,6 +28,7 @@ import CountryShapeView from '../components/CountryShapeView';
 import { playDing, playWrong, playTick, playTextToSpeech } from '../lib/audio';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Speech from 'expo-speech';
+import { filterQuizCountries } from '../lib/quizCountryFilters';
 
 const NIGHTMARE_LOSS_KEY = 'nightmare_loss_count';
 
@@ -142,7 +143,7 @@ export default function NightmareQuizScreen({ navigation }: Props) {
           return;
         }
 
-        const countries = await fetchCountries();
+        const countries = filterQuizCountries(await fetchCountries());
         setAllCountries(countries);
         const q = buildNightmareQuestions(countries);
         setQuestions(q);

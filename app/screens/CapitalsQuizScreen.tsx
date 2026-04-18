@@ -23,6 +23,7 @@ import { playDingStreak, playWrong, playTextToSpeech } from '../lib/audio';
 import HeatStreakBadge from '../components/HeatStreakBadge';
 import { useAuth } from '../context/AuthContext';
 import * as Speech from 'expo-speech';
+import { filterQuizCountries } from '../lib/quizCountryFilters';
 
 const GOLD_PER_CORRECT = 18;
 const AUTO_ADVANCE_DELAY_MS = 2500;
@@ -78,7 +79,7 @@ export default function CapitalsQuizScreen({ navigation }: Props) {
             throw new Error('OFFLINE_NO_PREMIUM');
           }
         }
-        const q = buildCapitalsQuizQuestions(countries, TOTAL_QUESTIONS);
+        const q = buildCapitalsQuizQuestions(filterQuizCountries(countries), TOTAL_QUESTIONS);
         setQuestions(q);
         questionsRef.current = q;
       } catch (e: any) {

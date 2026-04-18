@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Image, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, Easing, Image, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { View as FallbackView } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
@@ -70,7 +70,7 @@ function achIconNode(key: string | undefined, fallback: string) {
 }
 
 export default function QuizResultsScreen({ navigation, route }: Props) {
-  const { score, total, goldEarned, quizType, elapsedSeconds } = route.params;
+  const { score, total, goldEarned, quizType, quizMode = 'standard', elapsedSeconds } = route.params;
   const percentage = Math.round((score / total) * 100);
   const { showToast } = useToast();
   const { user, addXP, addGold, profile, incrementQuizCount, nextQuizBoostActive, setNextQuizBoostActive, consumeNextQuizBoost } = useAuth();
@@ -117,6 +117,11 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
     millionaire: 'Millionaire Quiz',
     nightmare: 'Nightmare Mode',
   };
+
+  const isBoostEligibleQuiz = ['flag', 'shape', 'capitals', 'borders', 'trail'].includes(quizType);
+  const quizLabel = quizType === 'flag' && quizMode === 'easy'
+    ? 'Easy Flag Quiz'
+    : (QUIZ_LABELS[quizType] ?? quizType);
 
   function buildShareMessage() {
     return `This is how much I scored in the quiz, think you can do better?\nGeoConquest - find us on Google Play\n${PLAY_STORE_URL}`;
@@ -365,7 +370,6 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
       }
 
       const xp = calcQuizXP(quizType, score, total, newlyCompletedNightmare);
-      const isBoostEligibleQuiz = ['flag', 'shape', 'capitals', 'borders', 'trail'].includes(quizType);
       const shouldApplyBoost = isBoostEligibleQuiz && nextQuizBoostActive;
       const effectiveXp = shouldApplyBoost ? xp * 2 : xp;
 
@@ -450,36 +454,6 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
       }
     });
 
-    const isBoostOfferQuiz = ['flag', 'shape', 'capitals', 'borders', 'trail'].includes(quizType);
-    if (isBoostOfferQuiz && !nextQuizBoostActive && Math.random() < 0.07) {
-      showAlert({
-        title: 'Double Rewards Next Quiz?',
-        message: 'Watch one ad now to get x2 Gold + x2 XP on your next quiz.',
-        buttons: [
-          {
-            text: 'Watch Ad',
-            style: 'cta',
-            onPress: async () => {
-              const adResult = await showRewardedAd();
-              if (!adResult.rewarded) {
-                showAlert({
-                  title: 'Ad Unavailable',
-                  message: `Could not load an ad right now. Try again later.${getRewardedAdFailureHint(adResult)}`,
-                });
-                return;
-              }
-              await setNextQuizBoostActive(true);
-              showToast({
-                title: 'Boost Ready',
-                message: 'Your next quiz rewards will be doubled.',
-              });
-            },
-          },
-          { text: 'Not now', style: 'cancel' },
-        ],
-      });
-    }
-
     return () => {
       isUnmountedRef.current = true;
       stopActiveAnimation();
@@ -519,8 +493,118 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
 
   const showGoldTransfer = displayGoldGain !== 0;
 
+  function navigateToNextQuiz() {
+    if (quizType === 'flag') {
+      navigation.replace('FlagQuiz', quizMode === 'easy' ? { mode: 'easy' } : undefined);
+      return;
+    }
+    if (quizType === 'shape') {
+      navigation.replace('ShapeQuiz');
+      return;
+    }
+    if (quizType === 'borders') {
+      navigation.replace('BordersQuiz');
+      return;
+    }
+    if (quizType === 'capitals') {
+      navigation.replace('CapitalsQuiz');
+      return;
+    }
+    if (quizType === 'trail') {
+      navigation.replace('TrailQuiz' as any);
+      return;
+    }
+    if (quizType === 'nightmare') {
+      navigation.replace('NightmareQuiz' as any);
+    }
+  }
+
+  function promptNextQuizBoost() {
+    showAlert({
+      title: 'Double Rewards Next Quiz?',
+      message: 'Watch one ad now to get x2 Gold + x2 XP on your next quiz.',
+      buttons: [
+        {
+          text: 'Watch Ad',
+          style: 'cta',
+          onPress: async () => {
+            const adResult = await showRewardedAd();
+            if (!adResult.rewarded) {
+              showAlert({
+                title: 'Ad Unavailable',
+                message: `Could not load an ad right now. Your next quiz will start normally.${getRewardedAdFailureHint(adResult)}`,
+                buttons: [
+                  { text: 'OK', style: 'cta', onPress: navigateToNextQuiz },
+                ],
+              });
+              return;
+            }
+            await setNextQuizBoostActive(true);
+            showAlert({
+              title: 'Boost Ready',
+              message: 'Your next quiz rewards will be doubled. Press OK to continue.',
+              buttons: [
+                {
+                  text: 'OK',
+                  style: 'cta',
+                  onPress: () => {
+                    showToast({
+                      title: 'Boost Ready',
+                      message: 'Your next quiz rewards will be doubled.',
+                    });
+                    navigateToNextQuiz();
+                  },
+                },
+              ],
+            });
+          },
+        },
+        {
+          text: 'Not now',
+          style: 'cancel',
+          onPress: navigateToNextQuiz,
+        },
+      ],
+    });
+  }
+
+  function handlePlayAgain() {
+    if (quizType === 'millionaire') {
+      if (tickets < 1) {
+        showAlert({
+          variant: 'ticket',
+          title: 'No Tickets',
+          message: 'You need at least 1 ticket to play again.\n\nEarn tickets from daily rewards or buy them in Shop → Items.',
+        });
+        return;
+      }
+
+      showAlert({
+        variant: 'ticket',
+        title: 'Play Again?',
+        message: `This will cost 1 ticket. You have ${tickets} ticket${tickets !== 1 ? 's' : ''}.`,
+        buttons: [
+          { text: 'Play', style: 'cta', onPress: () => navigation.replace('MillionaireQuiz' as any) },
+          { text: 'Cancel', style: 'cancel' },
+        ],
+      });
+      return;
+    }
+
+    if (isBoostEligibleQuiz && !nextQuizBoostActive) {
+      promptNextQuizBoost();
+      return;
+    }
+
+    navigateToNextQuiz();
+  }
+
   return (
-    <View style={[styles.container, isNightmare && styles.containerNightmare]}>
+    <ScrollView
+      contentContainerStyle={[styles.container, isNightmare && styles.containerNightmare]}
+      showsVerticalScrollIndicator={false}
+      bounces={false}
+    >
       <Image source={rating.imageSource} style={styles.ratingImage} resizeMode="contain" />
       <Text style={[styles.rating, isNightmare && styles.ratingNightmare]}>{rating.label}</Text>
 
@@ -593,43 +677,14 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
             <Text style={styles.shareCaptureStoreText}>Live on Google Play</Text>
           </View>
           <Image source={shareBadgeSource} style={styles.shareCaptureHero} resizeMode="contain" />
-          <Text style={styles.shareCaptureQuiz}>{QUIZ_LABELS[quizType] ?? quizType}</Text>
+          <Text style={styles.shareCaptureQuiz}>{quizLabel}</Text>
           <Text style={styles.shareCaptureScore}>{score}/{total} ({percentage}%)</Text>
         </ViewShot>
       </View>
 
       <TouchableOpacity
         style={styles.playAgainButton}
-        onPress={() => {
-          if (quizType === 'millionaire') {
-            if (tickets < 1) {
-              showAlert({
-                variant: 'ticket',
-                title: 'No Tickets',
-                message: 'You need at least 1 ticket to play again.\n\nEarn tickets from daily rewards or buy them in Shop → Items.',
-              });
-              return;
-            }
-
-            showAlert({
-              variant: 'ticket',
-              title: 'Play Again?',
-              message: `This will cost 1 ticket. You have ${tickets} ticket${tickets !== 1 ? 's' : ''}.`,
-              buttons: [
-                { text: 'Play', style: 'cta', onPress: () => navigation.replace('MillionaireQuiz' as any) },
-                { text: 'Cancel', style: 'cancel' },
-              ],
-            });
-            return;
-          }
-
-          if (quizType === 'flag') navigation.replace('FlagQuiz');
-          else if (quizType === 'shape') navigation.replace('ShapeQuiz');
-          else if (quizType === 'borders') navigation.replace('BordersQuiz');
-          else if (quizType === 'capitals') navigation.replace('CapitalsQuiz');
-          else if (quizType === 'trail') navigation.replace('TrailQuiz' as any);
-          else if (quizType === 'nightmare') navigation.replace('NightmareQuiz' as any);
-        }}
+        onPress={handlePlayAgain}
       >
         <Text style={styles.playAgainText}>Play Again</Text>
       </TouchableOpacity>
@@ -658,7 +713,7 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
           </View>
         </Animated.View>
       )}
-    </View>
+    </ScrollView>
   );
 }
 
@@ -740,24 +795,26 @@ function CoinBurst() {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    flexGrow: 1,
     backgroundColor: '#0a0a1a',
     alignItems: 'center',
-    justifyContent: 'center',
     padding: 22,
-    gap: 14,
+    paddingTop: 18,
+    paddingBottom: 30,
+    gap: 12,
   },
   containerNightmare: {
     backgroundColor: '#0d0000',
   },
-  ratingImage: { width: 120, height: 120 },
-  rating: { color: '#fff', fontSize: 28, fontWeight: 'bold' },
+  ratingImage: { width: 108, height: 108 },
+  rating: { color: '#fff', fontSize: 26, fontWeight: 'bold', textAlign: 'center' },
   ratingNightmare: { color: '#ff8888', fontStyle: 'italic' },
   card: {
     backgroundColor: '#1a1a2e',
     borderRadius: 16,
     padding: 18,
     width: '100%',
+    maxWidth: 420,
     gap: 10,
     borderWidth: 1,
     borderColor: '#2a2a4e',
@@ -909,12 +966,14 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 40,
     width: '100%',
+    maxWidth: 420,
     alignItems: 'center',
   },
   playAgainText: { color: '#0a0a1a', fontWeight: 'bold', fontSize: 17 },
   bottomRow: {
     flexDirection: 'row',
     width: '100%',
+    maxWidth: 420,
     gap: 10,
   },
   menuButton: {

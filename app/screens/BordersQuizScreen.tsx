@@ -20,6 +20,7 @@ import BordersMapView from '../components/BordersMapView';
 import { playDingStreak, playWrong } from '../lib/audio';
 import HeatStreakBadge from '../components/HeatStreakBadge';
 import ConfettiCannon from 'react-native-confetti-cannon';
+import { filterQuizCountries } from '../lib/quizCountryFilters';
 
 const GOLD_PER_CORRECT = 20;
 const AUTO_ADVANCE_DELAY_MS = 2500;
@@ -70,7 +71,7 @@ export default function BordersQuizScreen({ navigation }: Props) {
             throw new Error('OFFLINE_NO_PREMIUM');
           }
         }
-        const q = buildBordersQuizQuestions(countries, TOTAL_QUESTIONS);
+        const q = buildBordersQuizQuestions(filterQuizCountries(countries), TOTAL_QUESTIONS);
         setQuestions(q);
         questionsRef.current = q;
       } catch (e: any) {

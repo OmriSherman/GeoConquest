@@ -31,6 +31,7 @@ import CountryShapeView from '../components/CountryShapeView';
 import { playDing, playWrong, playTick, playTextToSpeech, playMillionaireSwap } from '../lib/audio';
 import * as Speech from 'expo-speech';
 import { getRewardedAdFailureHint, showRewardedAd } from '../lib/rewardedAds';
+import { filterQuizCountries } from '../lib/quizCountryFilters';
 
 const AUTO_ADVANCE_DELAY_MS = 2500;
 const TIMER_SECONDS = 15;
@@ -157,6 +158,7 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
   const currentIndexRef = useRef(0);
   const questionsRef = useRef<MillionaireQuestion[]>([]);
   const autoAdvanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const secondChancePromptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const quizStartRef = useRef<number>(0);
   const ladderScrollRef = useRef<ScrollView>(null);
   const [ladderWidth, setLadderWidth] = useState(0);
@@ -235,8 +237,15 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
       i === question.correctIndex ? 'correct' : 'disabled',
     ));
     setAnswered(true);
-    setGameOver(true);
     stopTimer();
+    if (secondChancePromptTimerRef.current) clearTimeout(secondChancePromptTimerRef.current);
+    if (!secondChanceUsed) {
+      secondChancePromptTimerRef.current = setTimeout(() => {
+        setShowSecondChanceModal(true);
+      }, 1000);
+      return;
+    }
+    setGameOver(true);
     setTimeout(endGameWithLoss, 2000);
   }
 
@@ -245,7 +254,7 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
   useEffect(() => {
     (async () => {
       try {
-        const countries = await fetchCountries();
+        const countries = filterQuizCountries(await fetchCountries());
         const withoutAF = countries.filter(c => c.cca2 !== 'AF');
         setAllCountries(withoutAF);
         const q = buildMillionaireQuestions(withoutAF);
@@ -276,6 +285,7 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
 
     return () => {
       if (autoAdvanceTimer.current) clearTimeout(autoAdvanceTimer.current);
+      if (secondChancePromptTimerRef.current) clearTimeout(secondChancePromptTimerRef.current);
       stopTimer();
       Speech.stop(); // Clean up speech on unmount
     };
@@ -416,6 +426,7 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
   async function handleSecondChanceAd() {
     setSecondChanceLoading(true);
     try {
+      if (secondChancePromptTimerRef.current) clearTimeout(secondChancePromptTimerRef.current);
       const adResult = await showRewardedAd();
       if (!adResult.rewarded) {
         showAlert({
@@ -431,7 +442,19 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
       setShowSecondChanceModal(false);
       setAnswered(false);
       setGameOver(false);
-      swapCurrentQuestionAndContinue();
+      showAlert({
+        title: 'Reward Granted',
+        message: 'Your second chance has been granted. Press OK to continue the game.',
+        buttons: [
+          {
+            text: 'OK',
+            style: 'cta',
+            onPress: () => {
+              swapCurrentQuestionAndContinue();
+            },
+          },
+        ],
+      });
     } finally {
       setSecondChanceLoading(false);
     }
@@ -478,8 +501,11 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
     } else {
       playWrong();
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      if (secondChancePromptTimerRef.current) clearTimeout(secondChancePromptTimerRef.current);
       if (!secondChanceUsed) {
-        setShowSecondChanceModal(true);
+        secondChancePromptTimerRef.current = setTimeout(() => {
+          setShowSecondChanceModal(true);
+        }, 1000);
         return;
       }
       setGameOver(true);
@@ -495,6 +521,10 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
     if (autoAdvanceTimer.current) {
       clearTimeout(autoAdvanceTimer.current);
       autoAdvanceTimer.current = null;
+    }
+    if (secondChancePromptTimerRef.current) {
+      clearTimeout(secondChancePromptTimerRef.current);
+      secondChancePromptTimerRef.current = null;
     }
     const nextIdx = currentIndexRef.current + 1;
     if (WALK_AWAY_CHECKPOINT_INDICES.includes(nextIdx)) {

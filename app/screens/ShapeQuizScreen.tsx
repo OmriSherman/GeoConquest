@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
+  Image,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,7 +13,7 @@ import {
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { QuizStackParamList, QuizQuestion, Country } from '../types';
+import { QuizStackParamList, QuizQuestion, Country, cca2ToFlagEmoji } from '../types';
 import { buildQuizQuestions, fetchCountries, getOfflineFullCountries } from '../lib/countryData';
 import { useGame } from '../context/GameContext';
 import AnswerButton from '../components/AnswerButton';
@@ -19,6 +21,8 @@ import CountryShapeView, { hasCountryShape } from '../components/CountryShapeVie
 import { playDingStreak, playWrong } from '../lib/audio';
 import HeatStreakBadge from '../components/HeatStreakBadge';
 import { useAuth } from '../context/AuthContext';
+import WorldMapView from '../components/WorldMapView';
+import { filterShapeQuizCountries } from '../lib/quizCountryFilters';
 
 const GOLD_PER_CORRECT = 15;
 const AUTO_ADVANCE_DELAY_MS = 2500;
@@ -46,6 +50,9 @@ export default function ShapeQuizScreen({ navigation }: Props) {
   const [answered, setAnswered] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showInfoModal, setShowInfoModal] = useState(false);
+  const [infoCountry, setInfoCountry] = useState<Country | null>(null);
+  const [modalFlagError, setModalFlagError] = useState(false);
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const currentIndexRef = useRef(0);
@@ -72,7 +79,7 @@ export default function ShapeQuizScreen({ navigation }: Props) {
           }
         }
         // Filter to countries that are large enough and have confirmed silhouette geometry.
-        const bigCountries = countries.filter((c) => c.area > 1000 && hasCountryShape(c.cca2));
+        const bigCountries = filterShapeQuizCountries(countries).filter((c) => hasCountryShape(c.cca2));
         if (bigCountries.length < 4) {
           throw new Error('Not enough silhouette-ready countries available.');
         }
@@ -138,6 +145,7 @@ export default function ShapeQuizScreen({ navigation }: Props) {
 
   function skipToNext() {
     if (!answered) return;
+    if (showInfoModal) return;
     if (autoAdvanceTimer.current) {
       clearTimeout(autoAdvanceTimer.current);
       autoAdvanceTimer.current = null;
@@ -179,6 +187,23 @@ export default function ShapeQuizScreen({ navigation }: Props) {
         useNativeDriver: true,
       }).start();
     });
+  }
+
+  function openCountryInfo() {
+    if (autoAdvanceTimer.current) {
+      clearTimeout(autoAdvanceTimer.current);
+      autoAdvanceTimer.current = null;
+    }
+    const question = questionsRef.current[currentIndexRef.current];
+    if (!question) return;
+    setModalFlagError(false);
+    setInfoCountry(question.country);
+    setShowInfoModal(true);
+  }
+
+  function closeInfoAndContinue() {
+    setShowInfoModal(false);
+    autoAdvanceTimer.current = setTimeout(advanceQuestion, 1500);
   }
 
   if (loading) {
@@ -245,6 +270,12 @@ export default function ShapeQuizScreen({ navigation }: Props) {
                 height={130}
                 color="#FFD700"
               />
+              {answered && (
+                <TouchableOpacity style={styles.infoBadge} onPress={openCountryInfo}>
+                  <Text style={styles.infoBadgeIcon}>ℹ️</Text>
+                  <Text style={styles.infoBadgeText}>Learn</Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             <View style={styles.answers}>
@@ -265,6 +296,65 @@ export default function ShapeQuizScreen({ navigation }: Props) {
             
           </Animated.View>
         </ScrollView>
+
+        <Modal
+          visible={showInfoModal}
+          transparent
+          animationType="slide"
+          onRequestClose={closeInfoAndContinue}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              {infoCountry && (
+                <>
+                  <View style={styles.modalHeader}>
+                    {infoCountry.flagUrl && !modalFlagError ? (
+                      <Image
+                        source={{ uri: infoCountry.flagUrl }}
+                        style={styles.modalFlag}
+                        resizeMode="contain"
+                        onError={() => setModalFlagError(true)}
+                      />
+                    ) : (
+                      <Text style={styles.modalFlagEmoji}>{cca2ToFlagEmoji(infoCountry.cca2)}</Text>
+                    )}
+                    <Text style={styles.modalTitle}>{infoCountry.name}</Text>
+                  </View>
+
+                  <WorldMapView
+                    ownedCountries={[infoCountry.cca2]}
+                    focusCountry={infoCountry.cca2}
+                    height={180}
+                    showNames={false}
+                  />
+
+                  <View style={styles.factsGrid}>
+                    <View style={styles.factItem}>
+                      <Text style={styles.factLabel}>Capital</Text>
+                      <Text style={styles.factValue}>{infoCountry.capital || 'N/A'}</Text>
+                    </View>
+                    <View style={styles.factItem}>
+                      <Text style={styles.factLabel}>Region</Text>
+                      <Text style={styles.factValue}>{infoCountry.region || 'N/A'}</Text>
+                    </View>
+                    <View style={styles.factItem}>
+                      <Text style={styles.factLabel}>Population</Text>
+                      <Text style={styles.factValue}>{infoCountry.population.toLocaleString()}</Text>
+                    </View>
+                    <View style={styles.factItem}>
+                      <Text style={styles.factLabel}>Area</Text>
+                      <Text style={styles.factValue}>{infoCountry.area.toLocaleString()} km²</Text>
+                    </View>
+                  </View>
+
+                  <TouchableOpacity style={styles.closeButton} onPress={closeInfoAndContinue}>
+                    <Text style={styles.closeButtonText}>Got it!</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+          </View>
+        </Modal>
       </View>
     </TouchableWithoutFeedback>
   );
@@ -318,7 +408,24 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#2a2a4e',
     marginBottom: 20,
+    position: 'relative',
   },
+  infoBadge: {
+    position: 'absolute',
+    bottom: 10,
+    right: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1a1a2e',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FFD700',
+    gap: 6,
+  },
+  infoBadgeIcon: { fontSize: 13 },
+  infoBadgeText: { color: '#FFD700', fontSize: 11, fontWeight: 'bold' },
   answers: { gap: 4 },
   tapHint: {
     color: '#555',
@@ -326,4 +433,39 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 16,
   },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    backgroundColor: '#1a1a2e',
+    borderRadius: 20,
+    padding: 24,
+    gap: 14,
+    borderWidth: 1,
+    borderColor: '#2a2a4e',
+  },
+  modalHeader: { alignItems: 'center', gap: 8 },
+  modalFlag: { width: 72, height: 48, borderRadius: 6 },
+  modalFlagEmoji: { fontSize: 48 },
+  modalTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
+  factsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  factItem: {
+    width: '47%',
+    backgroundColor: '#0a0a1a',
+    borderRadius: 10,
+    padding: 12,
+    gap: 4,
+  },
+  factLabel: { color: '#888', fontSize: 11, textTransform: 'uppercase' },
+  factValue: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  closeButton: {
+    backgroundColor: '#FFD700',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  closeButtonText: { color: '#0a0a1a', fontWeight: 'bold', fontSize: 16 },
 });

@@ -47,7 +47,7 @@ const VIEWBOX_W = 800;
 const VIEWBOX_H = 600;
 const screenW = Dimensions.get('window').width;
 const RATIO = VIEWBOX_W / screenW;
-const FOCUS_ANIMATION_MS = 520;
+const FOCUS_ANIMATION_MS = 780;
 
 const CountryLabel = React.memo(({ f, showNames }: { f: any, showNames: boolean }) => {
   const [cx, cy] = f.centroid || [0, 0];

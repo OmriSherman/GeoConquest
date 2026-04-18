@@ -37,6 +37,7 @@ const TerrorIcon = ({ size = 48 }) => (
 
 const QUIZZES = [
   {
+    key: 'flag_standard',
     screen: 'FlagQuiz' as const,
     title: 'Flag Quiz',
     description: 'Identify the country from its flag',
@@ -45,6 +46,17 @@ const QUIZZES = [
     emoji: '🏴',
   },
   {
+    key: 'flag_easy',
+    screen: 'FlagQuiz' as const,
+    params: { mode: 'easy' as const },
+    title: 'Easy Flags',
+    description: 'Flags only, focused on easier and more familiar countries',
+    goldAmount: '10',
+    goldSuffix: '/ 5 XP per correct',
+    emoji: '🏴',
+  },
+  {
+    key: 'shape_standard',
     screen: 'ShapeQuiz' as const,
     title: 'Shape Quiz',
     description: 'Recognize countries by their silhouette',
@@ -53,6 +65,7 @@ const QUIZZES = [
     emoji: '🗺️',
   },
   {
+    key: 'capitals_standard',
     screen: 'CapitalsQuiz' as const,
     title: 'Capitals Quiz',
     description: 'Match the capital city to its country',
@@ -61,6 +74,7 @@ const QUIZZES = [
     emoji: '🏛️',
   },
   {
+    key: 'borders_standard',
     screen: 'BordersQuiz' as const,
     title: 'Borders Quiz',
     description: 'Find the country that does NOT share a border',
@@ -69,6 +83,7 @@ const QUIZZES = [
     emoji: '🧩',
   },
   {
+    key: 'trail_standard',
     screen: 'TrailQuiz' as const,
     title: 'Trail Quiz',
     description: 'Hop across neighboring countries by name/capital',
@@ -77,6 +92,7 @@ const QUIZZES = [
     emoji: '🧭',
   },
   {
+    key: 'millionaire_standard',
     screen: 'MillionaireQuiz' as const,
     title: 'Millionaire Quiz',
     description: 'Answer 15 questions for the grand prize!',
@@ -243,7 +259,7 @@ export default function QuizMenuScreen({ navigation }: Props) {
 
           return (
             <QuizCard
-              key={quiz.screen}
+              key={quiz.key}
               title={quiz.title}
               description={quiz.description}
               goldRewardParts={{ amount: quiz.goldAmount, suffix: quiz.goldSuffix }}
@@ -289,9 +305,9 @@ export default function QuizMenuScreen({ navigation }: Props) {
                     message: 'You need at least 1 ticket to play the Millionaire Quiz.\n\nEarn tickets from daily rewards or buy them in Shop → Items.',
                   });
                 } else {
-                  navigation.navigate(quiz.screen);
-                }
-              }}
+                    navigation.navigate(quiz.screen as any, quiz.params);
+                  }
+                }}
             />
           );
         })}

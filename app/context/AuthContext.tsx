@@ -194,6 +194,7 @@ interface AuthContextValue {
   unlockedItems: Set<string>;
   refreshUnlockedItems: () => Promise<void>;
   refreshQuestStatus: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
   spendTicket: () => Promise<void>;
   addTickets: (amount: number) => Promise<void>;
   purchaseTicket: (cost: number) => Promise<void>;
@@ -374,6 +375,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setDailyRewardAvailable(false);
       }
     }
+  }
+
+  async function refreshProfile() {
+    const userId = profile?.id ?? session?.user?.id;
+    if (!userId) return;
+    await fetchProfile(userId);
   }
 
 
@@ -1132,6 +1139,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         unlockedItems,
         refreshUnlockedItems,
         refreshQuestStatus,
+        refreshProfile,
         spendTicket,
         addTickets,
         purchaseTicket,

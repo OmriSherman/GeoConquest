@@ -125,7 +125,7 @@ export type MainTabParamList = {
 
 export type QuizStackParamList = {
   QuizMenu: undefined;
-  FlagQuiz: undefined;
+  FlagQuiz: { mode?: 'standard' | 'easy' } | undefined;
   ShapeQuiz: undefined;
   BordersQuiz: undefined;
   CapitalsQuiz: undefined;
@@ -137,6 +137,7 @@ export type QuizStackParamList = {
     total: number;
     goldEarned: number;
     quizType: QuizType;
+    quizMode?: 'standard' | 'easy';
     elapsedSeconds?: number;
   };
 };

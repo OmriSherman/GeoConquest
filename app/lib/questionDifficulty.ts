@@ -1,5 +1,6 @@
 import { Country, MillionaireQuestion, MILLIONAIRE_GOLD_LADDER } from '../types';
 import { getCca3ToCca2Map } from './countryData';
+import { isShapeQuizEligibleCountry } from './quizCountryFilters';
 
 // ─── Difficulty Tiers ─────────────────────────────────────────────────────────
 
@@ -227,8 +228,7 @@ export function buildShapeQuestion(
   difficulty: number,
   goldReward: number,
 ): MillionaireQuestion {
-  // Try to use distractors that also have visible shapes
-  const validDistractors = all.filter(c => c.area > 1000);
+  const validDistractors = all.filter(isShapeQuizEligibleCountry);
   const distractors = getSmartDistractors(country, validDistractors, difficulty, 3);
   const optionCountries = [...distractors, country].sort(() => Math.random() - 0.5);
   const correctIndex = optionCountries.findIndex((o) => o.cca2 === country.cca2);
@@ -305,6 +305,7 @@ export function buildSingleMillionaireQuestion(
     }
 
     if (type === 'shape') {
+      if (!isShapeQuizEligibleCountry(subject)) continue;
       question = buildShapeQuestion(subject, all, diff, goldReward);
       usedCca2.add(subject.cca2);
       break;
@@ -396,11 +397,7 @@ export function buildNightmareQuestions(all: Country[]): MillionaireQuestion[] {
   for (let d = 1; d <= 10; d++) buckets[d] = [];
   for (const { country, diff } of withDiff) buckets[diff].push(country);
 
-  // Countries without shape data in world-atlas TopoJSON — same set as ShapeQuizScreen
-  const NO_SHAPE = new Set(['GP', 'MQ', 'YT', 'RE', 'PM', 'BL', 'MF', 'CX', 'CC', 'HM', 'NF', 'CK', 'NU', 'TK', 'WF', 'AX', 'SJ', 'BV', 'TF', 'UM', 'GG', 'JE', 'IM', 'GI', 'FK', 'FJ']);
-  // Pool of all countries that have a valid renderable shape — any difficulty
-  const shapeEligible = all.filter(c => c.area > 1000 && !NO_SHAPE.has(c.cca2));
-  // Separate bucket for shape subjects so any eligible country can appear (rotated)
+  const shapeEligible = all.filter(isShapeQuizEligibleCountry);
   const shapeBuckets: Record<number, Country[]> = {};
   for (let d = 1; d <= 10; d++) shapeBuckets[d] = [];
   for (const c of shapeEligible) {

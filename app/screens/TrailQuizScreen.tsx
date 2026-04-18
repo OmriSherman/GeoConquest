@@ -19,6 +19,7 @@ import AnswerButton from '../components/AnswerButton';
 import WorldMapView from '../components/WorldMapView';
 import { playDingStreak, playWrong } from '../lib/audio';
 import HeatStreakBadge from '../components/HeatStreakBadge';
+import { filterQuizCountries } from '../lib/quizCountryFilters';
 
 const GOLD_PER_CORRECT = 22;
 const MAX_LIVES = 3;
@@ -191,7 +192,7 @@ export default function TrailQuizScreen({ navigation }: Props) {
           }
         }
 
-        const eligible = countries.filter((c) =>
+        const eligible = filterQuizCountries(countries).filter((c) =>
           !!c.capital &&
           c.capital.trim().length > 0 &&
           Number(c.area || 0) >= MIN_TRAIL_COUNTRY_AREA_KM2 &&

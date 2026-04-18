@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { StackNavigationProp } from '@react-navigation/stack';
+import { RouteProp } from '@react-navigation/native';
 import { QuizStackParamList, QuizQuestion, Country, cca2ToFlagEmoji } from '../types';
 import { buildQuizQuestions, fetchCountries, getOfflineFlagCountries, getCca3ToCca2Map } from '../lib/countryData';
 import { useGame } from '../context/GameContext';
@@ -21,19 +22,22 @@ import WorldMapView from '../components/WorldMapView';
 import { playDingStreak, playWrong } from '../lib/audio';
 import HeatStreakBadge from '../components/HeatStreakBadge';
 import { useAuth } from '../context/AuthContext';
+import { buildEasyFlagQuizPool, filterQuizCountries } from '../lib/quizCountryFilters';
 
 const GOLD_PER_CORRECT = 10;
 const AUTO_ADVANCE_DELAY_MS = 2500;
 
 type Props = {
   navigation: StackNavigationProp<QuizStackParamList, 'FlagQuiz'>;
+  route: RouteProp<QuizStackParamList, 'FlagQuiz'>;
 };
 
 type AnswerState = 'default' | 'correct' | 'wrong' | 'disabled';
 
-export default function FlagQuizScreen({ navigation }: Props) {
+export default function FlagQuizScreen({ navigation, route }: Props) {
   const { addGold } = useGame();
   const { profile, effectiveMaxTurns } = useAuth();
+  const quizMode = route.params?.mode ?? 'standard';
   
   const TOTAL_QUESTIONS = effectiveMaxTurns;
 
@@ -73,8 +77,9 @@ export default function FlagQuizScreen({ navigation }: Props) {
           // Network unavailable — fall back to bundled flag data (free for all users)
           countries = getOfflineFlagCountries();
         }
-        const withoutAF = countries.filter(c => c.cca2 !== 'AF');
-        const q = buildQuizQuestions(withoutAF, TOTAL_QUESTIONS);
+        const eligibleCountries = filterQuizCountries(countries).filter((c) => c.cca2 !== 'AF');
+        const questionPool = quizMode === 'easy' ? buildEasyFlagQuizPool(eligibleCountries) : eligibleCountries;
+        const q = buildQuizQuestions(questionPool, TOTAL_QUESTIONS);
         // Prefetch flag images (no-op if flagUrl is empty in offline mode)
         await Promise.allSettled(q.filter(q => q.country.flagUrl).map(q => Image.prefetch(q.country.flagUrl)));
         setQuestions(q);
@@ -94,7 +99,7 @@ export default function FlagQuizScreen({ navigation }: Props) {
       if (autoAdvanceTimer.current) clearTimeout(autoAdvanceTimer.current);
       if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current);
     };
-  }, []);
+  }, [TOTAL_QUESTIONS, profile?.is_conquerer, quizMode]);
 
   function handleAnswer(selectedIndex: number) {
     if (answered) return;
@@ -159,6 +164,7 @@ export default function FlagQuizScreen({ navigation }: Props) {
         total: TOTAL_QUESTIONS,
         goldEarned: goldRef.current,
         quizType: 'flag',
+        quizMode,
         elapsedSeconds: Math.floor((Date.now() - quizStartRef.current) / 1000),
       });
       return;
@@ -243,7 +249,9 @@ export default function FlagQuizScreen({ navigation }: Props) {
 
           {/* Question */}
           <Animated.View style={[styles.questionArea, { opacity: fadeAnim }]}>
-            <Text style={styles.prompt}>Which country does this flag belong to?</Text>
+            <Text style={styles.prompt}>
+              {quizMode === 'easy' ? 'Which easy-country flag is this?' : 'Which country does this flag belong to?'}
+            </Text>
 
             <View style={styles.flagContainer}>
               {question.country.flagUrl && !flagLoadError ? (
