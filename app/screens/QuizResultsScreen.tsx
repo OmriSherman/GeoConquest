@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Image, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, Easing, Image, Modal, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { View as FallbackView } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
@@ -13,6 +13,8 @@ import {
   playDevilLaugh,
   playXpGain,
   playPurchase,
+  playGauntletTier,
+  playGauntletFail,
 } from '../lib/audio';
 import { recordQuizCompletion } from './AchievementsScreen';
 import { useToast } from '../context/ToastContext';
@@ -22,6 +24,8 @@ import { useGame } from '../context/GameContext';
 import { ACHIEVEMENTS_DATA } from '../lib/achievementsData';
 import { calcQuizXP, getLevelInfo } from '../lib/xpSystem';
 import TopFallConfetti from '../components/TopFallConfetti';
+import AvatarDisplay from '../components/AvatarDisplay';
+import AnalogCountdownClock from '../components/AnalogCountdownClock';
 import { showRewardedAd } from '../lib/rewardedAds';
 import { supabase } from '../lib/supabase';
 
@@ -43,6 +47,7 @@ const SHARE_QUIZ_ICON_IMAGES: Record<string, any> = {
   trail: require('../../assets/avatars/compass.png'),
   millionaire: require('../../assets/avatars/gold_bag.png'),
   nightmare: require('../../assets/avatars/skull.png'),
+  gauntlet: require('../../assets/avatars/flame.png'),
 };
 const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.geoconquest.app';
 
@@ -73,11 +78,13 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
   const { score, total, goldEarned, quizType, elapsedSeconds } = route.params;
   const percentage = Math.round((score / total) * 100);
   const { showToast } = useToast();
-  const { user, addXP, addGold, profile, incrementQuizCount, nextQuizBoostActive, setNextQuizBoostActive, consumeNextQuizBoost } = useAuth();
+  const { user, addXP, addGold, profile, incrementQuizCount, nextQuizBoostActive, setNextQuizBoostActive, consumeNextQuizBoost, refundMap, maps, deductMap, mapsNextRefillAt, mapsAdsUsedToday, grantAdMap, unlockedItems } = useAuth();
   const { showAlert } = useAlert();
   const { triggerQuestToast } = useGame();
 
   const tickets = profile?.tickets ?? 0;
+  const isConqueror = profile?.is_conquerer ?? false;
+  const skipMapCheck = isConqueror || unlockedItems.has('upgrade_infinite_maps');
 
   const [xpEarned, setXpEarned] = useState(0);
   const [xpTier, setXpTier] = useState<1 | 1.5 | 2>(1);
@@ -87,8 +94,15 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
   const [levelBonusGold, setLevelBonusGold] = useState(0);
   const [showCoinBurst, setShowCoinBurst] = useState(false);
   const [coinBurstNonce, setCoinBurstNonce] = useState(0);
+  const [showMapsModal, setShowMapsModal] = useState(false);
+  const [mapsRemainingSeconds, setMapsRemainingSeconds] = useState(0);
+  const [mapsActionLoading, setMapsActionLoading] = useState(false);
 
-  const [displayGoldGain, setDisplayGoldGain] = useState(goldEarned);
+  const MAPS_REFILL_SECONDS = 5400;
+  const MAX_ADS_PER_DAY = 3;
+  const MAX_MAPS = 5;
+
+  const [displayGoldGain, setDisplayGoldGain] = useState(goldEarned < 0 ? 0 : goldEarned);
   const initialGoldTotal = Math.max(0, (profile?.gold_balance ?? 0) - goldEarned);
   const initialXpTotal = profile?.xp ?? 0;
   const [displayGoldTotal, setDisplayGoldTotal] = useState(initialGoldTotal);
@@ -116,6 +130,7 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
     trail: 'Trail Quiz',
     millionaire: 'Millionaire Quiz',
     nightmare: 'Nightmare Mode',
+    gauntlet: 'The Gauntlet',
   };
 
   function buildShareMessage() {
@@ -234,6 +249,7 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
     const start = displayGoldRef.current;
     const target = Math.max(0, start + delta);
     const gainStart = Math.max(0, delta);
+    const penaltyTarget = Math.abs(Math.min(0, delta));
 
     await animateCounterValue(start, target, 1100, (value) => {
       displayGoldRef.current = value;
@@ -241,6 +257,9 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
       if (delta > 0) {
         const transferred = Math.max(0, value - start);
         setDisplayGoldGain(Math.max(0, gainStart - transferred));
+      } else {
+        const transferred = Math.max(0, start - value);
+        setDisplayGoldGain(-Math.min(penaltyTarget, transferred));
       }
     });
 
@@ -296,7 +315,13 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
       return;
     }
 
-    if (percentage >= 85) await playSuccess();
+    if (quizType === 'gauntlet') {
+      if (score >= 11) await playGauntletTier();
+      else await playGauntletFail();
+      return;
+    }
+
+    if (percentage >= 70) await playSuccess();
     else if (percentage >= 30) await playFail();
     else await playBoo();
   }
@@ -362,6 +387,13 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
 
       if (newlyCompletedSpeedDemon || newlyCompletedNightmare || newlyCompletedCapitalsMastery) {
         setShowConfetti(true);
+      }
+
+      if (percentage === 100 && quizType !== 'millionaire' && !isConqueror) {
+        try {
+          await refundMap();
+          showToast({ title: 'Map Returned!', message: 'Perfect score — your map was refunded.' });
+        } catch { /* silent — refund is a bonus */ }
       }
 
       const xp = calcQuizXP(quizType, score, total, newlyCompletedNightmare);
@@ -432,7 +464,7 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
         await addGold(goldEarned);
       }
 
-      setDisplayGoldGain(quizGoldDelta);
+      setDisplayGoldGain(quizGoldDelta > 0 ? quizGoldDelta : 0);
 
       await playResultSound(millionairePerfectWin);
       await animateXpDelta(effectiveXp, levelUpGoldBonus, () => {
@@ -484,6 +516,47 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
     };
   }, []);
 
+  useEffect(() => {
+    if (!mapsNextRefillAt) { setMapsRemainingSeconds(0); return; }
+    function update() {
+      setMapsRemainingSeconds(Math.max(0, Math.floor((mapsNextRefillAt!.getTime() - Date.now()) / 1000)));
+    }
+    update();
+    const interval = setInterval(update, 1000);
+    return () => clearInterval(interval);
+  }, [mapsNextRefillAt]);
+
+  function startQuiz() {
+    if (quizType === 'flag') navigation.replace('FlagQuiz');
+    else if (quizType === 'shape') navigation.replace('ShapeQuiz');
+    else if (quizType === 'borders') navigation.replace('BordersQuiz');
+    else if (quizType === 'capitals') navigation.replace('CapitalsQuiz');
+    else if (quizType === 'trail') navigation.replace('TrailQuiz' as any);
+    else if (quizType === 'nightmare') navigation.replace('NightmareQuiz' as any);
+    else if (quizType === 'gauntlet') navigation.replace('Gauntlet' as any);
+  }
+
+  async function handleWatchAdForMap() {
+    setMapsActionLoading(true);
+    try {
+      const { rewarded } = await showRewardedAd();
+      if (!rewarded) {
+        showAlert({ title: 'Ad Unavailable', message: 'Could not load a rewarded ad right now. Please try again.' });
+        return;
+      }
+      await grantAdMap();
+      const ok = await deductMap();
+      if (ok) {
+        setShowMapsModal(false);
+        startQuiz();
+      }
+    } catch (err: any) {
+      showAlert({ title: 'Error', message: err.message });
+    } finally {
+      setMapsActionLoading(false);
+    }
+  }
+
   function getRating(): { imageSource: any; label: string } {
     if (quizType === 'nightmare') {
       if (percentage === 100) return { imageSource: require('../../assets/avatars/skull.png'), label: 'Well played..' };
@@ -494,6 +567,15 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
       if (score === total) return { imageSource: require('../../assets/avatars/gold_bag.png'), label: 'Flawless Victory!' };
       if (score > 5) return { imageSource: require('../../assets/avatars/cringe.png'), label: 'Not good enough' };
       return { imageSource: require('../../assets/avatars/lmao.png'), label: 'No way you wasted a ticket for this..' };
+    }
+
+    if (quizType === 'gauntlet') {
+      if (score >= 100) return { imageSource: require('../../assets/avatars/flame.png'), label: 'Void Walker' };
+      if (score >= 51)  return { imageSource: require('../../assets/avatars/flame.png'), label: 'Inferno Survivor' };
+      if (score >= 26)  return { imageSource: require('../../assets/avatars/trophy.png'), label: 'On Fire!' };
+      if (score >= 11)  return { imageSource: require('../../assets/avatars/bullseye.png'), label: 'Getting Warmer' };
+      if (score >= 5)   return { imageSource: require('../../assets/avatars/hand_shake.png'), label: 'Keep Training' };
+      return { imageSource: require('../../assets/avatars/lmao.png'), label: 'The Gauntlet Broke You' };
     }
 
     if (percentage === 100) return { imageSource: require('../../assets/avatars/trophy.png'), label: 'Well played!' };
@@ -507,6 +589,7 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
   const shareBadgeSource = rating.imageSource;
   const shareQuizIcon = SHARE_QUIZ_ICON_IMAGES[quizType] ?? require('../../assets/icon.png');
   const isNightmare = quizType === 'nightmare';
+  const isGauntlet = quizType === 'gauntlet';
   const animatedLevelInfo = getLevelInfo(displayXpTotal);
   const xpProgressPct =
     animatedLevelInfo.xpForNextLevel > 0
@@ -517,12 +600,15 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
   const showGoldTransfer = displayGoldGain !== 0;
 
   return (
-    <View style={[styles.container, isNightmare && styles.containerNightmare]}>
+    <View style={[styles.container, isNightmare && styles.containerNightmare, isGauntlet && styles.containerGauntlet]}>
       <Image source={rating.imageSource} style={styles.ratingImage} resizeMode="contain" />
-      <Text style={[styles.rating, isNightmare && styles.ratingNightmare]}>{rating.label}</Text>
+      <Text style={[styles.rating, isNightmare && styles.ratingNightmare, isGauntlet && styles.ratingGauntlet]}>{rating.label}</Text>
 
-      <ViewShot ref={cardCaptureRef} style={[styles.card, isNightmare && styles.cardNightmare]}>
-        <Row label="Score" value={`${percentage}%`} />
+      <ViewShot ref={cardCaptureRef} style={[styles.card, isNightmare && styles.cardNightmare, isGauntlet && styles.cardGauntlet]}>
+        {isGauntlet
+          ? <Row label="Score" value={`${score}`} highlight />
+          : <Row label="Score" value={`${percentage}%`} />
+        }
 
         {elapsedSeconds != null && (
           <Row
@@ -536,7 +622,17 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
 
         <View style={styles.xpProgressSection}>
           <View style={styles.xpProgressHeader}>
-            <Text style={styles.rowLabel}>Level {animatedLevelInfo.level}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              {profile?.avatar_emoji ? (
+                <AvatarDisplay
+                  avatarId={profile.avatar_emoji}
+                  avatarFlag={profile.avatar_flag ?? undefined}
+                  size={28}
+                  isConqueror={profile.is_conquerer ?? false}
+                />
+              ) : null}
+              <Text style={styles.rowLabel}>Level {animatedLevelInfo.level}</Text>
+            </View>
             <Text style={styles.rowValueSmall}>
               {animatedLevelInfo.xpIntoLevel} / {animatedLevelInfo.xpForNextLevel || 0} XP
             </Text>
@@ -558,16 +654,30 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
           label="Gold"
           valueNode={
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-              {showGoldTransfer ? (
+              {showGoldTransfer && displayGoldGain < 0 ? (
+                <>
+                  <Text style={[styles.rowValue, styles.rowValueHighlight]}>{displayGoldTotal.toLocaleString()}</Text>
+                  <Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 16, height: 16 }} resizeMode="contain" />
+                  <Text style={styles.rowValueSmall}>→</Text>
+                  <Text style={[styles.rowValue, styles.rowValueNegative]}>
+                    {displayGoldGain.toLocaleString()}
+                  </Text>
+                </>
+              ) : showGoldTransfer ? (
                 <>
                   <Text style={[styles.rowValue, displayGoldGain >= 0 ? styles.rowValueHighlight : styles.rowValueNegative]}>
                     {displayGoldGain > 0 ? `+${displayGoldGain.toLocaleString()}` : displayGoldGain.toLocaleString()}
                   </Text>
                   <Text style={styles.rowValueSmall}>→</Text>
+                  <Text style={[styles.rowValue, styles.rowValueHighlight]}>{displayGoldTotal.toLocaleString()}</Text>
+                  <Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 16, height: 16 }} resizeMode="contain" />
                 </>
-              ) : null}
-              <Text style={[styles.rowValue, styles.rowValueHighlight]}>{displayGoldTotal.toLocaleString()}</Text>
-              <Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 16, height: 16 }} resizeMode="contain" />
+              ) : (
+                <>
+                  <Text style={[styles.rowValue, styles.rowValueHighlight]}>{displayGoldTotal.toLocaleString()}</Text>
+                  <Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 16, height: 16 }} resizeMode="contain" />
+                </>
+              )}
             </View>
           }
         />
@@ -576,6 +686,18 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
       {/* Hidden capture card for sharing only (not shown in summary UI) */}
       <View style={styles.shareCaptureContainer} pointerEvents="none">
         <ViewShot ref={shareCaptureRef} style={styles.shareCaptureCard}>
+          {/* Player identity — top-left */}
+          {profile?.avatar_emoji ? (
+            <View style={styles.sharePlayerRow}>
+              <AvatarDisplay
+                avatarId={profile.avatar_emoji}
+                avatarFlag={profile.avatar_flag ?? undefined}
+                size={32}
+                isConqueror={profile.is_conquerer ?? false}
+              />
+              <Text style={styles.sharePlayerName} numberOfLines={1}>{profile.username ?? 'Explorer'}</Text>
+            </View>
+          ) : null}
           <View style={styles.shareCaptureBrandRow}>
             <Image source={require('../../assets/icon.png')} style={styles.shareCaptureBrandLogo} resizeMode="contain" />
           </View>
@@ -586,8 +708,7 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
             </Text>
           </View>
           <View style={styles.shareCaptureStoreRow}>
-            <Image source={require('../../assets/icon.png')} style={styles.shareCaptureStoreIcon} resizeMode="contain" />
-            <Text style={styles.shareCaptureStoreText}>Live on Google Play</Text>
+            <Text style={styles.shareCaptureStoreText}>Download Geo Conquest</Text>
           </View>
           <Image source={shareBadgeSource} style={styles.shareCaptureHero} resizeMode="contain" />
           <Text style={styles.shareCaptureQuiz}>{QUIZ_LABELS[quizType] ?? quizType}</Text>
@@ -596,8 +717,8 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
       </View>
 
       <TouchableOpacity
-        style={styles.playAgainButton}
-        onPress={() => {
+        style={[styles.playAgainButton, isNightmare && styles.playAgainButtonNightmare, isGauntlet && styles.playAgainButtonGauntlet]}
+        onPress={async () => {
           if (quizType === 'millionaire') {
             if (tickets < 1) {
               showAlert({
@@ -620,12 +741,18 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
             return;
           }
 
-          if (quizType === 'flag') navigation.replace('FlagQuiz');
-          else if (quizType === 'shape') navigation.replace('ShapeQuiz');
-          else if (quizType === 'borders') navigation.replace('BordersQuiz');
-          else if (quizType === 'capitals') navigation.replace('CapitalsQuiz');
-          else if (quizType === 'trail') navigation.replace('TrailQuiz' as any);
-          else if (quizType === 'nightmare') navigation.replace('NightmareQuiz' as any);
+          if (!skipMapCheck && maps <= 0) {
+            setShowMapsModal(true);
+            return;
+          }
+          if (!skipMapCheck) {
+            const ok = await deductMap();
+            if (!ok) {
+              setShowMapsModal(true);
+              return;
+            }
+          }
+          startQuiz();
         }}
       >
         <Text style={styles.playAgainText}>Play Again</Text>
@@ -642,6 +769,68 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
       </View>
 
       {showConfetti && <TopFallConfetti />}
+
+      {/* Out of Maps modal — mirrors the one in QuizMenuScreen */}
+      <Modal visible={showMapsModal} animationType="fade" transparent statusBarTranslucent onRequestClose={() => setShowMapsModal(false)}>
+        <TouchableOpacity style={styles.mapsModalOverlay} activeOpacity={1} onPress={() => setShowMapsModal(false)}>
+          <View style={styles.mapsModalContainer} onStartShouldSetResponder={() => true}>
+            <Text style={styles.mapsModalTitle}>Out of Maps!</Text>
+
+            {mapsRemainingSeconds > 0 && (
+              <View style={{ alignItems: 'center', marginBottom: 12 }}>
+                <AnalogCountdownClock
+                  remainingSeconds={mapsRemainingSeconds}
+                  totalSeconds={MAPS_REFILL_SECONDS}
+                  format="mm:ss"
+                  size={96}
+                  color="#FFD700"
+                />
+              </View>
+            )}
+
+            <Text style={styles.mapsModalSubtext}>Maps refill 1 every 60 minutes.</Text>
+
+            <TouchableOpacity
+              style={styles.mapsModalCard}
+              onPress={() => { setShowMapsModal(false); navigation.getParent()?.navigate('Premium' as any); }}
+              activeOpacity={0.8}
+            >
+              <Image source={require('../../assets/avatars/conqueror.png')} style={{ width: 72, height: 72, margin: -8 }} resizeMode="contain" />
+              <View style={styles.mapsModalCardInfo}>
+                <Text style={[styles.mapsModalCardTitle, { fontSize: 12 }]} numberOfLines={1}>Become a Conqueror</Text>
+                <Text style={styles.mapsModalCardDesc}>Unlimited maps — never wait again</Text>
+              </View>
+              <View style={[styles.mapsModalBadge, { backgroundColor: '#3a1a5a', borderColor: '#9b59b6' }]}>
+                <Text style={[styles.mapsModalBadgeText, { color: '#c084fc' }]}>Go</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.mapsModalCard, { borderColor: '#FFD700', opacity: (mapsAdsUsedToday ?? 0) >= MAX_ADS_PER_DAY || mapsActionLoading ? 0.5 : 1 }]}
+              onPress={handleWatchAdForMap}
+              disabled={(mapsAdsUsedToday ?? 0) >= MAX_ADS_PER_DAY || mapsActionLoading}
+              activeOpacity={0.8}
+            >
+              <Image source={require('../../assets/avatars/star2.png')} style={{ width: 72, height: 72, margin: -8 }} resizeMode="contain" />
+              <View style={styles.mapsModalCardInfo}>
+                <Text style={styles.mapsModalCardTitle}>Watch an Ad</Text>
+                <Text style={styles.mapsModalCardDesc}>
+                  {(mapsAdsUsedToday ?? 0) >= MAX_ADS_PER_DAY
+                    ? 'Come back tomorrow'
+                    : `Get 1 map · ${MAX_ADS_PER_DAY - (mapsAdsUsedToday ?? 0)} left today`}
+                </Text>
+              </View>
+              <View style={[styles.mapsModalBadge, { backgroundColor: '#302a10', borderColor: '#FFD700' }]}>
+                <Text style={styles.mapsModalBadgeText}>Watch</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.mapsModalCancel} onPress={() => setShowMapsModal(false)}>
+              <Text style={styles.mapsModalCancelText}>Wait</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       {levelUpTo !== null && (
         <Animated.View
@@ -741,13 +930,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#0a0a1a',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 22,
-    gap: 14,
+    padding: 16,
+    gap: 10,
   },
   containerNightmare: {
     backgroundColor: '#0d0000',
   },
-  ratingImage: { width: 120, height: 120 },
+  ratingImage: { width: 108, height: 108 },
   rating: { color: '#fff', fontSize: 28, fontWeight: 'bold' },
   ratingNightmare: { color: '#ff8888', fontStyle: 'italic' },
   card: {
@@ -763,11 +952,34 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a0000',
     borderColor: '#ff4444',
   },
+  containerGauntlet: {
+    backgroundColor: '#0c0500',
+  },
+  cardGauntlet: {
+    backgroundColor: '#180a00',
+    borderColor: '#ff6b3555',
+  },
+  ratingGauntlet: {
+    color: '#ff6b35',
+  },
   shareCaptureContainer: {
     position: 'absolute',
     left: -1200,
     top: -1200,
     width: 360,
+  },
+  sharePlayerRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  sharePlayerName: {
+    color: '#e2e8f0',
+    fontSize: 13,
+    fontWeight: '700',
+    flex: 1,
   },
   shareCaptureCard: {
     width: 340,
@@ -908,6 +1120,12 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
   },
+  playAgainButtonNightmare: {
+    backgroundColor: '#e05353',
+  },
+  playAgainButtonGauntlet: {
+    backgroundColor: '#ff6b35',
+  },
   playAgainText: { color: '#0a0a1a', fontWeight: 'bold', fontSize: 17 },
   bottomRow: {
     flexDirection: 'row',
@@ -951,4 +1169,66 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   shareText: { color: '#b7d4ff', fontSize: 15, fontWeight: '600' },
+  // Out of Maps modal
+  mapsModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 24,
+  },
+  mapsModalContainer: {
+    backgroundColor: '#0d0d1f',
+    borderRadius: 20,
+    padding: 12,
+    width: '100%',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#2a2a4e',
+  },
+  mapsModalTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  mapsModalSubtext: {
+    color: '#888',
+    fontSize: 13,
+    marginBottom: 4,
+  },
+  mapsModalCard: {
+    backgroundColor: '#1a0a2e',
+    borderRadius: 12,
+    padding: 2,
+    borderWidth: 1,
+    borderColor: '#9b59b6',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    overflow: 'hidden',
+  },
+  mapsModalCardInfo: { flex: 1 },
+  mapsModalCardTitle: { color: '#fff', fontSize: 15, fontWeight: 'bold' },
+  mapsModalCardDesc: { color: '#888', fontSize: 12, marginTop: 2 },
+  mapsModalBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginRight: 8,
+  },
+  mapsModalBadgeText: { color: '#FFD700', fontWeight: 'bold' },
+  mapsModalCancel: {
+    backgroundColor: '#1a1a2e',
+    borderRadius: 12,
+    paddingVertical: 13,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#2a2a4e',
+    marginTop: 2,
+  },
+  mapsModalCancelText: { color: '#888', fontSize: 14, fontWeight: '600' },
 });

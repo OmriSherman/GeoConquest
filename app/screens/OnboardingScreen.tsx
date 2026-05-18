@@ -240,6 +240,10 @@ export default function OnboardingScreen() {
               ))}
             </View>
 
+            <Text style={{ color: '#666', fontSize: 11, textAlign: 'center', marginTop: 4 }}>
+              Not feeling it? Unlock 50+ more characters in the Avatar Shop anytime.
+            </Text>
+
             <View style={styles.navRow}>
               <TouchableOpacity style={styles.backButton} onPress={() => setStep('username')}>
                 <Text style={styles.backButtonText}>← Back</Text>

@@ -16,7 +16,7 @@ export function getLevelInfo(totalXP: number): {
 } {
   let level = 1;
   let remaining = totalXP;
-  while (level < 100) {
+  while (true) {
     const needed = xpToNextLevel(level);
     if (remaining < needed) break;
     remaining -= needed;
@@ -25,7 +25,7 @@ export function getLevelInfo(totalXP: number): {
   return {
     level,
     xpIntoLevel: remaining,
-    xpForNextLevel: level < 100 ? xpToNextLevel(level) : 0,
+    xpForNextLevel: xpToNextLevel(level),
   };
 }
 
@@ -57,6 +57,10 @@ export function calcQuizXP(
 ): number {
   if (quizType === 'nightmare') {
     return isFirstNightmareWin ? 20000 : 0;
+  }
+
+  if (quizType === 'gauntlet') {
+    return score * 30;
   }
 
   if (quizType === 'millionaire') {

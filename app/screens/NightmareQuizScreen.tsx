@@ -21,7 +21,6 @@ import {
 } from '../types';
 import { fetchCountries } from '../lib/countryData';
 import { buildNightmareQuestions } from '../lib/questionDifficulty';
-import { useGame } from '../context/GameContext';
 import { useAuth } from '../context/AuthContext';
 import AnswerButton from '../components/AnswerButton';
 import CountryShapeView from '../components/CountryShapeView';
@@ -43,8 +42,7 @@ type Props = {
 type AnswerState = 'default' | 'correct' | 'wrong' | 'disabled';
 
 export default function NightmareQuizScreen({ navigation }: Props) {
-  const { addGold } = useGame();
-  const { addGold: deductGold, profile } = useAuth();
+  const { addGold, profile } = useAuth();
 
   const [allCountries, setAllCountries] = useState<Country[]>([]);
   const [questions, setQuestions] = useState<MillionaireQuestion[]>([]);
@@ -104,7 +102,7 @@ export default function NightmareQuizScreen({ navigation }: Props) {
     const lossCount = parseInt(stored ?? '0', 10);
     const toll = 200 + lossCount * 20;
     await AsyncStorage.setItem(NIGHTMARE_LOSS_KEY, String(lossCount + 1));
-    deductGold(-toll);
+    await addGold(-toll);
     navigation.replace('QuizResults', {
       score: currentIndexRef.current,
       total: TOTAL_QUESTIONS,
@@ -191,7 +189,7 @@ export default function NightmareQuizScreen({ navigation }: Props) {
 
   // ── Answer handling ────────────────────────────────────────────────────────
 
-  function handleAnswer(selectedIndex: number) {
+  async function handleAnswer(selectedIndex: number) {
     if (answered) return;
     stopTimer();
     setAnswered(true);
@@ -216,7 +214,7 @@ export default function NightmareQuizScreen({ navigation }: Props) {
 
       // Final question — win!
       if (idx === TOTAL_QUESTIONS - 1) {
-        addGold(PRIZE_GOLD);
+        await addGold(PRIZE_GOLD);
         setConfettiActive(true);
         setShowWin(true);
         return;
@@ -288,7 +286,7 @@ export default function NightmareQuizScreen({ navigation }: Props) {
 
   const question = questions[currentIndex];
   const timerPct = timeLeft / TIMER_SECONDS;
-  const timerColor = timeLeft <= 3 ? '#f44336' : timeLeft <= 6 ? '#FF9800' : '#FFD700';
+  const timerColor = '#ff4444';
 
   return (
     <View style={styles.container}>

@@ -20,6 +20,10 @@ export interface Profile {
   referral_bonus_claimed?: boolean;
   completed_speed_detective?: boolean;
   completed_ground_invasion?: boolean;
+  maps?: number;
+  maps_next_refill_at?: string | null;
+  maps_ad_used_at?: string | null;
+  maps_ad_count?: number;
   created_at: string;
 }
 
@@ -62,7 +66,7 @@ export interface OwnedCountry {
 
 // ─── Quiz ─────────────────────────────────────────────────────────────────────
 
-export type QuizType = 'flag' | 'shape' | 'borders' | 'millionaire' | 'capitals' | 'nightmare' | 'trail';
+export type QuizType = 'flag' | 'shape' | 'borders' | 'millionaire' | 'capitals' | 'nightmare' | 'trail' | 'gauntlet';
 
 export interface QuizResult {
   id: string;
@@ -99,6 +103,8 @@ export interface LeaderboardEntry {
   owned_area?: number;   // km²
   conquest_pct?: number; // % of Earth's land area owned
   is_conquerer?: boolean;
+  quiz_count?: number;
+  avatar_count?: number;
 }
 
 // ─── Navigation ───────────────────────────────────────────────────────────────
@@ -132,6 +138,7 @@ export type QuizStackParamList = {
   TrailQuiz: undefined;
   MillionaireQuiz: undefined;
   NightmareQuiz: undefined;
+  Gauntlet: undefined;
   QuizResults: {
     score: number;
     total: number;
@@ -175,4 +182,5 @@ export const GOLD_REWARDS: Record<QuizType, number> = {
   trail: 22,
   millionaire: 25, // base; scales per level
   nightmare: 50000,
+  gauntlet: 0,    // per-round gold is calculated dynamically in GauntletScreen
 };

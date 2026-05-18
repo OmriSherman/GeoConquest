@@ -17,6 +17,7 @@ export interface Achievement {
     rewardItems?: AchievementRewardItem[]; // multiple items (e.g. World Domination)
     isPremium?: boolean;                 // continent/premium quests
     hidden?: boolean;                    // shown as ??? until condition met
+    prerequisite?: string;               // quest id that must be claimed first
     // Returns [current, target]
     getProgress: (stats: {
         ownedCount: number;
@@ -31,6 +32,10 @@ export interface Achievement {
         ownedAvatarCount?: number;
         playerLevel?: number;
         quizCount?: number;
+        excellentScoreCount?: number;
+        trailBestScore?: number;
+        dailyFirstPlaceWins?: number;
+        perfectAccuracyCount?: number;
     }) => [number, number];
 }
 
@@ -96,7 +101,6 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
         rewardTickets: 10,
         getProgress: (stats) => [Math.min(stats.playerLevel ?? 1, 100), 100],
     },
-
     // ─── Countries ────────────────────────────────────────────────────────────
 
     {
@@ -297,6 +301,43 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
         rewardTickets: 3,
         getProgress: (stats) => [Math.min(stats.quizCount ?? 0, 50), 50],
     },
+    {
+        id: 'excellence_20',
+        title: 'Scholar of the World',
+        description: 'Score 85% or higher in 20 different quizzes.',
+        icon: 'png_hourglass',
+        rewardGold: 5000,
+        rewardTickets: 2,
+        getProgress: (stats) => [Math.min(stats.excellentScoreCount ?? 0, 20), 20],
+    },
+    {
+        id: 'trail_blazer_50',
+        title: 'Trail Blazer',
+        description: 'Answer 50 questions correctly in a single Trail Quiz run.',
+        icon: 'png_caravel',
+        rewardGold: 3000,
+        rewardTickets: 1,
+        getProgress: (stats) => [Math.min(stats.trailBestScore ?? 0, 50), 50],
+    },
+    {
+        id: 'perfect_accuracy_15',
+        title: 'Precision',
+        description: 'Achieve 100% accuracy in 15 different quizzes.',
+        icon: 'png_sextant',
+        rewardGold: 7000,
+        rewardTickets: 3,
+        getProgress: (stats) => [Math.min(stats.perfectAccuracyCount ?? 0, 15), 15],
+    },
+    {
+        id: 'daily_champion_5',
+        title: 'Champion of the Day',
+        description: 'Finish in 1st place in the daily challenge 5 times.',
+        icon: 'png_trophy',
+        rewardGold: 10000,
+        rewardTickets: 3,
+        rewardItem: { type: 'avatar', itemId: 'png_void_eye', label: 'Void Eye' },
+        getProgress: (stats) => [Math.min(stats.dailyFirstPlaceWins ?? 0, 5), 5],
+    },
 
     // ─── Collection ───────────────────────────────────────────────────────────
 
@@ -345,7 +386,7 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
         description: 'Well played, conqueror of the underworld.',
         icon: 'png_evil_vanquished',
         rewardGold: 25000,
-        rewardItem: { type: 'item', itemId: 'png_beast_mark', label: 'Beast Mark' },
+        rewardItem: { type: 'avatar', itemId: 'png_beast_mark', label: 'Beast Mark' },
         getProgress: (stats) => [stats.nightmareCompleted ? 1 : 0, 1],
     },
     {
@@ -375,5 +416,52 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
             const hasCosmicArmor = stats.ownedItems?.has('png_cosmic_armor') ? 1 : 0;
             return [hasDivineHighKing + hasCosmicArmor, 2];
         },
+    },
+
+    // ─── Transcendent Level Quests (locked until World Domination claimed) ────
+
+    {
+        id: 'level_150',
+        title: 'Ascended Mind',
+        description: 'Reach Level 150.',
+        icon: 'png_ascended_sigil',
+        prerequisite: 'complete_the_world',
+        rewardGold: 25000,
+        rewardTickets: 15,
+        rewardItem: { type: 'avatar', itemId: 'png_void_herald', label: 'Void Herald' },
+        getProgress: (stats) => [Math.min(stats.playerLevel ?? 1, 150), 150],
+    },
+    {
+        id: 'level_200',
+        title: 'Myth of the Atlas',
+        description: 'Reach Level 200.',
+        icon: 'png_atlas_rune',
+        prerequisite: 'complete_the_world',
+        rewardGold: 50000,
+        rewardTickets: 20,
+        rewardItem: { type: 'avatar', itemId: 'png_atlas_titan', label: 'Atlas Titan' },
+        getProgress: (stats) => [Math.min(stats.playerLevel ?? 1, 200), 200],
+    },
+    {
+        id: 'level_250',
+        title: 'Eternal Sovereign',
+        description: 'Reach Level 250.',
+        icon: 'png_eternal_seal',
+        prerequisite: 'complete_the_world',
+        rewardGold: 100000,
+        rewardTickets: 25,
+        rewardItem: { type: 'avatar', itemId: 'png_eternal_emperor', label: 'Eternal Emperor' },
+        getProgress: (stats) => [Math.min(stats.playerLevel ?? 1, 250), 250],
+    },
+    {
+        id: 'level_300',
+        title: 'Beyond the Veil',
+        description: 'Reach Level 300.',
+        icon: 'png_the_singularity',
+        prerequisite: 'complete_the_world',
+        rewardGold: 250000,
+        rewardTickets: 30,
+        rewardItem: { type: 'avatar', itemId: 'png_void_ascendant', label: 'Void Ascendant' },
+        getProgress: (stats) => [Math.min(stats.playerLevel ?? 1, 300), 300],
     },
 ];

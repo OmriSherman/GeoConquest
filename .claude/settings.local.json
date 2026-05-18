@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:api.github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "PowerShell(python --version)",
+      "PowerShell(python -c \"from PIL import Image; print\\('Pillow OK'\\)\")",
+      "PowerShell(python3 --version 2>$null)",
+      "PowerShell(py --version 2>$null)",
+      "PowerShell(node --version)",
+      "PowerShell(py -c \"from PIL import Image; print\\('Pillow OK'\\)\")",
+      "PowerShell(py -m pip install numpy --quiet)",
+      "PowerShell(Get-Command py -ErrorAction SilentlyContinue)",
+      "PowerShell(py --version 2>&1)",
+      "Bash(py scripts/split_avatars.py crucible penguin_admiral bear_berserker doom_paladin siege_lord sorceress farewell cold_judgment --cols 3 --rows 3 --bg \"#FF00FF\" --snippet)"
+    ]
+  }
+}

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Image, Modal, StyleSheet, Text, TouchableOpacity, View, ScrollView } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
+import { useFocusEffect } from '@react-navigation/native';
 import { QuizStackParamList } from '../types';
 import QuizCard from '../components/QuizCard';
 import DailyRewardModal from '../components/DailyRewardModal';
@@ -13,6 +14,11 @@ import { playPurchasedItem } from '../lib/audio';
 import * as Haptics from 'expo-haptics';
 import { showRewardedAd } from '../lib/rewardedAds';
 import { getLevelInfo } from '../lib/xpSystem';
+import AnalogCountdownClock from '../components/AnalogCountdownClock';
+
+const MAX_MAPS = 5;
+const MAPS_REFILL_SECONDS = 3600;
+const MAX_ADS_PER_DAY = 3;
 
 type Props = {
   navigation: StackNavigationProp<QuizStackParamList, 'QuizMenu'>;
@@ -87,16 +93,20 @@ const QUIZZES = [
 ];
 
 export default function QuizMenuScreen({ navigation }: Props) {
-  const { disabledUpgrades, unlockedItems, profile, purchaseTicket, purchaseTickets } = useAuth();
+  const { disabledUpgrades, unlockedItems, profile, purchaseTicket, purchaseTickets, maps, mapsNextRefillAt, mapsAdsUsedToday, deductMap, grantAdMap, syncMaps } = useAuth();
   const { showAlert } = useAlert();
   const { showToast } = useToast();
   const { questHighlightId } = useGame();
   const [showGoldShop, setShowGoldShop] = useState(false);
   const [showTicketModal, setShowTicketModal] = useState(false);
+  const [showMapsModal, setShowMapsModal] = useState(false);
+  const [mapsRemainingSeconds, setMapsRemainingSeconds] = useState(0);
   const [actionLoading, setActionLoading] = useState(false);
   const tickets = profile?.tickets ?? 0;
   const gold = profile?.gold_balance ?? 0;
   const playerLevel = getLevelInfo(profile?.xp ?? 0).level;
+  const isConqueror = profile?.is_conquerer ?? false;
+  const skipMapCheck = isConqueror || unlockedItems.has('upgrade_infinite_maps');
 
   const TICKET_COST = 2000;
   const PACK_COST = 8500;
@@ -164,17 +174,70 @@ export default function QuizMenuScreen({ navigation }: Props) {
     }
   }
 
+  async function handleWatchAdForMap() {
+    if (!profile) return;
+    setActionLoading(true);
+    try {
+      const { rewarded } = await showRewardedAd();
+      if (!rewarded) {
+        showAlert({ title: 'Ad Unavailable', message: 'Could not load a rewarded ad right now. Please try again.' });
+        return;
+      }
+      await grantAdMap();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast({ title: 'Map Added!', message: 'Enjoy your quiz.' });
+      setShowMapsModal(false);
+    } catch (err: any) {
+      showAlert({ title: 'Error', message: err.message });
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  useFocusEffect(
+    useCallback(() => {
+      syncMaps();
+    }, [])
+  );
+
+  useEffect(() => {
+    if (!mapsNextRefillAt) {
+      setMapsRemainingSeconds(0);
+      return;
+    }
+    function update() {
+      setMapsRemainingSeconds(Math.max(0, Math.floor((mapsNextRefillAt!.getTime() - Date.now()) / 1000)));
+    }
+    update();
+    const interval = setInterval(update, 1000);
+    return () => clearInterval(interval);
+  }, [mapsNextRefillAt]);
+
   function showRewardsInfo() {
     showAlert({
-      title: 'Multipliers',
+      title: 'How It Works',
       messageAlign: 'left',
+      contentNode: (
+        <View style={{ gap: 10, alignSelf: 'stretch' }}>
+          {[
+            { img: require('../../assets/avatars/ancient_map.png'), text: 'Each quiz costs 1 map. Get 100% correct and your map is refunded.' },
+            { img: require('../../assets/avatars/raffle_ticket.png'), text: 'The Millionaire Quiz costs 1 ticket instead of a map.' },
+            { img: require('../../assets/avatars/gold_bag.png'), text: 'Earn gold from quizzes, then spend it in the Shop to buy countries and expand your empire.' },
+          ].map(({ img, text }, i) => (
+            <View key={i} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+              <Image source={img} style={{ width: 20, height: 20, marginTop: 1 }} resizeMode="contain" />
+              <Text style={{ color: '#bbb', fontSize: 13, lineHeight: 19, flex: 1 }}>{text}</Text>
+            </View>
+          ))}
+        </View>
+      ),
       message:
-        'Gold scales by combo streak:\n\n' +
+        '— Gold multipliers —\n\n' +
         '×1.0 — combo 1\n' +
         '×1.1 — combo 2\n' +
         '×1.2 — combo 3\n' +
         '... (+10% per extra streak)\n\n' +
-        'XP scales by accuracy:\n\n' +
+        '— XP multipliers —\n\n' +
         '×1.0 — any score\n' +
         '×1.5 — above 85% accuracy\n' +
         '×2.0 — perfect score',
@@ -192,6 +255,18 @@ export default function QuizMenuScreen({ navigation }: Props) {
           </TouchableOpacity>
         </View>
         <View style={styles.headerRight}>
+          {!skipMapCheck && (
+            <TouchableOpacity onPress={() => setShowMapsModal(true)}>
+              <View style={[styles.currencyPill, maps === 0 && { borderColor: '#ff4444' }]}>
+                <View style={[styles.currencyIcon, { backgroundColor: '#0a1a0a' }]}>
+                  <Image source={require('../../assets/avatars/ancient_map.png')} style={{ width: 18, height: 18 }} resizeMode="contain" />
+                </View>
+                <Text style={[styles.currencyAmount, maps === 0 && { color: '#ff8888' }]}>
+                  {maps} / {MAX_MAPS}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity onPress={() => setShowTicketModal(true)}>
             <View style={styles.currencyPill}>
               <View style={[styles.currencyIcon, styles.currencyIconTicket]}>
@@ -199,14 +274,6 @@ export default function QuizMenuScreen({ navigation }: Props) {
               </View>
               <Text style={styles.currencyAmount}>{tickets}</Text>
               <Text style={styles.currencyPillPlus}>+</Text>
-            </View>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setShowGoldShop(true)}>
-            <View style={styles.currencyPill}>
-              <View style={styles.currencyIcon}>
-                <Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 20, height: 20 }} resizeMode="contain" />
-              </View>
-              <Text style={styles.currencyAmount}>{gold.toLocaleString()}</Text>
             </View>
           </TouchableOpacity>
         </View>
@@ -257,7 +324,7 @@ export default function QuizMenuScreen({ navigation }: Props) {
                 <Text style={{ color: '#8ab4ff', fontSize: 12, fontWeight: '700' }}>🔒 Lvl 50</Text>
               ) : undefined}
               shouldBlink={shouldBlink}
-              onPress={() => {
+              onPress={async () => {
                 if (isLocked) {
                   if (lockReason === 'trail_level') {
                     showAlert({
@@ -285,7 +352,15 @@ export default function QuizMenuScreen({ navigation }: Props) {
                     title: 'No Tickets',
                     message: 'You need at least 1 ticket to play the Millionaire Quiz.\n\nEarn tickets from daily rewards or buy them in Shop → Items.',
                   });
+                } else if (isMillionaire) {
+                  navigation.navigate(quiz.screen);
+                } else if (!skipMapCheck && maps <= 0) {
+                  setShowMapsModal(true);
                 } else {
+                  if (!skipMapCheck) {
+                    const ok = await deductMap();
+                    if (!ok) { setShowMapsModal(true); return; }
+                  }
                   navigation.navigate(quiz.screen);
                 }
               }}
@@ -304,8 +379,16 @@ export default function QuizMenuScreen({ navigation }: Props) {
               description={isUnlocked ? "Is it worth it...?" : ""}
               goldReward={isUnlocked ? "" : "???"}
               iconNode={<TerrorIcon />}
-              onPress={() => {
+              onPress={async () => {
                 if (isUnlocked) {
+                  if (!skipMapCheck && maps <= 0) {
+                    setShowMapsModal(true);
+                    return;
+                  }
+                  if (!skipMapCheck) {
+                    const ok = await deductMap();
+                    if (!ok) { setShowMapsModal(true); return; }
+                  }
                   navigation.navigate('NightmareQuiz' as any);
                 }
               }}
@@ -319,6 +402,43 @@ export default function QuizMenuScreen({ navigation }: Props) {
                 elevation: 10,
               }}
             />
+          );
+        })()}
+
+        {(() => {
+          return (
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={gauntletStyles.card}
+              onPress={async () => {
+                if (!skipMapCheck && maps <= 0) {
+                  setShowMapsModal(true);
+                  return;
+                }
+                if (!skipMapCheck) {
+                  const ok = await deductMap();
+                  if (!ok) { setShowMapsModal(true); return; }
+                }
+                navigation.navigate('Gauntlet' as any);
+              }}
+            >
+              <View style={gauntletStyles.badge}>
+                <Text style={gauntletStyles.badgeText}>ENDGAME MODE</Text>
+              </View>
+              <View style={gauntletStyles.body}>
+                <View style={gauntletStyles.iconWrap}>
+                  <Image source={require('../../assets/avatars/flame.png')} style={{ width: 44, height: 44 }} resizeMode="contain" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={gauntletStyles.title}>The Gauntlet</Text>
+                  <Text style={gauntletStyles.desc}>Survive endless questions. One wrong answer ends your run.</Text>
+                </View>
+                <View style={gauntletStyles.costBox}>
+                  <Image source={require('../../assets/avatars/ancient_map.png')} style={{ width: 14, height: 14 }} resizeMode="contain" />
+                  <Text style={gauntletStyles.costText}>1 map</Text>
+                </View>
+              </View>
+            </TouchableOpacity>
           );
         })()}
 
@@ -346,7 +466,7 @@ export default function QuizMenuScreen({ navigation }: Props) {
           <View style={styles.ticketModalContainer} onStartShouldSetResponder={() => true}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
               <Image source={require('../../assets/avatars/raffle_ticket.png')} style={{ width: 22, height: 22 }} resizeMode="contain" />
-              <Text style={styles.ticketModalTitle}>acquire millionaire tickets</Text>
+              <Text style={styles.ticketModalTitle}>Acquire Millionaire Tickets</Text>
             </View>
 
             <TouchableOpacity
@@ -357,8 +477,7 @@ export default function QuizMenuScreen({ navigation }: Props) {
             >
               <Image source={require('../../assets/avatars/raffle_ticket.png')} style={styles.upgradeCardImageLarge} resizeMode="contain" />
               <View style={styles.upgradeInfo}>
-                <Text style={styles.upgradeTitle}>Millionaire Ticket</Text>
-                <Text style={styles.upgradeDesc}>1 ticket</Text>
+                <Text style={styles.upgradeTitle}>1 Ticket</Text>
               </View>
               <View style={[styles.goldBadge, { flexDirection: 'row', alignItems: 'center', gap: 5, marginRight: 8, marginLeft: -8 }]}>
                 <Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 14, height: 14 }} resizeMode="contain" />
@@ -374,8 +493,7 @@ export default function QuizMenuScreen({ navigation }: Props) {
             >
               <Image source={require('../../assets/avatars/raffle_ticket_pack.png')} style={styles.upgradeCardImageLarge} resizeMode="contain" />
               <View style={styles.upgradeInfo}>
-                <Text style={styles.upgradeTitle}>Ticket Pack</Text>
-                <Text style={styles.upgradeDesc}>5 millionaire tickets</Text>
+                <Text style={styles.upgradeTitle}>5 Tickets</Text>
               </View>
               <View style={[styles.goldBadge, { flexDirection: 'row', alignItems: 'center', gap: 5, marginRight: 8, marginLeft: -8 }]}>
                 <Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 14, height: 14 }} resizeMode="contain" />
@@ -391,16 +509,80 @@ export default function QuizMenuScreen({ navigation }: Props) {
             >
               <Image source={require('../../assets/avatars/raffle_ticket.png')} style={styles.upgradeCardImageLarge} resizeMode="contain" />
               <View style={styles.upgradeInfo}>
-                <Text style={styles.upgradeTitle}>Watch an ad</Text>
-                <Text style={styles.upgradeDesc}>1 ticket for 1 ad</Text>
+                <Text style={styles.upgradeTitle}>1 Ad = 1 Ticket</Text>
               </View>
-              <View style={[styles.goldBadge, { backgroundColor: '#9b59b6', borderColor: '#9b59b6' }]}>
-                <Text style={styles.goldText}>Free</Text>
+              <View style={[styles.goldBadge, { backgroundColor: '#9b59b6', borderColor: '#9b59b6', marginLeft: -8, marginRight: 8 }]}>
+                <Text style={styles.goldText}>Watch</Text>
               </View>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.ticketModalCancel} onPress={() => setShowTicketModal(false)}>
               <Text style={styles.ticketModalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Out of Maps modal */}
+      <Modal visible={showMapsModal} animationType="fade" transparent statusBarTranslucent onRequestClose={() => setShowMapsModal(false)}>
+        <TouchableOpacity style={styles.ticketModalOverlay} activeOpacity={1} onPress={() => setShowMapsModal(false)}>
+          <View style={styles.ticketModalContainer} onStartShouldSetResponder={() => true}>
+            <Text style={[styles.ticketModalTitle, { fontSize: 18, textAlign: 'center', marginBottom: 8 }]}>
+              {maps === 0 ? 'Out of Maps!' : 'Ready to Conquer!'}
+            </Text>
+
+            {maps < MAX_MAPS && mapsRemainingSeconds > 0 && (
+              <View style={{ alignItems: 'center', marginBottom: 12 }}>
+                <AnalogCountdownClock
+                  remainingSeconds={mapsRemainingSeconds}
+                  totalSeconds={MAPS_REFILL_SECONDS}
+                  format="mm:ss"
+                  size={96}
+                  color="#FFD700"
+                />
+                <Text style={{ color: '#aaa', fontSize: 12, marginTop: 4 }}>
+                  Next map in {Math.ceil(mapsRemainingSeconds / 60)}m
+                </Text>
+              </View>
+            )}
+
+            <Text style={{ color: '#888', fontSize: 13, marginBottom: 4 }}>
+              {maps === 0 ? 'Maps refill 1 every 60 minutes.' : `${maps} / ${MAX_MAPS} maps remaining. 1 per quiz.`}
+            </Text>
+
+            <TouchableOpacity
+              style={[styles.upgradeCard, { padding: 2, borderColor: '#9b59b6', backgroundColor: '#1a0a2e' }]}
+              onPress={() => { setShowMapsModal(false); navigation.getParent()?.getParent()?.navigate('Premium' as any); }}
+              activeOpacity={0.8}
+            >
+              <Image source={require('../../assets/avatars/conqueror.png')} style={styles.upgradeCardImageLarge} resizeMode="contain" />
+              <View style={styles.upgradeInfo}>
+                <Text style={[styles.upgradeTitle, { fontSize: 12 }]} numberOfLines={1}>Become a Conqueror</Text>
+                <Text style={styles.upgradeDesc}>Unlimited maps — never wait again</Text>
+              </View>
+              <View style={[styles.goldBadge, { backgroundColor: '#3a1a5a', borderColor: '#9b59b6' }]}>
+                <Text style={[styles.goldText, { color: '#c084fc' }]}>Go</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.upgradeCard, { padding: 2, borderColor: '#FFD700', opacity: mapsAdsUsedToday >= MAX_ADS_PER_DAY || actionLoading ? 0.5 : 1 }]}
+              onPress={handleWatchAdForMap}
+              disabled={mapsAdsUsedToday >= MAX_ADS_PER_DAY || actionLoading}
+              activeOpacity={0.8}
+            >
+              <Image source={require('../../assets/avatars/star2.png')} style={styles.upgradeCardImageLarge} resizeMode="contain" />
+              <View style={styles.upgradeInfo}>
+                <Text style={styles.upgradeTitle}>Watch an Ad</Text>
+                <Text style={styles.upgradeDesc}>{mapsAdsUsedToday >= MAX_ADS_PER_DAY ? 'Come back tomorrow' : `Get 1 map · ${MAX_ADS_PER_DAY - mapsAdsUsedToday} left today`}</Text>
+              </View>
+              <View style={[styles.goldBadge, { backgroundColor: '#302a10', borderColor: '#FFD700' }]}>
+                <Text style={styles.goldText}>Watch</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.ticketModalCancel} onPress={() => setShowMapsModal(false)}>
+              <Text style={styles.ticketModalCancelText}>{maps > 0 ? "Let's Go!" : 'Wait'}</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
@@ -420,7 +602,7 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  headerTitle: { color: '#fff', fontSize: 26, fontWeight: 'bold' },
+  headerTitle: { color: '#fff', fontSize: 22, fontWeight: 'bold' },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   infoBtn: { width: 28, height: 28, borderRadius: 14, borderWidth: 1, borderColor: '#3a3a5e', alignItems: 'center', justifyContent: 'center' },
   infoBtnText: { color: '#aaa', fontSize: 14, fontWeight: '600' },
@@ -462,14 +644,15 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.75)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
+    paddingHorizontal: 12,
+    paddingVertical: 24,
   },
   ticketModalContainer: {
     backgroundColor: '#0d0d1f',
     borderRadius: 20,
-    padding: 18,
+    padding: 12,
     width: '100%',
-    gap: 10,
+    gap: 8,
     borderWidth: 1,
     borderColor: '#2a2a4e',
   },
@@ -487,6 +670,7 @@ const styles = StyleSheet.create({
   upgradeCard: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
+    alignSelf: 'stretch' as const,
     backgroundColor: '#13132a',
     borderRadius: 14,
     borderWidth: 1.5,
@@ -505,6 +689,77 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#FFD700',
+    minWidth: 80,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   goldText: { color: '#FFD700', fontWeight: 'bold' },
+});
+
+const gauntletStyles = StyleSheet.create({
+  card: {
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#ff6b35',
+    backgroundColor: '#1a0a00',
+    overflow: 'hidden',
+    marginBottom: 8,
+    shadowColor: '#ff6b35',
+    shadowOpacity: 0.6,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  badge: {
+    backgroundColor: '#ff6b35',
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    paddingVertical: 3,
+  },
+  badgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 2,
+  },
+  body: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    gap: 12,
+  },
+  iconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    backgroundColor: '#2a1000',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  title: {
+    color: '#ff6b35',
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 3,
+  },
+  desc: {
+    color: '#aaa',
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  costBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#2a1a00',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ff6b35',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  costText: {
+    color: '#ff6b35',
+    fontSize: 11,
+    fontWeight: '700',
+  },
 });

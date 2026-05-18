@@ -63,8 +63,20 @@ const ACHIEVEMENT_ICON_IMAGES: Record<string, any> = {
   png_theater_mask:    require('../../assets/avatars/theater_mask.png'),
   png_skull:           require('../../assets/avatars/skull.png'),
   png_bullseye:        require('../../assets/avatars/bullseye.png'),
+  png_sextant:         require('../../assets/avatars/sextant.png'),
+  png_caravel:         require('../../assets/avatars/caravel.png'),
+  png_hourglass:       require('../../assets/avatars/hourglass.png'),
   png_open_scroll:     require('../../assets/avatars/open_scroll.png'),
   png_compass:         require('../../assets/avatars/compass.png'),
+  png_cosmic_armor:    require('../../assets/avatars/cosmic_armor.png'),
+  png_world_ender:     require('../../assets/avatars/world_ender.png'),
+  png_divine_high_king: require('../../assets/avatars/divine_high_king.png'),
+  png_void_eye:        require('../../assets/avatars/void_eye.png'),
+  // Transcendent quest icons
+  png_ascended_sigil:  require('../../assets/avatars/ascended_sigil.png'),
+  png_atlas_rune:      require('../../assets/avatars/atlas_rune.png'),
+  png_eternal_seal:    require('../../assets/avatars/eternal_seal.png'),
+  png_the_singularity: require('../../assets/avatars/the_singularity.png'),
 };
 
 // Small visual preview of a trophy item reward (avatar emoji/SVG or flag)
@@ -221,6 +233,10 @@ type StatsType = {
   ownedItems?: Set<string>;
   ownedAvatarCount?: number;
   playerLevel?: number;
+  excellentScoreCount?: number;
+  trailBestScore?: number;
+  dailyFirstPlaceWins?: number;
+  perfectAccuracyCount?: number;
 };
 
 function renderAchievementCard(
@@ -381,6 +397,10 @@ export default function AchievementsScreen() {
   const [nightmareCompleted, setNightmareCompleted] = useState(false);
   const [hasDarkScroll, setHasDarkScroll] = useState(false);
   const [ownedItemsSet, setOwnedItemsSet] = useState<Set<string>>(new Set());
+  const [excellentScoreCount, setExcellentScoreCount] = useState(0);
+  const [trailBestScore, setTrailBestScore] = useState(0);
+  const [dailyFirstPlaceWins, setDailyFirstPlaceWins] = useState(0);
+  const [perfectAccuracyCount, setPerfectAccuracyCount] = useState(0);
 
   useEffect(() => {
     fetchCountries().then(setAllCountries).catch(console.warn);
@@ -481,6 +501,39 @@ export default function AchievementsScreen() {
       setOwnedItemsSet(itemSet);
 
       setHasDarkScroll(itemSet.has('upgrade_nightmare'));
+
+      // Excellence + Precision quests: fetch standard quiz results once
+      const { data: quizRows } = await supabase
+        .from('quiz_results')
+        .select('score, total_questions, quiz_type')
+        .eq('user_id', profile.id)
+        .in('quiz_type', ['flag', 'shape', 'capitals', 'borders', 'trail']);
+      const excellentCount = (quizRows ?? []).filter(
+        (r: any) => r.total_questions > 0 && r.score / r.total_questions >= 0.85,
+      ).length;
+      setExcellentScoreCount(excellentCount);
+      const perfectCount = (quizRows ?? []).filter(
+        (r: any) => r.quiz_type !== 'trail' && r.total_questions > 0 && r.score >= r.total_questions,
+      ).length;
+      setPerfectAccuracyCount(perfectCount);
+
+      // Trail Blazer quest: best single-session score in trail quiz
+      const { data: trailRows } = await supabase
+        .from('quiz_results')
+        .select('score')
+        .eq('user_id', profile.id)
+        .eq('quiz_type', 'trail')
+        .order('score', { ascending: false })
+        .limit(1);
+      setTrailBestScore(trailRows?.[0]?.score ?? 0);
+
+      // Daily Champion quest: number of times finished #1 in daily challenge
+      const { data: champRows } = await supabase
+        .from('daily_leaderboard_rewards')
+        .select('reward_date')
+        .eq('awarded_user_id', profile.id)
+        .eq('reward_rank', 1);
+      setDailyFirstPlaceWins((champRows ?? []).length);
     } catch (err) {
       console.warn('Failed to load achievements:', err);
     } finally {
@@ -563,6 +616,10 @@ export default function AchievementsScreen() {
     ownedAvatarCount,
     playerLevel: getLevelInfo(profile?.xp ?? 0).level,
     quizCount: profile?.quiz_count ?? 0,
+    excellentScoreCount,
+    trailBestScore,
+    dailyFirstPlaceWins,
+    perfectAccuracyCount,
   };
 
 
@@ -597,6 +654,25 @@ export default function AchievementsScreen() {
       </View>
 
       {ACHIEVEMENTS_DATA.map((achievement) => {
+        // Prerequisite lock — shown as ??? void card until prerequisite is claimed
+        if (achievement.prerequisite && !claimedIds.has(achievement.prerequisite)) {
+          return (
+            <View key={`${achievement.id}_locked`} style={[styles.card, styles.cardTranscendentLocked]}>
+              <View style={[styles.iconBg, styles.iconBgTranscendentLocked]}>
+                {ACHIEVEMENT_ICON_IMAGES[achievement.icon]
+                  ? <Image source={ACHIEVEMENT_ICON_IMAGES[achievement.icon]} style={{ width: 28, height: 28, opacity: 0.45 }} resizeMode="contain" />
+                  : <Text style={styles.achievementEmoji}>?</Text>
+                }
+              </View>
+              <View style={styles.cardBody}>
+                <Text style={styles.cardTitleTranscendentLocked}>???</Text>
+                <View style={[styles.progressBarBg, { marginTop: 8, marginRight: 0 }]}>
+                  <View style={[styles.progressBarFill, { width: '100%', backgroundColor: '#1a0a2e' }]} />
+                </View>
+              </View>
+            </View>
+          );
+        }
         // Nightmare quest: hidden as ??? until user owns the Dark Scroll upgrade
         if (achievement.id === 'nightmare_complete' && !hasDarkScroll) {
           return (
@@ -946,5 +1022,20 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.55,
     shadowRadius: 12,
     elevation: 8,
+  },
+  // ── Transcendent locked (prerequisite not yet claimed) ────────────────────
+  cardTranscendentLocked: {
+    borderColor: '#5b21b6',
+    borderWidth: 1.5,
+    backgroundColor: '#07041a',
+  },
+  iconBgTranscendentLocked: {
+    backgroundColor: '#150d2e',
+  },
+  cardTitleTranscendentLocked: {
+    color: '#7c3aed',
+    fontSize: 14,
+    fontWeight: '600' as const,
+    letterSpacing: 3,
   },
 });

@@ -4,6 +4,7 @@ import {
   Image,
   ImageBackground,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   StyleSheet,
   Text,
@@ -13,6 +14,7 @@ import {
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabase';
 import { AuthStackParamList } from '../types';
 
 type Props = {
@@ -26,6 +28,10 @@ export default function LoginScreen({ navigation }: Props) {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [showForgot, setShowForgot] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotSent, setForgotSent] = useState(false);
 
   useEffect(() => {
     const resolved = Image.resolveAssetSource(bgSource);
@@ -44,6 +50,25 @@ export default function LoginScreen({ navigation }: Props) {
       Alert.alert('Sign In Failed', err.message ?? 'Something went wrong');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleForgotPassword() {
+    if (!forgotEmail.trim()) {
+      Alert.alert('Error', 'Please enter your email address.');
+      return;
+    }
+    setForgotLoading(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail.trim(), {
+        redirectTo: 'geoconquest://reset-password',
+      });
+      if (error) throw error;
+      setForgotSent(true);
+    } catch (err: any) {
+      Alert.alert('Error', err.message ?? 'Failed to send reset email.');
+    } finally {
+      setForgotLoading(false);
     }
   }
 
@@ -124,7 +149,52 @@ export default function LoginScreen({ navigation }: Props) {
               >
                 <Text style={styles.buttonText}>{loading ? 'Signing in…' : 'Sign In'}</Text>
               </TouchableOpacity>
+
+              <TouchableOpacity onPress={() => { setForgotSent(false); setForgotEmail(email); setShowForgot(true); }}>
+                <Text style={styles.forgotLink}>Forgot Password?</Text>
+              </TouchableOpacity>
             </View>
+
+            {/* Forgot Password Modal */}
+            <Modal visible={showForgot} transparent animationType="fade" onRequestClose={() => setShowForgot(false)}>
+              <View style={styles.modalOverlay}>
+                <View style={styles.modalCard}>
+                  {forgotSent ? (
+                    <>
+                      <Text style={styles.modalTitle}>Email Sent</Text>
+                      <Text style={styles.modalMessage}>Check your inbox for a password reset link.</Text>
+                      <TouchableOpacity style={styles.modalButton} onPress={() => setShowForgot(false)}>
+                        <Text style={styles.modalButtonText}>Done</Text>
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    <>
+                      <Text style={styles.modalTitle}>Reset Password</Text>
+                      <Text style={styles.modalMessage}>Enter your email and we'll send you a reset link.</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Email"
+                        placeholderTextColor="#555"
+                        value={forgotEmail}
+                        onChangeText={setForgotEmail}
+                        autoCapitalize="none"
+                        keyboardType="email-address"
+                      />
+                      <TouchableOpacity
+                        style={[styles.modalButton, forgotLoading && styles.buttonDisabled]}
+                        onPress={handleForgotPassword}
+                        disabled={forgotLoading}
+                      >
+                        <Text style={styles.modalButtonText}>{forgotLoading ? 'Sending…' : 'Send Reset Link'}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => setShowForgot(false)}>
+                        <Text style={styles.modalCancel}>Cancel</Text>
+                      </TouchableOpacity>
+                    </>
+                  )}
+                </View>
+              </View>
+            </Modal>
 
             <TouchableOpacity onPress={() => navigation.navigate('SignUp')}>
               <Text style={styles.link}>Don't have an account? Sign Up</Text>
@@ -252,6 +322,56 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0,0,0,0.6)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
+  },
+  forgotLink: {
+    color: '#888',
+    textAlign: 'center',
+    fontSize: 13,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  modalCard: {
+    backgroundColor: '#0e0e1f',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#FFD700',
+    paddingHorizontal: 24,
+    paddingVertical: 28,
+    width: '100%',
+    gap: 14,
+  },
+  modalTitle: {
+    color: '#FFD700',
+    fontSize: 18,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  modalMessage: {
+    color: '#aaa',
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  modalButton: {
+    backgroundColor: '#FFD700',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  modalButtonText: {
+    color: '#0a0a1a',
+    fontWeight: 'bold',
+    fontSize: 15,
+  },
+  modalCancel: {
+    color: '#666',
+    textAlign: 'center',
+    fontSize: 13,
   },
   poweredByRow: {
     marginTop: 2,

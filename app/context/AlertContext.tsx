@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState } from 'react';
 import {
+  Dimensions,
   Image,
   Modal,
   StyleSheet,
@@ -7,6 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import ConfettiCannon from 'react-native-confetti-cannon';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -25,6 +27,7 @@ export interface AlertConfig {
   icon?: React.ReactNode;
   messageAlign?: 'left' | 'center';
   variant?: 'default' | 'premium' | 'leveled' | 'unique' | 'ticket';
+  confetti?: boolean;
 }
 
 interface AlertContextValue {
@@ -61,8 +64,11 @@ const AlertContext = createContext<AlertContextValue | null>(null);
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
+const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
+
 export function AlertProvider({ children }: { children: React.ReactNode }) {
   const [config, setConfig] = useState<AlertConfig | null>(null);
+  const [fireConfetti, setFireConfetti] = useState(false);
 
   function showAlert(cfg: AlertConfig) {
     setConfig(cfg);
@@ -285,6 +291,7 @@ export function AlertProvider({ children }: { children: React.ReactNode }) {
                       },
                     ]}
                     onPress={() => {
+                      if (config?.confetti) setFireConfetti(true);
                       dismiss();
                       btn.onPress?.();
                     }}
@@ -312,6 +319,19 @@ export function AlertProvider({ children }: { children: React.ReactNode }) {
           </View>
         </View>
       </Modal>
+      {fireConfetti && (
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          <ConfettiCannon
+            count={120}
+            origin={{ x: SCREEN_W / 2, y: SCREEN_H * 0.72 }}
+            explosionSpeed={400}
+            fallSpeed={2800}
+            fadeOut
+            colors={['#FFD700', '#FFA500', '#ff4dff', '#4daaff', '#ffffff', '#ff4d4d']}
+            onAnimationEnd={() => setFireConfetti(false)}
+          />
+        </View>
+      )}
     </AlertContext.Provider>
   );
 }

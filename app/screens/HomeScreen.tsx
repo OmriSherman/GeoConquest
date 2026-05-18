@@ -16,7 +16,9 @@ let captureRef: ((ref: any, opts?: any) => Promise<string>) | null = null;
 try { const _vs = require('react-native-view-shot'); ViewShot = _vs.default; captureRef = _vs.captureRef; } catch {}
 let Sharing: { isAvailableAsync: () => Promise<boolean>; shareAsync: (uri: string, opts?: any) => Promise<void> } | null = null;
 try { Sharing = require('expo-sharing'); } catch {}
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../context/AuthContext';
+import { useAlert } from '../context/AlertContext';
 import { useGame } from '../context/GameContext';
 import { fetchCountries } from '../lib/countryData';
 import { supabase } from '../lib/supabase';
@@ -40,7 +42,32 @@ const TOTAL_AVATARS = CUSTOM_AVATARS.length;
 export default function HomeScreen({ navigation }: any) {
   const { profile, signOut, user, shareReferralLink } = useAuth();
   const { ownedCountries } = useGame();
+  const { showAlert } = useAlert();
   const mapCaptureRef = useRef<any>(null);
+
+  async function handleDeleteAccount() {
+    setShowUserMenu(false);
+    showAlert({
+      title: 'Delete Account',
+      message: 'This will permanently delete your account and all your data. This cannot be undone.',
+      buttons: [
+        {
+          text: 'Delete Forever',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase.rpc('delete_account');
+              if (error) throw error;
+              await signOut();
+            } catch (err: any) {
+              showAlert({ title: 'Error', message: err.message ?? 'Failed to delete account.', buttons: [{ text: 'OK' }] });
+            }
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
 
   async function handleShareMap() {
     if (!captureRef || !mapCaptureRef.current) return;
@@ -85,6 +112,44 @@ export default function HomeScreen({ navigation }: any) {
     fetchCountries()
       .then(setAllCountries)
       .catch(console.warn);
+  }, []);
+
+  useEffect(() => {
+    async function maybeShowWelcome() {
+      const seen = await AsyncStorage.getItem('@welcome_popup_seen');
+      if (seen) return;
+      await AsyncStorage.setItem('@welcome_popup_seen', '1');
+      showAlert({
+        icon: (
+          <Image
+            source={require('../../assets/avatars/globe.png')}
+            style={{ width: 72, height: 72 }}
+            resizeMode="contain"
+          />
+        ),
+        title: 'Welcome, Explorer!',
+        contentNode: (
+          <View style={{ gap: 12, alignSelf: 'stretch' }}>
+            <Text style={{ color: '#FFD700', fontSize: 14, fontWeight: '700', textAlign: 'center', marginBottom: 2 }}>
+              Time to build your empire.
+            </Text>
+            {[
+              { img: require('../../assets/avatars/gold_bag.png'),  text: 'Earn gold by taking quizzes. The better you score, the more you earn.' },
+              { img: require('../../assets/avatars/cart.png'),       text: 'Spend gold in the Shop to buy countries, avatars, and gameplay upgrades.' },
+              { img: require('../../assets/avatars/war_medal.png'), text: 'Complete quests to unlock exclusive rewards and rare avatars.' },
+              { img: require('../../assets/avatars/trophy.png'),    text: 'Compete in daily challenges against explorers from around the world.' },
+            ].map(({ img, text }, i) => (
+              <View key={i} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+                <Image source={img} style={{ width: 20, height: 20, marginTop: 1 }} resizeMode="contain" />
+                <Text style={{ color: '#bbb', fontSize: 13, lineHeight: 19, flex: 1 }}>{text}</Text>
+              </View>
+            ))}
+          </View>
+        ),
+        buttons: [{ text: "Let's Conquer!", style: 'cta' }],
+      });
+    }
+    maybeShowWelcome();
   }, []);
 
   useEffect(() => {
@@ -313,9 +378,32 @@ export default function HomeScreen({ navigation }: any) {
               })()}
             </View>
             <View style={styles.menuDivider} />
+            {!profile?.is_conquerer && (
+              <>
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => { setShowUserMenu(false); navigation.getParent()?.navigate('Premium'); }}
+                >
+                  <View style={{ width: 72, alignItems: 'center' }}>
+                    <Image source={require('../../assets/avatars/conqueror.png')} style={{ width: 72, height: 72, marginVertical: -27 }} resizeMode="contain" />
+                  </View>
+                  <Text style={[styles.menuItemText, { color: '#9B59B6' }]}>Become a Conqueror</Text>
+                </TouchableOpacity>
+                <View style={styles.menuDivider} />
+              </>
+            )}
             <TouchableOpacity style={styles.menuItem} onPress={() => { setShowUserMenu(false); signOut(); }}>
-              <Text style={styles.menuItemIcon}>🚪</Text>
+              <View style={{ width: 72, alignItems: 'center' }}>
+                <Image source={require('../../assets/avatars/eyes.png')} style={{ width: 58, height: 58, marginVertical: -20 }} resizeMode="contain" />
+              </View>
               <Text style={styles.menuItemText}>Sign Out</Text>
+            </TouchableOpacity>
+            <View style={styles.menuDivider} />
+            <TouchableOpacity style={styles.menuItem} onPress={handleDeleteAccount}>
+              <View style={{ width: 72, alignItems: 'center' }}>
+                <Image source={require('../../assets/avatars/skull.png')} style={{ width: 52, height: 52, marginVertical: -14 }} resizeMode="contain" />
+              </View>
+              <Text style={[styles.menuItemText, { color: '#ff4444' }]}>Delete Account</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>

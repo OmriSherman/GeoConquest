@@ -34,6 +34,7 @@ import { showRewardedAd } from '../lib/rewardedAds';
 
 const AUTO_ADVANCE_DELAY_MS = 2500;
 const TIMER_SECONDS = 15;
+const SECOND_CHANCE_POPUP_DELAY_MS = 500;
 
 // Show walk-or-continue checkpoint before these 0-indexed next-question indices:
 // after answering Q5 (250), Q10 (1.5k), Q13 (4k).
@@ -157,6 +158,7 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
   const currentIndexRef = useRef(0);
   const questionsRef = useRef<MillionaireQuestion[]>([]);
   const autoAdvanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const secondChanceModalTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const quizStartRef = useRef<number>(0);
   const ladderScrollRef = useRef<ScrollView>(null);
   const [ladderWidth, setLadderWidth] = useState(0);
@@ -252,7 +254,7 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
         setQuestions(q);
         questionsRef.current = q;
         startTimer();
-        spendTicket();
+        await spendTicket();
       } catch (e: any) {
         setError(e.message ?? 'Failed to load questions');
       } finally {
@@ -276,6 +278,7 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
 
     return () => {
       if (autoAdvanceTimer.current) clearTimeout(autoAdvanceTimer.current);
+      if (secondChanceModalTimer.current) clearTimeout(secondChanceModalTimer.current);
       stopTimer();
       Speech.stop(); // Clean up speech on unmount
     };
@@ -311,6 +314,7 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
         stopTimer();
         Speech.stop();
         if (autoAdvanceTimer.current) clearTimeout(autoAdvanceTimer.current);
+        if (secondChanceModalTimer.current) clearTimeout(secondChanceModalTimer.current);
       };
     }, [])
   );
@@ -434,6 +438,10 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
   }
 
   function declineSecondChance() {
+    if (secondChanceModalTimer.current) {
+      clearTimeout(secondChanceModalTimer.current);
+      secondChanceModalTimer.current = null;
+    }
     setShowSecondChanceModal(false);
     setGameOver(true);
     setTimeout(endGameWithLoss, 1500);
@@ -475,7 +483,10 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
       playWrong();
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       if (!secondChanceUsed) {
-        setShowSecondChanceModal(true);
+        secondChanceModalTimer.current = setTimeout(() => {
+          secondChanceModalTimer.current = null;
+          setShowSecondChanceModal(true);
+        }, SECOND_CHANCE_POPUP_DELAY_MS);
         return;
       }
       setGameOver(true);

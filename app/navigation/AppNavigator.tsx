@@ -1,5 +1,19 @@
-import React, { useEffect } from 'react';
-import { ActivityIndicator, Image, Linking, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Linking,
+  Modal,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { supabase } from '../lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CommonActions, createNavigationContainerRef, NavigationContainer } from '@react-navigation/native';
@@ -27,6 +41,7 @@ import CapitalsQuizScreen from '../screens/CapitalsQuizScreen';
 import TrailQuizScreen from '../screens/TrailQuizScreen';
 import MillionaireQuizScreen from '../screens/MillionaireQuizScreen';
 import NightmareQuizScreen from '../screens/NightmareQuizScreen';
+import GauntletScreen from '../screens/GauntletScreen';
 import QuizResultsScreen from '../screens/QuizResultsScreen';
 import ShopScreen from '../screens/ShopScreen';
 import GoldShopScreen from '../screens/GoldShopScreen';
@@ -114,6 +129,11 @@ function QuizNavigator() {
         options={{ title: 'Nightmare Mode' }}
       />
       <QuizStack.Screen
+        name="Gauntlet"
+        component={GauntletScreen}
+        options={{ headerShown: false }}
+      />
+      <QuizStack.Screen
         name="QuizResults"
         component={QuizResultsScreen}
         options={{ title: 'Results', headerLeft: () => null }}
@@ -194,8 +214,26 @@ export default function AppNavigator() {
   const { session, loading, needsUsername } = useAuth();
   const { questToast, questHighlightId, clearQuestToast } = useGame();
 
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
+
   useEffect(() => {
     async function handleUrl(url: string) {
+      if (url.includes('reset-password')) {
+        const codeMatch = url.match(/[?&]code=([^&]+)/);
+        if (codeMatch?.[1]) {
+          try { await supabase.auth.exchangeCodeForSession(decodeURIComponent(codeMatch[1])); } catch {}
+          setShowResetModal(true);
+          return;
+        }
+        const typeMatch = url.match(/[#&]type=([^&]+)/);
+        if (typeMatch?.[1] === 'recovery') {
+          setShowResetModal(true);
+          return;
+        }
+      }
       const match = url.match(/[?&]code=([^&]+)/);
       if (match?.[1]) {
         await AsyncStorage.setItem('@pending_referral_code', decodeURIComponent(match[1]));
@@ -206,6 +244,30 @@ export default function AppNavigator() {
     return () => sub.remove();
   }, []);
 
+  async function handlePasswordReset() {
+    if (!newPassword || newPassword !== confirmPassword) {
+      Alert.alert('Error', 'Passwords must match and cannot be empty.');
+      return;
+    }
+    if (newPassword.length < 6) {
+      Alert.alert('Error', 'Password must be at least 6 characters.');
+      return;
+    }
+    setResetLoading(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      setShowResetModal(false);
+      setNewPassword('');
+      setConfirmPassword('');
+      Alert.alert('Success', 'Your password has been updated!');
+    } catch (err: any) {
+      Alert.alert('Error', err.message ?? 'Failed to update password.');
+    } finally {
+      setResetLoading(false);
+    }
+  }
+
   if (loading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0a0a1a' }}>
@@ -215,42 +277,130 @@ export default function AppNavigator() {
   }
 
   return (
-    <NavigationContainer ref={navigationRef}>
-      <View style={{ flex: 1 }}>
-        <RootStack.Navigator screenOptions={{ headerShown: false }}>
-          {!session ? (
-            <RootStack.Screen name="Auth" component={AuthNavigator} />
-          ) : needsUsername ? (
-            <RootStack.Screen name="ChooseUsername" component={OnboardingScreen} />
-          ) : (
-            <>
-              <RootStack.Screen name="Main" component={MainNavigator} />
-              <RootStack.Screen
-                name="Premium"
-                component={PremiumScreen}
-                options={{ presentation: 'modal', headerShown: false }}
-              />
-            </>
+    <>
+      <NavigationContainer ref={navigationRef}>
+        <View style={{ flex: 1 }}>
+          <RootStack.Navigator screenOptions={{ headerShown: false }}>
+            {!session ? (
+              <RootStack.Screen name="Auth" component={AuthNavigator} />
+            ) : needsUsername ? (
+              <RootStack.Screen name="ChooseUsername" component={OnboardingScreen} />
+            ) : (
+              <>
+                <RootStack.Screen name="Main" component={MainNavigator} />
+                <RootStack.Screen
+                  name="Premium"
+                  component={PremiumScreen}
+                  options={{ presentation: 'modal', headerShown: false }}
+                />
+              </>
+            )}
+          </RootStack.Navigator>
+          {session && !needsUsername && (
+            <QuestToastBanner
+              message={questToast}
+              highlightId={questHighlightId}
+              onDismiss={clearQuestToast}
+              onNavigateToQuests={(hid) => {
+                if (navigationRef.isReady()) {
+                  navigationRef.dispatch(
+                    CommonActions.navigate({
+                      name: 'Achievements',
+                      params: hid ? { highlightId: hid } : {},
+                    })
+                  );
+                }
+              }}
+            />
           )}
-        </RootStack.Navigator>
-        {session && !needsUsername && (
-          <QuestToastBanner
-            message={questToast}
-            highlightId={questHighlightId}
-            onDismiss={clearQuestToast}
-            onNavigateToQuests={(hid) => {
-              if (navigationRef.isReady()) {
-                navigationRef.dispatch(
-                  CommonActions.navigate({
-                    name: 'Achievements',
-                    params: hid ? { highlightId: hid } : {},
-                  })
-                );
-              }
-            }}
-          />
-        )}
-      </View>
-    </NavigationContainer>
+        </View>
+      </NavigationContainer>
+
+      <Modal visible={showResetModal} transparent animationType="fade" onRequestClose={() => {}}>
+        <KeyboardAvoidingView style={resetStyles.overlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <View style={resetStyles.card}>
+            <Text style={resetStyles.title}>Set New Password</Text>
+            <Text style={resetStyles.message}>Enter a new password for your account.</Text>
+            <TextInput
+              style={resetStyles.input}
+              placeholder="New password"
+              placeholderTextColor="#555"
+              value={newPassword}
+              onChangeText={setNewPassword}
+              secureTextEntry
+              autoFocus
+            />
+            <TextInput
+              style={resetStyles.input}
+              placeholder="Confirm new password"
+              placeholderTextColor="#555"
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              secureTextEntry
+            />
+            <TouchableOpacity
+              style={[resetStyles.button, resetLoading && { opacity: 0.6 }]}
+              onPress={handlePasswordReset}
+              disabled={resetLoading}
+            >
+              <Text style={resetStyles.buttonText}>{resetLoading ? 'Saving…' : 'Save Password'}</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+    </>
   );
 }
+
+const resetStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  card: {
+    backgroundColor: '#0e0e1f',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#FFD700',
+    paddingHorizontal: 24,
+    paddingVertical: 28,
+    width: '100%',
+    gap: 14,
+  },
+  title: {
+    color: '#FFD700',
+    fontSize: 20,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  message: {
+    color: '#aaa',
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  input: {
+    backgroundColor: 'rgba(20,20,45,0.9)',
+    color: '#fff',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+    borderWidth: 1,
+    borderColor: '#2a2a4e',
+  },
+  button: {
+    backgroundColor: '#FFD700',
+    borderRadius: 12,
+    paddingVertical: 15,
+    alignItems: 'center',
+  },
+  buttonText: {
+    color: '#0a0a1a',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+});

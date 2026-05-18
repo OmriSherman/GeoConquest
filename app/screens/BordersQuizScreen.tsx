@@ -15,6 +15,7 @@ import { QuizStackParamList, QuizQuestion } from '../types';
 import { buildBordersQuizQuestions, fetchCountries, getOfflineFullCountries, getCca3ToCca2Map } from '../lib/countryData';
 import { useGame } from '../context/GameContext';
 import { useAuth } from '../context/AuthContext';
+import AvatarDisplay from '../components/AvatarDisplay';
 import AnswerButton from '../components/AnswerButton';
 import BordersMapView from '../components/BordersMapView';
 import { playDingStreak, playWrong } from '../lib/audio';
@@ -216,7 +217,14 @@ export default function BordersQuizScreen({ navigation }: Props) {
           <View style={styles.header}>
             <Text style={styles.progress}>{currentIndex + 1} / {TOTAL_QUESTIONS}</Text>
             <View style={styles.progressBarWrapper}>
-              <View style={[styles.scoreFill, { width: `${(currentIndex / TOTAL_QUESTIONS) * 100}%` as any }]} />
+              <View style={styles.progressBarTrack}>
+                <View style={[styles.scoreFill, { width: `${(currentIndex / TOTAL_QUESTIONS) * 100}%` as any }]} />
+              </View>
+              {profile?.avatar_emoji ? (
+                <View style={[styles.progressAvatarWrap, { left: `${(currentIndex / TOTAL_QUESTIONS) * 100}%` as any }]}>
+                  <AvatarDisplay avatarId={profile.avatar_emoji} avatarFlag={profile.avatar_flag ?? undefined} size={22} isConqueror={profile.is_conquerer ?? false} />
+                </View>
+              ) : null}
             </View>
             <Text style={styles.timerText}>⏱ {String(Math.floor(elapsedSec / 60)).padStart(2, '0')}:{String(elapsedSec % 60).padStart(2, '0')}</Text>
             <HeatStreakBadge combo={currentCombo} />
@@ -265,7 +273,9 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8, gap: 8 },
   progress: { color: '#aaa', fontSize: 14, fontWeight: '600' },
   timerText: { color: '#aaa', fontSize: 13, fontWeight: '600' },
-  progressBarWrapper: { flex: 1, height: 4, backgroundColor: '#1a1a2e', borderRadius: 2, overflow: 'hidden' },
+  progressBarWrapper: { flex: 1, height: 22, justifyContent: 'center' },
+  progressBarTrack: { height: 4, backgroundColor: '#1a1a2e', borderRadius: 2, overflow: 'hidden' },
+  progressAvatarWrap: { position: 'absolute', transform: [{ translateX: -11 }] },
   comboBadge: { backgroundColor: '#3a0000', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: '#ff4444' },
   comboText: { color: '#ff8888', fontWeight: 'bold', fontSize: 13 },
   scoreFill: { height: '100%', backgroundColor: '#FFD700', borderRadius: 2 },

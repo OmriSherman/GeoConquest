@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { Country, getCountryPrice } from '../types';
-import { useAuth, enqueueMutation, PROFILE_CACHE_KEY } from './AuthContext';
+import { useAuth } from './AuthContext';
 import { ACHIEVEMENTS_DATA } from '../lib/achievementsData';
 
 const OWNED_KEY = (uid: string) => `@geoquest/owned_countries_${uid}`;
@@ -39,9 +39,9 @@ const GameContext = createContext<GameContextValue | null>(null);
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
 export function GameProvider({ children }: { children: React.ReactNode }) {
-  const { user, profile } = useAuth();
+  const { user, profile, addGold: updateGoldBalance } = useAuth();
+  const goldBalance = profile?.gold_balance ?? 0;
 
-  const [goldBalance, setGoldBalance] = useState(0);
   const [ownedCountries, setOwnedCountries] = useState<string[]>([]);
   const [loadingGame, setLoadingGame] = useState(true);
   const [questToast, setQuestToast] = useState<string | null>(null);
@@ -60,20 +60,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!user) {
-      setGoldBalance(0);
       setOwnedCountries([]);
       setLoadingGame(false);
       return;
     }
     loadGameData();
   }, [user]);
-
-  // Sync gold balance from profile whenever profile changes
-  useEffect(() => {
-    if (profile) {
-      setGoldBalance(profile.gold_balance);
-    }
-  }, [profile]);
 
   // Check empire thresholds whenever ownedCountries grows
   useEffect(() => {
@@ -141,59 +133,47 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   const addGold = useCallback(
     async (amount: number) => {
-      if (!user) return;
-
-      const newBalance = goldBalance + amount;
-
-      // Optimistic — always update display immediately
-      setGoldBalance(newBalance);
-
-      const { error } = await supabase
-        .from('profiles')
-        .update({ gold_balance: newBalance })
-        .eq('id', user.id);
-
-      if (error) {
-        // Offline — queue delta for sync on reconnect and persist to profile cache
-        await enqueueMutation(user.id, { type: 'add_gold', delta: amount });
-        const raw = await AsyncStorage.getItem(PROFILE_CACHE_KEY(user.id));
-        if (raw) {
-          const cached = JSON.parse(raw);
-          AsyncStorage.setItem(PROFILE_CACHE_KEY(user.id), JSON.stringify({ ...cached, gold_balance: newBalance })).catch(() => {});
-        }
-      }
+      await updateGoldBalance(amount);
     },
-    [user, goldBalance]
+    [updateGoldBalance]
   );
 
   const purchaseCountry = useCallback(
     async (country: Country) => {
-      if (!user) return;
+      if (!user || !profile) return;
       const price = getCountryPrice(country.area);
+      const currentGold = profile.gold_balance ?? 0;
 
-      if (goldBalance < price) {
+      if (currentGold < price) {
         throw new Error('Not enough gold');
       }
       if (ownedCountries.includes(country.cca2)) {
         throw new Error('Country already owned');
       }
 
-      const newBalance = goldBalance - price;
+      await updateGoldBalance(-price);
 
-      const [goldRes, purchaseRes] = await Promise.all([
-        supabase.from('profiles').update({ gold_balance: newBalance }).eq('id', user.id),
-        supabase
-          .from('owned_countries')
-          .insert({ user_id: user.id, country_code: country.cca2 }),
-      ]);
+      const purchaseRes = await supabase
+        .from('owned_countries')
+        .insert({ user_id: user.id, country_code: country.cca2 });
 
-      if (goldRes.error) throw goldRes.error;
-      if (purchaseRes.error) throw purchaseRes.error;
+      if (purchaseRes.error) {
+        try {
+          await updateGoldBalance(price);
+        } catch (refundError) {
+          console.warn('[Game] Failed to refund gold after country purchase error:', refundError);
+        }
+        throw purchaseRes.error;
+      }
 
-      setGoldBalance(newBalance);
-      setOwnedCountries(prev => [...prev, country.cca2]);
+      setOwnedCountries(prev => {
+        if (prev.includes(country.cca2)) return prev;
+        const next = [...prev, country.cca2];
+        AsyncStorage.setItem(OWNED_KEY(user.id), JSON.stringify(next)).catch(() => {});
+        return next;
+      });
     },
-    [user, goldBalance, ownedCountries]
+    [user, profile, ownedCountries, updateGoldBalance]
   );
 
   // ── Helpers ────────────────────────────────────────────────────────────────
@@ -204,8 +184,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   );
 
   const canAfford = useCallback(
-    (price: number) => goldBalance >= price,
-    [goldBalance]
+    (price: number) => (profile?.gold_balance ?? 0) >= price,
+    [profile?.gold_balance]
   );
 
   // ── Render ─────────────────────────────────────────────────────────────────

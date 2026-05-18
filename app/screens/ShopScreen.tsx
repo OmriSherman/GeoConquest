@@ -111,6 +111,7 @@ export default function ShopScreen() {
 
   // ── Avatar/Flag tab state ──────────────────────────────────────────────────
   const [subTab, setSubTab] = useState<'buy' | 'owned'>('buy');
+  const [newItemBadge, setNewItemBadge] = useState<'avatar' | 'flag' | null>(null);
   const [unlockedItems, setUnlockedItems] = useState<Set<string>>(new Set());
   const [loadingUnlocks, setLoadingUnlocks] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -156,7 +157,38 @@ export default function ShopScreen() {
     }
   }, [search, sortMode, countries, isOwned, hideOwned]);
 
+  // ── Avatar of the Day ──────────────────────────────────────────────────────
+
+  const featuredAvatar = useMemo(() => {
+    const candidates = AVATAR_CHARACTERS.filter(a =>
+      a.isPremium &&
+      !(a as any).questOnly &&
+      !(a as any).isPremiumSubscription &&
+      (a.price ?? 0) > 0,
+    );
+    if (candidates.length === 0) return null;
+    const dayIndex = Math.floor(Date.now() / 86400000) % candidates.length;
+    const avatar = candidates[dayIndex];
+    const discountedPrice = Math.floor((avatar.price ?? 0) * 0.8);
+    return { ...avatar, discountedPrice };
+  }, []);
+
   // ── Tier chain builder ─────────────────────────────────────────────────────
+
+  const affordableAvatarCount = useMemo(() => {
+    if (subTab !== 'buy') return 0;
+    const allBuyable = [
+      ...AVATAR_CHARACTERS,
+      ...CUSTOM_AVATARS.map(a => ({ emoji: a.key, price: a.price, isPremium: a.isPremium, questOnly: a.questOnly, isPremiumSubscription: a.isPremiumSubscription })),
+    ];
+    return allBuyable.filter(a => {
+      if (unlockedItems.has(a.emoji)) return false;
+      if ((a as any).questOnly) return false;
+      if ((a as any).isPremiumSubscription && !profile?.is_conquerer) return false;
+      if (!a.isPremium) return false; // free avatars don't need to be "bought"
+      return (a.price ?? 0) > 0 && goldBalance >= (a.price ?? 0);
+    }).length;
+  }, [subTab, unlockedItems, goldBalance, profile?.is_conquerer]);
 
   const { avatarTierChains, standaloneCustomAvatars } = useMemo(() => {
     const items = CUSTOM_AVATARS;
@@ -279,6 +311,11 @@ export default function ShopScreen() {
       setUnlockedItems(prev => new Set(prev).add(itemId));
       setShowConfetti(true);
       setTimeout(() => setShowConfetti(false), 3000);
+      setNewItemBadge(itemType);
+      showAlert({
+        title: itemType === 'avatar' ? 'Avatar Unlocked!' : 'Flag Unlocked!',
+        message: 'Switch to the Owned tab to equip it.',
+      });
     } catch (err: any) {
       showAlert({ title: 'Purchase Failed', message: err.message });
     } finally {
@@ -314,6 +351,9 @@ export default function ShopScreen() {
         }
         playDing();
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        if (itemType === 'avatar') {
+          showToast({ title: 'Avatar Equipped!', message: 'Your avatar is visible to everyone on the leaderboard.', icon: <AvatarDisplay avatarId={itemId} size={28} /> });
+        }
       } catch (err: any) {
         showAlert({ title: 'Error', message: err.message });
       } finally {
@@ -465,6 +505,31 @@ export default function ShopScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       playPurchasedItem();
       setUnlockedItems(prev => new Set(prev).add('upgrade_nightmare'));
+      setShowConfetti(true);
+      setTimeout(() => setShowConfetti(false), 3000);
+    } catch (err: any) {
+      showAlert({ title: 'Purchase Failed', message: err.message });
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function handleBuyInfiniteMaps() {
+    if (!profile) return;
+    if (unlockedItems.has('upgrade_infinite_maps')) return;
+
+    const cost = 50000;
+    if (goldBalance < cost) {
+      showNotEnoughGold(cost, <Image source={require('../../assets/avatars/ancient_map.png')} style={{ width: 40, height: 40 }} resizeMode="contain" />, 'Infinite Maps');
+      return;
+    }
+
+    setActionLoading(true);
+    try {
+      await purchaseAvatarItem('flag', 'upgrade_infinite_maps', cost);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      playPurchasedItem();
+      setUnlockedItems(prev => new Set(prev).add('upgrade_infinite_maps'));
       setShowConfetti(true);
       setTimeout(() => setShowConfetti(false), 3000);
     } catch (err: any) {
@@ -749,13 +814,51 @@ export default function ShopScreen() {
         <>
           <View style={styles.subTabBar}>
             {(['buy', 'owned'] as const).map(t => (
-              <TouchableOpacity key={t} style={[styles.subTab, subTab === t && styles.subTabActive]} onPress={() => setSubTab(t)}>
-                <Text style={[styles.subTabText, subTab === t && styles.subTabTextActive]}>
-                  {t === 'buy' ? '🛍️ Buy' : '🎒 Owned'}
-                </Text>
+              <TouchableOpacity
+                key={t}
+                style={[styles.subTab, subTab === t && styles.subTabActive]}
+                onPress={() => { setSubTab(t); if (t === 'owned') setNewItemBadge(null); }}
+              >
+                <View style={{ position: 'relative' }}>
+                  <Text style={[styles.subTabText, subTab === t && styles.subTabTextActive]}>
+                    {t === 'buy' ? '🛍️ Buy' : '🎒 Owned'}
+                  </Text>
+                  {t === 'owned' && newItemBadge === 'avatar' && (
+                    <View style={{ position: 'absolute', top: -3, right: -8, width: 8, height: 8, borderRadius: 4, backgroundColor: '#e74c3c' }} />
+                  )}
+                </View>
               </TouchableOpacity>
             ))}
           </View>
+
+          {/* ── Avatar of the Day ───────────────────────────────────────── */}
+          {subTab === 'buy' && featuredAvatar && !unlockedItems.has(featuredAvatar.emoji) && (
+            <TouchableOpacity
+              style={styles.featuredAvatarCard}
+              onPress={() => handleItemPress('avatar', featuredAvatar.emoji, featuredAvatar.discountedPrice, featuredAvatar.isPremium, featuredAvatar.label)}
+              disabled={actionLoading}
+              activeOpacity={0.85}
+            >
+              <View style={styles.featuredAvatarBadge}>
+                <Text style={styles.featuredAvatarBadgeText}>⭐ FEATURED TODAY</Text>
+              </View>
+              <View style={styles.featuredAvatarBody}>
+                <AvatarDisplay avatarId={featuredAvatar.emoji} size={64} />
+                <View style={styles.featuredAvatarInfo}>
+                  <Text style={styles.featuredAvatarName}>{featuredAvatar.label}</Text>
+                  <Text style={styles.featuredAvatarSub}>20% off today only</Text>
+                  <View style={styles.featuredPriceRow}>
+                    <Text style={styles.featuredOldPrice}>{(featuredAvatar.price ?? 0).toLocaleString()}</Text>
+                    <View style={styles.goldRow}>
+                      <Image source={require('../../assets/avatars/gold_coin.png')} style={styles.goldCoinSmall} resizeMode="contain" />
+                      <Text style={styles.featuredNewPrice}>{featuredAvatar.discountedPrice.toLocaleString()}</Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
+            </TouchableOpacity>
+          )}
+
           {loadingUnlocks ? (
             <View style={styles.centered}>
               <ActivityIndicator size="large" color="#FFD700" />
@@ -780,10 +883,29 @@ export default function ShopScreen() {
                 if (pa !== pb) return pa - pb;
                 return String(a.label ?? '').localeCompare(String(b.label ?? ''));
               })}
-              ListFooterComponent={subTab !== 'buy' ? null :
-                <View>
-                  {avatarTierChains
-                    .map((chain, idx) => {
+              ListHeaderComponent={subTab === 'buy' && affordableAvatarCount > 0 ? (
+                <TouchableOpacity
+                  style={styles.affordBanner}
+                  onPress={() => {}}
+                  activeOpacity={0.8}
+                >
+                  <Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 16, height: 16 }} resizeMode="contain" />
+                  <Text style={styles.affordBannerText}>
+                    You can afford <Text style={styles.affordBannerCount}>{affordableAvatarCount}</Text> {affordableAvatarCount === 1 ? 'avatar' : 'avatars'} right now
+                  </Text>
+                  <Text style={styles.affordBannerArrow}>↓</Text>
+                </TouchableOpacity>
+              ) : null}
+              ListFooterComponent={(() => {
+                const visibleChains = subTab === 'owned'
+                  ? avatarTierChains.filter(chain =>
+                      chain.some(a => (!a.isPremium && !a.questOnly) || unlockedItems.has(a.key))
+                    )
+                  : avatarTierChains;
+                if (visibleChains.length === 0) return null;
+                return (
+                  <View>
+                    {visibleChains.map((chain, idx) => {
                       const sectionName = chain[0].collection?.replace(/ Tier \d+$/, '') || chain[0].culture;
                       return (
                         <View key={idx} style={styles.tierSection}>
@@ -852,8 +974,9 @@ export default function ShopScreen() {
                         </View>
                       );
                     })}
-                </View>
-              }
+                  </View>
+                );
+              })()}
               keyExtractor={(item) => item.emoji}
               numColumns={3}
               contentContainerStyle={styles.itemListContent}
@@ -911,11 +1034,9 @@ export default function ShopScreen() {
                         <Text style={[styles.stateBadgeText, { color: bp.badgeColor }]}>🔒 Lvl {item.requiresLevel}</Text>
                       </View>
                     ) : cs.isSubscriptionLocked ? (
-                      <View style={[styles.stateBadge, { backgroundColor: bp.badgeBg, borderColor: bp.badgeBorder }]}>
-                        <View style={styles.goldRow}>
-                          <Image source={require('../../assets/avatars/gold_coin.png')} style={styles.goldCoinTiny} resizeMode="contain" />
-                          <Text style={[styles.stateBadgeText, { color: bp.badgeColor }]}>{item.price}</Text>
-                        </View>
+                      <View style={styles.conquerorStamp}>
+                        <Image source={require('../../assets/avatars/conqueror.png')} style={{ width: 12, height: 12 }} resizeMode="contain" />
+                        <Text style={styles.conquerorStampText}>Conqueror</Text>
                       </View>
                     ) : (
                       <View style={styles.itemPriceBadge}>
@@ -938,10 +1059,19 @@ export default function ShopScreen() {
         <>
           <View style={styles.subTabBar}>
             {(['buy', 'owned'] as const).map(t => (
-              <TouchableOpacity key={t} style={[styles.subTab, subTab === t && styles.subTabActive]} onPress={() => setSubTab(t)}>
-                <Text style={[styles.subTabText, subTab === t && styles.subTabTextActive]}>
-                  {t === 'buy' ? '🛍️ Buy' : '🎒 Owned'}
-                </Text>
+              <TouchableOpacity
+                key={t}
+                style={[styles.subTab, subTab === t && styles.subTabActive]}
+                onPress={() => { setSubTab(t); if (t === 'owned') setNewItemBadge(null); }}
+              >
+                <View style={{ position: 'relative' }}>
+                  <Text style={[styles.subTabText, subTab === t && styles.subTabTextActive]}>
+                    {t === 'buy' ? '🛍️ Buy' : '🎒 Owned'}
+                  </Text>
+                  {t === 'owned' && newItemBadge === 'flag' && (
+                    <View style={{ position: 'absolute', top: -3, right: -8, width: 8, height: 8, borderRadius: 4, backgroundColor: '#e74c3c' }} />
+                  )}
+                </View>
               </TouchableOpacity>
             ))}
           </View>
@@ -1268,7 +1398,52 @@ export default function ShopScreen() {
                   <View style={styles.goldBadge}>
                     <View style={styles.goldRow}>
                       <Image source={require('../../assets/avatars/gold_coin.png')} style={styles.goldCoinSmall} resizeMode="contain" />
-                      <Text style={styles.goldText}>66,666</Text>
+                      <Text style={styles.goldText}>66666</Text>
+                    </View>
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })()}
+
+          {/* Infinite Maps */}
+          {(() => {
+            const isOwned = unlockedItems.has('upgrade_infinite_maps');
+            const cs = resolveCardState({ isUnlocked: isOwned, requiredLevel: 125, playerLevel });
+            const cp = CARD_PALETTES[cs.primaryState];
+            const bp = CARD_PALETTES[cs.badgeState];
+            return (
+              <TouchableOpacity
+                style={[styles.upgradeCard, isOwned ? styles.upgradeCardOwned : { backgroundColor: cp.cardBg, borderColor: cp.cardBorder, opacity: cs.states.length > 0 ? 0.8 : 1 }]}
+                onPress={() => {
+                  if (cs.isLevelLocked) {
+                    showLevelAlert({ requiredLevel: 125, itemName: 'Infinite Maps' });
+                    return;
+                  }
+                  if (isOwned) return;
+                  handleBuyInfiniteMaps();
+                }}
+                disabled={actionLoading || isOwned}
+                activeOpacity={0.8}
+              >
+                <Image source={require('../../assets/avatars/ancient_map.png')} style={styles.upgradeCardImage} resizeMode="contain" />
+                <View style={styles.upgradeInfo}>
+                  <Text style={styles.upgradeTitle}>Infinite Maps</Text>
+                  {!isOwned && !cs.isLevelLocked && <Text style={styles.upgradeDesc}>Never wait for maps again</Text>}
+                </View>
+                {isOwned ? (
+                  <View style={[styles.ownedItemBadgeRow, { paddingRight: 12 }]}>
+                    <Text style={{ color: '#FFD700', fontSize: 22, fontWeight: 'bold' }}>∞</Text>
+                  </View>
+                ) : cs.isLevelLocked ? (
+                  <View style={[styles.upgradeBadge, { backgroundColor: bp.badgeBg, borderColor: bp.badgeBorder }]}>
+                    <Text style={[styles.upgradeBadgeText, { color: bp.badgeColor }]}>🔒 Lvl 125</Text>
+                  </View>
+                ) : (
+                  <View style={styles.goldBadge}>
+                    <View style={styles.goldRow}>
+                      <Image source={require('../../assets/avatars/gold_coin.png')} style={styles.goldCoinSmall} resizeMode="contain" />
+                      <Text style={styles.goldText}>50,000</Text>
                     </View>
                   </View>
                 )}
@@ -1650,6 +1825,77 @@ const styles = StyleSheet.create({
     borderColor: '#FFD700',
   },
   itemPriceText: { color: '#FFD700', fontSize: 10, fontWeight: 'bold' },
+  featuredAvatarCard: {
+    marginHorizontal: 12,
+    marginBottom: 14,
+    backgroundColor: '#1a1020',
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#FFD700',
+    padding: 14,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  featuredAvatarBadge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    backgroundColor: '#FFD700',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderBottomLeftRadius: 12,
+  },
+  featuredAvatarBadgeText: {
+    color: '#0a0a1a',
+    fontSize: 10,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
+  },
+  featuredAvatarBody: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    marginTop: 10,
+  },
+  featuredAvatarInfo: { flex: 1 },
+  featuredAvatarName: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginBottom: 2 },
+  featuredAvatarSub: { color: '#6BCB77', fontSize: 12, fontWeight: '600', marginBottom: 6 },
+  featuredPriceRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  featuredOldPrice: { color: '#555', fontSize: 13, textDecorationLine: 'line-through' },
+  featuredNewPrice: { color: '#FFD700', fontSize: 18, fontWeight: 'bold' },
+  affordBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#1a1a20',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FFD700',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginHorizontal: 6,
+    marginBottom: 12,
+  },
+  affordBannerText: { flex: 1, color: '#ccc', fontSize: 13 },
+  affordBannerCount: { color: '#FFD700', fontWeight: 'bold' },
+  affordBannerArrow: { color: '#FFD700', fontSize: 16, fontWeight: 'bold' },
+  conquerorStamp: {
+    backgroundColor: '#2a1a4a',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#9B59B6',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  conquerorStampText: {
+    color: '#9B59B6',
+    fontSize: 9,
+    fontWeight: 'bold',
+    letterSpacing: 0.3,
+  },
   statusBadgeTierLocked: {
     backgroundColor: '#3a1a1a',
     paddingHorizontal: 8,

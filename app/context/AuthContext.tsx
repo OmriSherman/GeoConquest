@@ -202,6 +202,13 @@ interface AuthContextValue {
   nextQuizBoostActive: boolean;
   setNextQuizBoostActive: (active: boolean) => Promise<void>;
   consumeNextQuizBoost: () => Promise<boolean>;
+  maps: number;
+  mapsNextRefillAt: Date | null;
+  mapsAdsUsedToday: number;
+  deductMap: () => Promise<boolean>;
+  refundMap: () => Promise<void>;
+  grantAdMap: () => Promise<void>;
+  syncMaps: () => Promise<void>;
 }
 
 // ─── Context ──────────────────────────────────────────────────────────────────
@@ -219,6 +226,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [dailyRewardAvailable, setDailyRewardAvailable] = useState(false);
   const [unlockedItems, setUnlockedItems] = useState<Set<string>>(new Set());
   const [nextQuizBoostActive, setNextQuizBoostActiveState] = useState(false);
+  const [maps, setMaps] = useState(5);
+  const [mapsNextRefillAt, setMapsNextRefillAt] = useState<Date | null>(null);
 
   // ── Bootstrap ──────────────────────────────────────────────────────────────
   //
@@ -305,6 +314,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
+  function applyMapsFromProfile(p: Profile) {
+    const MAX_MAPS = 5;
+    const REFILL_MS = 2 * 60 * 60 * 1000;
+    let count = Math.min(Math.max(p.maps ?? MAX_MAPS, 0), MAX_MAPS);
+    let refillAt = p.maps_next_refill_at ? new Date(p.maps_next_refill_at).getTime() : null;
+    const now = Date.now();
+
+    while (count < MAX_MAPS && refillAt !== null && refillAt <= now) {
+      count++;
+      refillAt = refillAt + REFILL_MS;
+    }
+    if (count >= MAX_MAPS) refillAt = null;
+
+    setMaps(count);
+    setMapsNextRefillAt(refillAt ? new Date(refillAt) : null);
+  }
+
   function applyProfileToState(p: Profile) {
     setProfile(p);
     if (p.last_reward_claim) {
@@ -315,6 +341,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setDailyRewardAvailable(true);
     }
     setNeedsUsername(!p.has_onboarded);
+    applyMapsFromProfile(p);
+  }
+
+  async function persistCachedProfilePatch(userId: string, patch: Partial<Profile>) {
+    try {
+      const raw = await AsyncStorage.getItem(PROFILE_CACHE_KEY(userId));
+      if (!raw) return;
+      const cached = JSON.parse(raw) as Profile;
+      await AsyncStorage.setItem(PROFILE_CACHE_KEY(userId), JSON.stringify({ ...cached, ...patch }));
+    } catch {}
+  }
+
+  async function syncProfileCurrencyState(userId: string, gold: number, tickets: number) {
+    setProfile(prev => prev ? { ...prev, gold_balance: gold, tickets } : prev);
+    await persistCachedProfilePatch(userId, { gold_balance: gold, tickets });
+  }
+
+  async function syncProfileGoldState(userId: string, gold: number, extraPatch?: Partial<Profile>) {
+    setProfile(prev => prev ? { ...prev, gold_balance: gold, ...extraPatch } : prev);
+    await persistCachedProfilePatch(userId, { gold_balance: gold, ...(extraPatch ?? {}) });
   }
 
   async function fetchProfile(userId: string) {
@@ -624,8 +670,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (error) throw error;
 
-    // Deduct gold locally + update unlock cache
-    setProfile(prev => prev ? { ...prev, gold_balance: prev.gold_balance - cost } : prev);
+    const { data: freshProfile, error: refreshError } = await supabase
+      .from('profiles')
+      .select('gold_balance, tickets')
+      .eq('id', profile.id)
+      .single();
+
+    if (!refreshError && freshProfile) {
+      await syncProfileCurrencyState(
+        profile.id,
+        Number((freshProfile as any).gold_balance ?? 0),
+        Number((freshProfile as any).tickets ?? profile.tickets ?? 0),
+      );
+    }
+
     setUnlockedItems(prev => new Set([...prev, itemId]));
   }
 
@@ -661,9 +719,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Grant ticket rewards — skip if already claimed (tickets were already granted)
     if (!alreadyClaimed && rewardTickets && rewardTickets > 0) {
-      const newTickets = (profile.tickets ?? 0) + rewardTickets;
-      await supabase.from('profiles').update({ tickets: newTickets }).eq('id', profile.id);
-      setProfile(prev => prev ? { ...prev, tickets: newTickets } : prev);
+      await applyProfileCurrencyDelta(0, rewardTickets);
     }
 
     // If it was already claimed and items were all already owned too, surface the error
@@ -687,12 +743,72 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw error;
     }
 
-    setProfile(prev => prev ? { ...prev, gold_balance: prev.gold_balance - cost, max_quiz_turns: newTurns } : prev);
+    const { data: freshProfile, error: refreshError } = await supabase
+      .from('profiles')
+      .select('gold_balance, tickets')
+      .eq('id', profile.id)
+      .single();
+
+    if (!refreshError && freshProfile) {
+      await syncProfileGoldState(profile.id, Number((freshProfile as any).gold_balance ?? 0), {
+        max_quiz_turns: newTurns,
+      });
+      return;
+    }
+
+    setProfile(prev => prev ? { ...prev, max_quiz_turns: newTurns } : prev);
   }
 
   // Gold and tickets per cycle day — mirrors REWARDS_CYCLE in DailyRewardModal.tsx
   const DAILY_GOLD_BY_DAY = [100, 150, 200, 250, 300, 400, 500];
   const DAILY_TICKETS_BY_DAY = [1, 1, 2, 2, 3, 3, 5];
+
+  async function applyProfileCurrencyDelta(goldDelta: number, ticketDelta: number): Promise<{ gold: number; tickets: number }> {
+    const userId = profile?.id ?? session?.user?.id;
+    if (!userId) return { gold: 0, tickets: 0 };
+    if (goldDelta === 0 && ticketDelta === 0) {
+      return { gold: profile?.gold_balance ?? 0, tickets: profile?.tickets ?? 0 };
+    }
+
+    const rpcResult = await supabase.rpc('apply_profile_currency_delta', {
+      p_gold_delta: goldDelta,
+      p_ticket_delta: ticketDelta,
+    });
+
+    if (!rpcResult.error) {
+      const row = Array.isArray(rpcResult.data) ? rpcResult.data[0] : rpcResult.data;
+      const gold = Number((row as any)?.gold_balance ?? profile?.gold_balance ?? 0);
+      const tickets = Number((row as any)?.tickets ?? profile?.tickets ?? 0);
+      await syncProfileCurrencyState(userId, gold, tickets);
+      return { gold, tickets };
+    }
+
+    const { data: currentRow, error: readError } = await supabase
+      .from('profiles')
+      .select('gold_balance, tickets')
+      .eq('id', userId)
+      .single();
+
+    if (readError) throw rpcResult.error;
+
+    const currentGold = Number((currentRow as any)?.gold_balance ?? 0);
+    const currentTickets = Number((currentRow as any)?.tickets ?? 0);
+    const gold = currentGold + goldDelta;
+    const tickets = currentTickets + ticketDelta;
+
+    if (gold < 0) throw new Error('Not enough gold.');
+    if (tickets < 0) throw new Error('Not enough tickets.');
+
+    const { error: updateError } = await supabase
+      .from('profiles')
+      .update({ gold_balance: gold, tickets })
+      .eq('id', userId);
+
+    if (updateError) throw updateError;
+
+    await syncProfileCurrencyState(userId, gold, tickets);
+    return { gold, tickets };
+  }
 
   async function claimDailyReward(): Promise<{ gold: number; tickets: number }> {
     if (!profile) return { gold: 0, tickets: 0 };
@@ -752,14 +868,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const totalGoldReward = baseGoldReward * rewardMultiplier;
         const extraGoldReward = totalGoldReward - baseGoldReward;
         const newGoldBalance = (new_balance as number) + extraGoldReward;
-        const newTickets = (profile.tickets ?? 0) + ticketBonus;
-        await supabase.from('profiles').update({ gold_balance: newGoldBalance, tickets: newTickets }).eq('id', profile.id);
+        const updatedCurrency = await applyProfileCurrencyDelta(extraGoldReward, ticketBonus);
         setProfile(prev => prev ? {
           ...prev,
-          gold_balance: newGoldBalance,
+          gold_balance: updatedCurrency.gold || newGoldBalance,
           login_streak: new_streak,
           last_reward_claim: new Date().toISOString(),
-          tickets: newTickets,
+          tickets: updatedCurrency.tickets,
         } : prev);
         setDailyRewardAvailable(false);
         return { gold: totalGoldReward, tickets: ticketBonus };
@@ -769,87 +884,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function addGold(amount: number) {
-    const userId = profile?.id ?? session?.user?.id;
-    if (!userId || amount === 0) return;
-
-    // Optimistic local update
-    setProfile(prev => prev ? { ...prev, gold_balance: Math.max(0, (prev.gold_balance ?? 0) + amount) } : prev);
-
-    // Use server value as source of truth to avoid stale-client overwrites
-    const { data: currentRow, error: readError } = await supabase
-      .from('profiles')
-      .select('gold_balance')
-      .eq('id', userId)
-      .single();
-
-    if (readError) {
-      if (profile?.id) {
-        await enqueueMutation(profile.id, { type: 'add_gold', delta: amount });
-      }
-      return;
-    }
-
-    const currentGold = Number((currentRow as any)?.gold_balance ?? 0);
-    const newBalance = Math.max(0, currentGold + amount);
-
-    const { error } = await supabase
-      .from('profiles')
-      .update({ gold_balance: newBalance })
-      .eq('id', userId);
-
-    if (error) {
-      if (profile?.id) {
-        await enqueueMutation(profile.id, { type: 'add_gold', delta: amount });
-        const raw = await AsyncStorage.getItem(PROFILE_CACHE_KEY(profile.id));
-        if (raw) {
-          const cached = JSON.parse(raw);
-          AsyncStorage.setItem(PROFILE_CACHE_KEY(profile.id), JSON.stringify({ ...cached, gold_balance: newBalance })).catch(() => {});
-        }
-      }
-      return;
-    }
-
-    setProfile(prev => prev ? { ...prev, gold_balance: newBalance } : prev);
+    if (amount === 0) return;
+    await applyProfileCurrencyDelta(amount, 0);
   }
 
   async function spendTicket() {
     if (!profile) return;
-    const newCount = Math.max(0, (profile.tickets ?? 0) - 1);
-    await supabase.from('profiles').update({ tickets: newCount }).eq('id', profile.id);
-    setProfile(prev => prev ? { ...prev, tickets: newCount } : prev);
+    await applyProfileCurrencyDelta(0, -1);
   }
 
   async function addTickets(amount: number) {
     if (!profile || amount <= 0) return;
-    const newCount = (profile.tickets ?? 0) + amount;
-    await supabase.from('profiles').update({ tickets: newCount }).eq('id', profile.id);
-    setProfile(prev => prev ? { ...prev, tickets: newCount } : prev);
+    await applyProfileCurrencyDelta(0, amount);
   }
 
   async function purchaseTickets(amount: number, cost: number) {
     if (!profile) return;
     if ((profile.gold_balance ?? 0) < cost) throw new Error('Not enough gold.');
-    const newGold = profile.gold_balance - cost;
-    const newTickets = (profile.tickets ?? 0) + amount;
-    const { error } = await supabase
-      .from('profiles')
-      .update({ gold_balance: newGold, tickets: newTickets })
-      .eq('id', profile.id);
-    if (error) throw error;
-    setProfile(prev => prev ? { ...prev, gold_balance: newGold, tickets: newTickets } : prev);
+    await applyProfileCurrencyDelta(-cost, amount);
   }
 
   async function purchaseTicket(cost: number) {
     if (!profile) return;
     if ((profile.gold_balance ?? 0) < cost) throw new Error('Not enough gold.');
-    const newGold = profile.gold_balance - cost;
-    const newTickets = (profile.tickets ?? 0) + 1;
-    const { error } = await supabase
-      .from('profiles')
-      .update({ gold_balance: newGold, tickets: newTickets })
-      .eq('id', profile.id);
-    if (error) throw error;
-    setProfile(prev => prev ? { ...prev, gold_balance: newGold, tickets: newTickets } : prev);
+    await applyProfileCurrencyDelta(-cost, 1);
   }
 
   async function purchaseConqueror(plan: 'unlimited' | 'monthly') {
@@ -865,15 +923,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (error) throw error;
       if (!data?.success) throw new Error(data?.error ?? 'Failed to activate subscription');
 
-      // Update profile locally
-      const updates: any = { is_conquerer: true };
-      const bonusGranted = !!data?.bonus_granted;
-      if (plan === 'unlimited' && bonusGranted) {
-        updates.gold_balance = (profile.gold_balance ?? 0) + 100000;
-        updates.tickets = (profile.tickets ?? 0) + 30;
-      }
+      const { data: freshProfile } = await supabase
+        .from('profiles')
+        .select('gold_balance, tickets, is_conquerer, conqueror_plan, conqueror_lifetime_bonus_claimed')
+        .eq('id', profile.id)
+        .single();
 
-      setProfile(prev => prev ? { ...prev, ...updates } : prev);
+      setProfile(prev => prev ? {
+        ...prev,
+        is_conquerer: true,
+        ...(freshProfile ?? {}),
+      } : prev);
     } catch (err: any) {
       throw new Error(err.message ?? 'Failed to activate Conqueror subscription');
     }
@@ -1084,6 +1144,64 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return true;
   }
 
+  // ── Maps ───────────────────────────────────────────────────────────────────
+
+  async function syncMaps() {
+    if (!profile) return;
+    const { data, error } = await supabase.rpc('sync_maps_refill');
+    if (error || !data) return;
+    const count = Number((data as any).maps ?? maps);
+    const refillIso: string | null = (data as any).maps_next_refill_at ?? null;
+    setMaps(Math.min(count, 5));
+    setMapsNextRefillAt(refillIso ? new Date(refillIso) : null);
+    setProfile(prev => prev ? { ...prev, maps: count, maps_next_refill_at: refillIso } : prev);
+  }
+
+  async function deductMap(): Promise<boolean> {
+    if (!profile) return false;
+    if (profile.is_conquerer) return true;
+    const { data, error } = await supabase.rpc('deduct_map');
+    if (error) throw error;
+    const count = Number((data as any).maps ?? 0);
+    const refillIso: string | null = (data as any).maps_next_refill_at ?? null;
+    setMaps(count);
+    setMapsNextRefillAt(refillIso ? new Date(refillIso) : null);
+    setProfile(prev => prev ? { ...prev, maps: count, maps_next_refill_at: refillIso } : prev);
+    return true;
+  }
+
+  async function refundMap() {
+    if (!profile || profile.is_conquerer) return;
+    const { data, error } = await supabase.rpc('refund_map');
+    if (error || !data) return;
+    const count = Number((data as any).maps ?? maps);
+    const refillIso: string | null = (data as any).maps_next_refill_at ?? null;
+    setMaps(Math.min(count, 5));
+    setMapsNextRefillAt(refillIso ? new Date(refillIso) : null);
+    setProfile(prev => prev ? { ...prev, maps: count, maps_next_refill_at: refillIso } : prev);
+  }
+
+  async function grantAdMap() {
+    if (!profile) return;
+    const { data, error } = await supabase.rpc('grant_ad_map');
+    if (error) throw error;
+    const count = Number((data as any).maps ?? maps);
+    const refillIso: string | null = (data as any).maps_next_refill_at ?? null;
+    const adUsedAt: string | null = (data as any).ad_used_at ?? null;
+    const adCount = Number((data as any).ad_count ?? 0);
+    setMaps(Math.min(count, 5));
+    setMapsNextRefillAt(refillIso ? new Date(refillIso) : null);
+    setProfile(prev => prev ? { ...prev, maps: count, maps_next_refill_at: refillIso, maps_ad_used_at: adUsedAt, maps_ad_count: adCount } : prev);
+  }
+
+  const mapsAdsUsedToday = React.useMemo(() => {
+    const adDate = profile?.maps_ad_used_at;
+    if (!adDate) return 0;
+    const today = new Date().toISOString().split('T')[0];
+    if (adDate.split('T')[0] !== today) return 0;
+    return profile?.maps_ad_count ?? 0;
+  }, [profile?.maps_ad_used_at, profile?.maps_ad_count]);
+
   // ── Render ─────────────────────────────────────────────────────────────────
   async function toggleUpgrade(id: string) {
     const newSet = new Set(disabledUpgrades);
@@ -1140,6 +1258,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         nextQuizBoostActive,
         setNextQuizBoostActive,
         consumeNextQuizBoost,
+        maps,
+        mapsNextRefillAt,
+        mapsAdsUsedToday,
+        deductMap,
+        refundMap,
+        grantAdMap,
+        syncMaps,
       }}
     >
       {children}

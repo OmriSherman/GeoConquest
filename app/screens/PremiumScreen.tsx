@@ -87,24 +87,11 @@ async function requestSubscription(sku: string): Promise<boolean> {
   }
 }
 
-// ─── Countdown timer ──────────────────────────────────────────────────────────
-
-function useCountdown(totalSeconds: number) {
-  const [remaining, setRemaining] = useState(totalSeconds);
-  useEffect(() => {
-    const id = setInterval(() => setRemaining(s => Math.max(0, s - 1)), 1000);
-    return () => clearInterval(id);
-  }, []);
-  const h = Math.floor(remaining / 3600);
-  const m = Math.floor((remaining % 3600) / 60);
-  const s = remaining % 60;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-}
-
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
 const FEATURE_ICON_IMAGES: Record<string, any> = {
   gold_coin: require('../../assets/avatars/gold_coin.png'),
+  ancient_map: require('../../assets/avatars/ancient_map.png'),
   '⚡': require('../../assets/avatars/lightning.png'),
   '👑': require('../../assets/avatars/crown.png'),
   '🏆': require('../../assets/avatars/trophy.png'),
@@ -112,7 +99,7 @@ const FEATURE_ICON_IMAGES: Record<string, any> = {
 
 const FEATURES = [
   { icon: 'gold_coin', title: 'Daily Triple Rewards', desc: 'Earn 3× gold and 3× tickets from daily login rewards.' },
-  { icon: '📡', title: 'Play Offline', desc: 'Capitals, Borders & Shape quizzes work with no internet connection.' },
+  { icon: 'ancient_map', title: 'Unlimited Maps', desc: 'Maps are never required. Play any quiz, any time, without limits.' },
   { icon: '🎭', title: 'Unique Avatars', desc: 'Exclusive Conqueror avatars not available anywhere else.' },
   { icon: '⚡', title: 'Unique Quests', desc: 'Access to exclusive quest content and rewards only for Conquerors.' },
   { icon: '👑', title: 'Conqueror Badge', desc: 'Exclusive crown badge displayed on the global leaderboard.' },
@@ -126,7 +113,7 @@ const COMPARE_ROWS: Array<{ label: string; free: string | boolean; pro: string |
   { label: 'Unique Avatars', free: false, pro: true },
   { label: 'Unique Quests', free: false, pro: true },
   { label: 'Early Feature Access', free: false, pro: true },
-  { label: 'Play Offline', free: 'Flag only', pro: 'All quizzes' },
+  { label: 'Map Requirement', free: '3 per day', pro: 'Never' },
 ];
 
 const TESTIMONIALS = [
@@ -173,9 +160,7 @@ export default function PremiumScreen({ navigation }: { navigation?: any }) {
   const { profile, purchaseConqueror } = useAuth();
   const { showAlert } = useAlert();
   const insets = useSafeAreaInsets();
-  const countdown = useCountdown(3 * 3600 + 47 * 60 + 22);
-
-  const [plan, setPlan] = useState<'unlimited' | 'monthly'>('unlimited');
+  const [plan, setPlan] = useState<'unlimited' | 'monthly'>('monthly');
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [purchasing, setPurchasing] = useState(false);
   const [iapReady, setIapReady] = useState(false);
@@ -312,7 +297,7 @@ export default function PremiumScreen({ navigation }: { navigation?: any }) {
             '1. Build with EAS: npx eas build\n' +
             '2. Configure subscriptions in App Store Connect / Google Play Console\n\n' +
             `Plan: ${plan === 'unlimited' ? 'Lifetime' : 'Monthly'}\n` +
-            `Price: ${plan === 'unlimited' ? '$39.99 once' : '$2.49 first month, then $4.99/mo'}`,
+            `Price: ${plan === 'unlimited' ? '$39.99 once' : '$1.99 first month, then $3.99/mo'}`,
           messageAlign: 'left',
           buttons: [{ text: 'OK', onPress: () => setPurchasing(false) }],
         });
@@ -323,21 +308,40 @@ export default function PremiumScreen({ navigation }: { navigation?: any }) {
         ? 'membership_lifetime'
         : 'geoconquest_conqueror_monthly';
 
-      const planDetails = plan === 'unlimited'
-        ? 'Lifetime ($39.99 once) + 100K Gold + 30 Tickets'
-        : 'Monthly ($2.49 first month, then $4.99/mo)';
-
       showAlert({
         variant: 'premium',
         icon: (
           <Image
             source={require('../../assets/avatars/conqueror.png')}
-            style={{ width: 120, height: 120 }}
+            style={{ width: 92, height: 92 }}
             resizeMode="contain"
           />
         ),
-        title: 'Become a Conqueror',
-        message: `${planDetails}\n\nReady to claim your premium status?`,
+        title: 'Confirm Purchase',
+        contentNode: (
+          <View style={styles.purchaseSummary}>
+            <Text style={styles.purchasePlanName}>
+              {plan === 'unlimited' ? 'Lifetime Conqueror' : 'Monthly Conqueror'}
+            </Text>
+            <Text style={styles.purchasePlanSubtitle}>
+              {plan === 'unlimited' ? 'Permanent access, no renewals' : 'Renews monthly through the store'}
+            </Text>
+            <View style={styles.purchaseDivider} />
+            <View style={styles.purchaseSummaryRow}>
+              <Text style={styles.purchaseSummaryLabel}>Price</Text>
+              <Text style={styles.purchaseSummaryValue}>
+                {plan === 'unlimited' ? '$39.99 once' : '$1.99 first month'}
+              </Text>
+            </View>
+            {plan === 'unlimited' && (
+              <View style={styles.purchaseSummaryRow}>
+                <Text style={styles.purchaseSummaryLabel}>Bonus</Text>
+                <Text style={styles.purchaseSummaryValue}>100K Gold + 30 Tickets</Text>
+              </View>
+            )}
+            <Text style={styles.purchaseStoreNote}>Payment is handled securely by Apple/Google.</Text>
+          </View>
+        ),
         buttons: [
           { text: 'Cancel', style: 'cancel', onPress: () => setPurchasing(false) },
           {
@@ -364,10 +368,11 @@ export default function PremiumScreen({ navigation }: { navigation?: any }) {
 
   return (
     <View style={styles.root}>
-      {/* ── Urgency banner ─────────────────────────────────────────────────── */}
+      {/* ── Intro offer banner ─────────────────────────────────────────────── */}
       <View style={[styles.urgencyBar, { paddingTop: insets.top + 6 }]}>
-        <Text style={styles.urgencyText}>Monthly plan — first month 50% off — expires in </Text>
-        <Text style={styles.urgencyTimer}>{countdown}</Text>
+        <Text style={styles.urgencyText}>Monthly plan — first month just </Text>
+        <Text style={styles.urgencyTimer}>$1.99</Text>
+        <Text style={styles.urgencyText}> · cancel anytime</Text>
       </View>
 
       <ScrollView
@@ -396,7 +401,7 @@ export default function PremiumScreen({ navigation }: { navigation?: any }) {
           <View style={styles.joinPill}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <Image source={require('../../assets/avatars/globe.png')} style={{ width: 16, height: 16 }} resizeMode="contain" />
-              <Text style={styles.joinText}>Join 1,200 Premium Explorers</Text>
+              <Text style={styles.joinText}>Join Conquerors Worldwide</Text>
             </View>
           </View>
         </View>
@@ -459,20 +464,34 @@ export default function PremiumScreen({ navigation }: { navigation?: any }) {
         {/* ── Pricing ────────────────────────────────────────────────────── */}
         <Text style={styles.sectionTitle}>Choose Your Plan</Text>
         <View style={styles.pricingRow}>
-          {/* Unlimited */}
+          {/* Monthly — shown first, MOST POPULAR */}
+          <TouchableOpacity
+            style={[styles.priceCard, plan === 'monthly' && styles.priceCardSelected]}
+            onPress={() => setPlan('monthly')}
+            activeOpacity={0.85}
+          >
+            <View style={styles.popularBadge}>
+              <Text style={styles.popularText}>BEST VALUE</Text>
+            </View>
+            <Text style={styles.planName}>Monthly</Text>
+            <Text style={styles.planPrice}>
+              $1.99<Text style={styles.planPer}>/mo</Text>
+            </Text>
+            <Text style={styles.planBreakdown}>First month intro price</Text>
+            <Text style={styles.planOldPrice}>Then $3.99/mo · cancel anytime</Text>
+          </TouchableOpacity>
+
+          {/* Lifetime */}
           <TouchableOpacity
             style={[styles.priceCard, plan === 'unlimited' && styles.priceCardSelected]}
             onPress={() => setPlan('unlimited')}
             activeOpacity={0.85}
           >
-            <View style={styles.popularBadge}>
-              <Text style={styles.popularText}>MOST POPULAR</Text>
-            </View>
             <Text style={styles.planName}>Lifetime</Text>
             <Text style={styles.planPrice}>
               $39.99<Text style={styles.planPer}> once</Text>
             </Text>
-            <Text style={styles.planBreakdown}>One-time payment · Lifetime access</Text>
+            <Text style={styles.planBreakdown}>One-time · no renewals</Text>
             <View style={styles.savingBadge}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                 <Text style={styles.savingText}>+100K</Text>
@@ -485,20 +504,6 @@ export default function PremiumScreen({ navigation }: { navigation?: any }) {
                 />
               </View>
             </View>
-          </TouchableOpacity>
-
-          {/* Monthly */}
-          <TouchableOpacity
-            style={[styles.priceCard, plan === 'monthly' && styles.priceCardSelected, styles.priceCardMonthly]}
-            onPress={() => setPlan('monthly')}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.planName}>Monthly</Text>
-            <Text style={styles.planPrice}>
-              $2.49<Text style={styles.planPer}>/mo</Text>
-            </Text>
-            <Text style={styles.planBreakdown}>First month special</Text>
-            <Text style={styles.planOldPrice}>Then $4.99/mo</Text>
           </TouchableOpacity>
         </View>
 
@@ -522,7 +527,7 @@ export default function PremiumScreen({ navigation }: { navigation?: any }) {
         <Text style={styles.sectionTitle}>What Conquerors Say</Text>
         <View style={styles.starsRow}>
           <Text style={styles.starsGold}>★★★★★</Text>
-          <Text style={styles.ratingLabel}>  4.9 / 5 from 2,000+ commanders</Text>
+          <Text style={styles.ratingLabel}>  Rated 5 stars by our Conquerors</Text>
         </View>
         {TESTIMONIALS.map((t, i) => (
           <View key={i} style={styles.testimonialCard}>
@@ -584,7 +589,7 @@ export default function PremiumScreen({ navigation }: { navigation?: any }) {
               ? 'Build with EAS to enable purchases'
               : plan === 'unlimited'
               ? '$39.99 · Lifetime · +100K Gold + 30 Tickets'
-              : '$2.49 first month, then $4.99/mo'}
+              : '$1.99 first month, then $3.99/mo'}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -593,7 +598,7 @@ export default function PremiumScreen({ navigation }: { navigation?: any }) {
           activeOpacity={0.7}
         >
           <Text style={styles.ctaSwitchText}>
-            {plan === 'unlimited' ? 'Switch to Monthly ($4.99/mo)' : 'Switch to Lifetime — $39.99 once'}
+            {plan === 'monthly' ? 'Or go Lifetime — $39.99 once, no renewals' : 'Switch to Monthly — $1.99 first month'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -796,6 +801,21 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 20,
   },
+  purchaseSummary: {
+    backgroundColor: '#160d24',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#432160',
+    padding: 14,
+    gap: 8,
+  },
+  purchasePlanName: { color: '#fff', fontSize: 17, fontWeight: '800', textAlign: 'center' },
+  purchasePlanSubtitle: { color: '#9f8ab8', fontSize: 12, textAlign: 'center' },
+  purchaseDivider: { height: 1, backgroundColor: '#432160', marginVertical: 4 },
+  purchaseSummaryRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 14 },
+  purchaseSummaryLabel: { color: '#9f8ab8', fontSize: 13, fontWeight: '600' },
+  purchaseSummaryValue: { color: '#c084fc', fontSize: 14, fontWeight: '800' },
+  purchaseStoreNote: { color: '#777', fontSize: 11, textAlign: 'center', marginTop: 4 },
 
   // Trust
   trustRow: {

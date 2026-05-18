@@ -121,6 +121,15 @@ export function playTick() {
     triggerSound('tick');
 }
 
+/** Gauntlet: heavy crash on wrong answer */
+export function playGauntletFail() { triggerSound('gauntlet_fail'); }
+/** Gauntlet: metallic clang when shield absorbs a hit */
+export function playGauntletShield() { triggerSound('gauntlet_shield'); }
+/** Gauntlet: ascending power arpeggio on tier escalation */
+export function playGauntletTier() { triggerSound('gauntlet_tier'); }
+/** Gauntlet: alarm siren + fanfare sting on boss round */
+export function playGauntletBoss() { triggerSound('gauntlet_boss'); }
+
 /** Gold counter gain sound in results animation */
 export async function playGoldGain() {
   triggerSound('purchase');

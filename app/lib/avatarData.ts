@@ -84,8 +84,10 @@ export const CUSTOM_AVATARS: CustomAvatarOption[] = [
     { key: 'png_vorvir', label: 'VorVir', culture: '', price: 4000, isPremium: true },
 
     // ── Shop-only originals ───────────────────────────────────────────────────
-    { key: 'png_piga', label: 'Piga', culture: '', price: 3500, isPremium: true, isPremiumSubscription: true },
-    { key: 'png_cheezus', label: 'Cheezus', culture: '', price: 10000, isPremium: true, requiresLevel: 50 },
+    { key: 'png_piga',          label: 'Piga',          culture: '', price: 3500,  isPremium: true, isPremiumSubscription: true },
+    { key: 'png_cheezus',       label: 'Cheezus',       culture: '', price: 10000, isPremium: true, requiresLevel: 50 },
+    { key: 'png_lich',          label: 'The Lich',      culture: '', price: 10000, isPremium: true, requiresLevel: 50 },
+    { key: 'png_plague_doctor', label: 'Plague Doctor', culture: '', price: 5000,  isPremium: true, requiresLevel: 25 },
 
     // ── Meme / Misc ───────────────────────────────────────────────────────────
     { key: 'png_smart_bulb', label: 'Smart Bulb', culture: '', price: 3000, isPremium: true },
@@ -117,7 +119,9 @@ export const CUSTOM_AVATARS: CustomAvatarOption[] = [
     { key: 'png_grim_reaper', label: 'Grim Reaper', culture: '', price: 3000, isPremium: true, requiresLevel: 20 },
 
     // ── Meme / Internet ───────────────────────────────────────────────────────
-    { key: 'png_npc', label: 'NPC', culture: '', price: 5000, isPremium: true, requiresLevel: 30 },
+    { key: 'png_npc',             label: 'NPC',             culture: '', price: 5000,  isPremium: true, requiresLevel: 30 },
+    { key: 'png_doge',            label: 'Doge',            culture: '', price: 50000, isPremium: true, requiresLevel: 30 },
+    { key: 'png_shocked_hamster', label: 'Shocked Hamster', culture: '', price: 2000,  isPremium: true, requiresLevel: 10 },
 
     // ── Cursed ────────────────────────────────────────────────────────────────
     { key: 'png_voodoo_doll',   label: 'Voodoo Doll',   culture: '', price: 2000, isPremium: true, requiresLevel: 10 },
@@ -147,10 +151,18 @@ export const CUSTOM_AVATARS: CustomAvatarOption[] = [
     { key: 'png_triboi',     label: 'Triboi',   culture: '', price: 0, isPremium: false, questOnly: true },
 
     // ── Endgame ───────────────────────────────────────────────────────────────
+    { key: 'png_void_eye',          label: 'Void Eye',          culture: '', price: 0, isPremium: false, questOnly: true },
+    { key: 'png_beast_mark',        label: 'Beast Mark',        culture: '', price: 0, isPremium: false, questOnly: true },
     { key: 'png_divine_high_king',  label: 'Divine High King',  culture: '', price: 0, isPremium: false, questOnly: true },
     { key: 'png_divine_high_queen', label: 'Divine High Queen', culture: '', price: 0, isPremium: false, questOnly: true },
     { key: 'png_cosmic_armor', label: 'Cosmic Armor', culture: '', price: 1000000, isPremium: true, requiresLevel: 100 },
     { key: 'png_world_ender',  label: 'World Ender',  culture: '', price: 0, isPremium: false, questOnly: true },
+
+    // ── Transcendent — level 150-300 exclusive quest rewards ──────────────────
+    { key: 'png_void_herald',     label: 'Void Herald',     culture: '', price: 0, isPremium: false, questOnly: true },
+    { key: 'png_atlas_titan',     label: 'Atlas Titan',     culture: '', price: 0, isPremium: false, questOnly: true },
+    { key: 'png_eternal_emperor', label: 'Eternal Emperor', culture: '', price: 0, isPremium: false, questOnly: true },
+    { key: 'png_void_ascendant',  label: 'Void Ascendant',  culture: '', price: 0, isPremium: false, questOnly: true },
 
 ];
 

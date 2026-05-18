@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Image,
   Platform,
@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useGame } from '../context/GameContext';
+import { useAuth } from '../context/AuthContext';
 import { useAlert } from '../context/AlertContext';
 import GoldDisplay from '../components/GoldDisplay';
 
@@ -125,11 +125,17 @@ async function purchaseProduct(productId: string): Promise<boolean> {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function GoldShopScreen() {
-  const { addGold } = useGame();
+  const { addGold } = useAuth();
   const { showAlert } = useAlert();
   const [purchasing, setPurchasing] = useState<string | null>(null);
   const [storeProducts, setStoreProducts] = useState<any[]>([]);
   const [iapReady, setIapReady] = useState(false);
+
+  // Keep latest callbacks in refs so the listener (registered once) never goes stale.
+  const addGoldRef = useRef(addGold);
+  const showAlertRef = useRef(showAlert);
+  useEffect(() => { addGoldRef.current = addGold; }, [addGold]);
+  useEffect(() => { showAlertRef.current = showAlert; }, [showAlert]);
 
   useEffect(() => {
     let purchaseListener: any;
@@ -142,35 +148,46 @@ export default function GoldShopScreen() {
       if (ready && IAP) {
         const products = await getProducts();
         setStoreProducts(products);
-        // console.log('[IAP] Products:', products.map((p: any) => p.productId));
 
-        // Listen for completed purchases
+        // Register listener exactly once — refs give access to latest callbacks.
         purchaseListener = IAP.purchaseUpdatedListener(async (purchase: any) => {
-          // console.log('[IAP] Purchase received:', purchase.productId);
-
-          // Find matching package and add gold
-          const pkg = GOLD_PACKAGES.find(p => p.productId === purchase.productId);
-            if (pkg) {
-              addGold(pkg.gold);
-              showAlert({
-                title: 'Purchase Complete! 🎉',
-                message: `You received ${pkg.gold.toLocaleString()} Gold!`,
-              });
-            }
-
-          // Acknowledge/finish the purchase
           try {
-            await IAP.finishTransaction({ purchase, isConsumable: true });
-          } catch (ackErr) {
-            console.warn('[IAP] Acknowledge error:', ackErr);
-          }
+            const pkg = GOLD_PACKAGES.find(p => p.productId === purchase.productId);
+            if (!pkg) throw new Error('Unknown purchase package.');
 
-          setPurchasing(null);
+            await addGoldRef.current(pkg.gold);
+            await IAP.finishTransaction({ purchase, isConsumable: true });
+            showAlertRef.current({
+              title: 'Purchase Successful',
+              icon: (
+                <Image
+                  source={GOLD_IMAGES[pkg.id as keyof typeof GOLD_IMAGES] || GOLD_IMAGES.gold_t1}
+                  style={{ width: 82, height: 82 }}
+                  resizeMode="contain"
+                />
+              ),
+              contentNode: (
+                <View style={styles.purchaseSuccessBox}>
+                  <Text style={styles.purchaseSuccessTitle}>{pkg.gold.toLocaleString()} Gold Added</Text>
+                  <Text style={styles.purchaseSuccessText}>Your balance has been updated.</Text>
+                </View>
+              ),
+            });
+          } catch (purchaseUpdateError: any) {
+            console.warn('[IAP] Failed to deliver purchase:', purchaseUpdateError);
+            showAlertRef.current({
+              title: 'Purchase Pending',
+              message:
+                'Your payment was detected, but the gold could not be confirmed yet. Please reopen the Gold Shop and we will retry the delivery.',
+            });
+          } finally {
+            setPurchasing(null);
+          }
         });
 
         purchaseErrorListener = IAP.purchaseErrorListener((err: any) => {
           if (err?.code !== 'E_USER_CANCELLED') {
-            showAlert({ title: 'Purchase Failed', message: err?.message ?? 'Please try again.' });
+            showAlertRef.current({ title: 'Purchase Failed', message: err?.message ?? 'Please try again.' });
           }
           setPurchasing(null);
         });
@@ -184,7 +201,7 @@ export default function GoldShopScreen() {
         IAP.endConnection?.();
       }
     };
-  }, [addGold, showAlert]);
+  }, []); // empty — listener is registered once, refs stay current
 
   function getStorePrice(productId: string): string | null {
     const product = storeProducts.find((p: any) => p.productId === productId);
@@ -211,9 +228,32 @@ export default function GoldShopScreen() {
       return;
     }
 
+    const displayPrice = getStorePrice(pkg.productId) || pkg.price;
+
     showAlert({
-      title: `Buy ${pkg.title}?`,
-      message: `You'll receive ${pkg.gold.toLocaleString()} Gold for ${getStorePrice(pkg.productId) || pkg.price}`,
+      title: 'Confirm Purchase',
+      icon: (
+        <Image
+          source={GOLD_IMAGES[pkg.id as keyof typeof GOLD_IMAGES] || GOLD_IMAGES.gold_t1}
+          style={{ width: 88, height: 88 }}
+          resizeMode="contain"
+        />
+      ),
+      contentNode: (
+        <View style={styles.purchaseSummary}>
+          <Text style={styles.purchasePackageName}>{pkg.title}</Text>
+          <Text style={styles.purchasePackageSubtitle}>{pkg.subtitle}</Text>
+          <View style={styles.purchaseDivider} />
+          <View style={styles.purchaseSummaryRow}>
+            <Text style={styles.purchaseSummaryLabel}>You receive</Text>
+            <Text style={styles.purchaseSummaryValue}>{pkg.gold.toLocaleString()} Gold</Text>
+          </View>
+          <View style={styles.purchaseSummaryRow}>
+            <Text style={styles.purchaseSummaryLabel}>Price</Text>
+            <Text style={styles.purchaseSummaryValue}>{displayPrice}</Text>
+          </View>
+        </View>
+      ),
       buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -371,6 +411,23 @@ const styles = StyleSheet.create({
   priceButtonBestValue: { backgroundColor: '#FF6B35' },
   priceText: { color: '#0a0a1a', fontWeight: 'bold', fontSize: 14 },
   priceTextBestValue: { color: '#fff' },
+  purchaseSummary: {
+    backgroundColor: '#15152a',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#2a2a4e',
+    padding: 14,
+    gap: 8,
+  },
+  purchasePackageName: { color: '#fff', fontSize: 17, fontWeight: '800', textAlign: 'center' },
+  purchasePackageSubtitle: { color: '#888', fontSize: 12, textAlign: 'center' },
+  purchaseDivider: { height: 1, backgroundColor: '#2a2a4e', marginVertical: 4 },
+  purchaseSummaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 16 },
+  purchaseSummaryLabel: { color: '#888', fontSize: 13, fontWeight: '600' },
+  purchaseSummaryValue: { color: '#FFD700', fontSize: 14, fontWeight: '800' },
+  purchaseSuccessBox: { alignItems: 'center', gap: 5 },
+  purchaseSuccessTitle: { color: '#FFD700', fontSize: 18, fontWeight: '800', textAlign: 'center' },
+  purchaseSuccessText: { color: '#aaa', fontSize: 13, textAlign: 'center' },
   disclaimer: {
     color: '#555',
     fontSize: 11,
