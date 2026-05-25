@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Image, Modal, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, Dimensions, Easing, Image, Modal, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+
+const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 import { View as FallbackView } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
@@ -39,6 +41,12 @@ const RESULT_ICON_IMAGES: Record<string, any> = {
   png_evil_vanquished: require('../../assets/avatars/evil_vanquished.png'),
   png_crossed_swords: require('../../assets/avatars/crossed_swords.png'),
 };
+const FALLBACK_ICON_IMAGES: Record<string, any> = {
+  lightning:      require('../../assets/avatars/lightning.png'),
+  skull:          require('../../assets/avatars/skull.png'),
+  hourglass:      require('../../assets/avatars/hourglass.png'),
+  crossed_swords: require('../../assets/avatars/crossed_swords.png'),
+};
 const SHARE_QUIZ_ICON_IMAGES: Record<string, any> = {
   flag: require('../../assets/avatars/flags.png'),
   shape: require('../../assets/avatars/shape.png'),
@@ -47,7 +55,7 @@ const SHARE_QUIZ_ICON_IMAGES: Record<string, any> = {
   trail: require('../../assets/avatars/compass.png'),
   millionaire: require('../../assets/avatars/gold_bag.png'),
   nightmare: require('../../assets/avatars/skull.png'),
-  gauntlet: require('../../assets/avatars/flame.png'),
+  gauntlet: require('../../assets/avatars/crucible.png'),
 };
 const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.geoconquest.app';
 
@@ -68,14 +76,16 @@ try {
   // optional dependency
 }
 
-function achIconNode(key: string | undefined, fallback: string) {
+function achIconNode(key: string | undefined, fallbackKey: string) {
   const src = key && RESULT_ICON_IMAGES[key];
   if (src) return <Image source={src} style={{ width: 20, height: 20 }} resizeMode="contain" />;
-  return <Text style={{ fontSize: 20 }}>{key ?? fallback}</Text>;
+  const fallbackSrc = FALLBACK_ICON_IMAGES[fallbackKey];
+  if (fallbackSrc) return <Image source={fallbackSrc} style={{ width: 20, height: 20 }} resizeMode="contain" />;
+  return <Text style={{ fontSize: 20 }}>{key ?? fallbackKey}</Text>;
 }
 
 export default function QuizResultsScreen({ navigation, route }: Props) {
-  const { score, total, goldEarned, quizType, elapsedSeconds } = route.params;
+  const { score, total, goldEarned, quizType, elapsedSeconds, tierAccent, tierLabel, tierBg } = route.params;
   const percentage = Math.round((score / total) * 100);
   const { showToast } = useToast();
   const { user, addXP, addGold, profile, incrementQuizCount, nextQuizBoostActive, setNextQuizBoostActive, consumeNextQuizBoost, refundMap, maps, deductMap, mapsNextRefillAt, mapsAdsUsedToday, grantAdMap, unlockedItems } = useAuth();
@@ -110,6 +120,7 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
 
   const cardCaptureRef = useRef<any>(null);
   const shareCaptureRef = useRef<any>(null);
+  const eternityGlowAnim = useRef(new Animated.Value(0)).current;
   const animationFrameRef = useRef<number | null>(null);
   const isUnmountedRef = useRef(false);
   const animatedLevelRef = useRef(getLevelInfo(initialXpTotal).level);
@@ -343,7 +354,7 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
         variant: 'unique',
         title: 'Referral Reward!',
         message: `You and your friend both received ${goldAwarded.toLocaleString()} gold.`,
-        icon: <Text style={{ fontSize: 54 }}>💰</Text>,
+        icon: <Image source={require('../../assets/avatars/gold_bag.png')} style={{ width: 54, height: 54 }} resizeMode="contain" />,
       });
     });
 
@@ -360,7 +371,7 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
         showToast({
           title: 'Quest Complete!',
           message: ach ? `${ach.title} — claim your reward in Quests!` : 'Flag Quiz Speed Demon!',
-          icon: achIconNode(ach?.icon, '⚡'),
+          icon: achIconNode(ach?.icon, 'lightning'),
           duration: 3500,
         });
       }
@@ -370,7 +381,7 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
         showToast({
           title: 'Quest Unlocked!',
           message: ach ? `${ach.title} — claim your reward in Quests!` : 'Nightmare Survived!',
-          icon: achIconNode(ach?.icon, '💀'),
+          icon: achIconNode(ach?.icon, 'skull'),
           duration: 3500,
         });
       }
@@ -380,7 +391,7 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
         showToast({
           title: 'Quest Complete!',
           message: ach ? `${ach.title} — claim your reward in Quests!` : 'Ground Invasion!',
-          icon: achIconNode(ach?.icon, '⚔️'),
+          icon: achIconNode(ach?.icon, 'crossed_swords'),
           duration: 3500,
         });
       }
@@ -509,10 +520,22 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
       });
     }
 
+    let glowLoop: Animated.CompositeAnimation | null = null;
+    if (tierLabel === 'ETERNITY') {
+      glowLoop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(eternityGlowAnim, { toValue: 1, duration: 2500, useNativeDriver: true }),
+          Animated.timing(eternityGlowAnim, { toValue: 0, duration: 2500, useNativeDriver: true }),
+        ])
+      );
+      glowLoop.start();
+    }
+
     return () => {
       isUnmountedRef.current = true;
       stopActiveAnimation();
       if (coinBurstTimeoutRef.current) clearTimeout(coinBurstTimeoutRef.current);
+      glowLoop?.stop();
     };
   }, []);
 
@@ -559,7 +582,7 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
 
   function getRating(): { imageSource: any; label: string } {
     if (quizType === 'nightmare') {
-      if (percentage === 100) return { imageSource: require('../../assets/avatars/skull.png'), label: 'Well played..' };
+      if (percentage === 100) return { imageSource: require('../../assets/avatars/demon.png'), label: 'Well played..' };
       return { imageSource: require('../../assets/avatars/demon_hand.png'), label: 'Pay up and get out' };
     }
 
@@ -570,12 +593,17 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
     }
 
     if (quizType === 'gauntlet') {
-      if (score >= 100) return { imageSource: require('../../assets/avatars/flame.png'), label: 'Void Walker' };
-      if (score >= 51)  return { imageSource: require('../../assets/avatars/flame.png'), label: 'Inferno Survivor' };
-      if (score >= 26)  return { imageSource: require('../../assets/avatars/trophy.png'), label: 'On Fire!' };
-      if (score >= 11)  return { imageSource: require('../../assets/avatars/bullseye.png'), label: 'Getting Warmer' };
-      if (score >= 5)   return { imageSource: require('../../assets/avatars/hand_shake.png'), label: 'Keep Training' };
-      return { imageSource: require('../../assets/avatars/lmao.png'), label: 'The Gauntlet Broke You' };
+      const GAUNTLET_RATINGS: Record<string, { imageSource: any; label: string }> = {
+        ETERNITY: { imageSource: require('../../assets/gauntlet/gauntlet_eternity.png'), label: 'Eternal Champion!'  },
+        OBLIVION: { imageSource: require('../../assets/gauntlet/gauntlet_oblivion.png'), label: 'Almost out'         },
+        INFERNO:  { imageSource: require('../../assets/gauntlet/gauntlet_inferno.png'),  label: 'Fueled The Inferno' },
+        HELL:     { imageSource: require('../../assets/gauntlet/gauntlet_hell.png'),     label: 'A Fresh Soul..'     },
+        VOID:     { imageSource: require('../../assets/gauntlet/gauntlet_void.png'),     label: 'Void Walker'        },
+        ABYSS:    { imageSource: require('../../assets/gauntlet/gauntlet_abyss.png'),    label: 'Fell Too Deep'      },
+        PERIL:    { imageSource: require('../../assets/gauntlet/gauntlet_peril.png'),    label: 'Feeling the Peril'  },
+        DANGER:   { imageSource: require('../../assets/gauntlet/gauntlet_danger.png'),   label: 'NOT WORTHY'         },
+      };
+      return GAUNTLET_RATINGS[tierLabel ?? 'DANGER'] ?? GAUNTLET_RATINGS['DANGER'];
     }
 
     if (percentage === 100) return { imageSource: require('../../assets/avatars/trophy.png'), label: 'Well played!' };
@@ -600,11 +628,40 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
   const showGoldTransfer = displayGoldGain !== 0;
 
   return (
-    <View style={[styles.container, isNightmare && styles.containerNightmare, isGauntlet && styles.containerGauntlet]}>
-      <Image source={rating.imageSource} style={styles.ratingImage} resizeMode="contain" />
-      <Text style={[styles.rating, isNightmare && styles.ratingNightmare, isGauntlet && styles.ratingGauntlet]}>{rating.label}</Text>
+    <View style={[styles.container, isNightmare && styles.containerNightmare, isGauntlet && tierBg && { backgroundColor: tierBg }]}>
+      {tierLabel === 'ETERNITY' && (
+        <>
+          <Animated.View pointerEvents="none" style={{ position: 'absolute', left: -SCREEN_W * 0.1, top: -SCREEN_H * 0.1, width: SCREEN_W * 1.2, height: SCREEN_H * 1.2, borderRadius: SCREEN_W * 0.6, backgroundColor: '#fbbf24', opacity: eternityGlowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.04, 0.10] }) }} />
+          <Animated.View pointerEvents="none" style={{ position: 'absolute', left: SCREEN_W / 2 - 220, top: SCREEN_H * 0.1, width: 440, height: 440, borderRadius: 220, backgroundColor: '#fbbf24', opacity: eternityGlowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.08, 0.24] }) }} />
+          <Animated.View pointerEvents="none" style={{ position: 'absolute', left: SCREEN_W / 2 - 140, top: -100, width: 280, height: 280, borderRadius: 140, backgroundColor: '#ffffff', opacity: eternityGlowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.05, 0.16] }) }} />
+          <Animated.View pointerEvents="none" style={{ position: 'absolute', left: SCREEN_W / 2 - 280, top: SCREEN_H * 0.55, width: 560, height: 560, borderRadius: 280, backgroundColor: '#fde68a', opacity: eternityGlowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.03, 0.10] }) }} />
+        </>
+      )}
 
-      <ViewShot ref={cardCaptureRef} style={[styles.card, isNightmare && styles.cardNightmare, isGauntlet && styles.cardGauntlet]}>
+      <View style={styles.ratingGroup}>
+        <View style={{ width: 120, height: 120, alignItems: 'center', justifyContent: 'center' }}>
+          {tierLabel === 'ETERNITY' && (
+            <>
+              <Animated.View pointerEvents="none" style={{ position: 'absolute', width: 260, height: 260, borderRadius: 130, backgroundColor: '#fbbf24', opacity: eternityGlowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.18, 0.42] }) }} />
+              <Animated.View pointerEvents="none" style={{ position: 'absolute', width: 180, height: 180, borderRadius: 90,  backgroundColor: '#ffffff', opacity: eternityGlowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.12, 0.30] }) }} />
+              <Animated.View pointerEvents="none" style={{ position: 'absolute', width: 130, height: 130, borderRadius: 65,  backgroundColor: '#fde68a', opacity: eternityGlowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.20, 0.45] }) }} />
+            </>
+          )}
+          <Image
+            source={rating.imageSource}
+            style={[styles.ratingImage, isNightmare && percentage < 100 && styles.ratingImageLoss, isGauntlet && styles.ratingImageGauntlet]}
+            resizeMode="contain"
+          />
+        </View>
+        <Text style={[
+          styles.rating,
+          isNightmare && styles.ratingNightmare,
+          isNightmare && percentage < 100 && styles.ratingLoss,
+          isGauntlet && tierAccent && { color: tierAccent },
+        ]}>{rating.label}</Text>
+      </View>
+
+      <ViewShot ref={cardCaptureRef} style={[styles.card, isNightmare && styles.cardNightmare, isGauntlet && tierAccent && { backgroundColor: tierAccent + '12', borderColor: tierAccent + '44' }]}>
         {isGauntlet
           ? <Row label="Score" value={`${score}`} highlight />
           : <Row label="Score" value={`${percentage}%`} />
@@ -617,10 +674,10 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
           />
         )}
 
-        {xpEarned > 0 && <Row label="XP Earned" value={`+${xpEarned} XP`} xpTier={xpTier} />}
+        {xpEarned > 0 && !(isNightmare && percentage < 100) && <Row label="XP Earned" value={`+${xpEarned} XP`} xpTier={xpTier} />}
         {boostApplied && <Row label="Boost" value="x2 Applied" highlight />}
 
-        <View style={styles.xpProgressSection}>
+        {!(isNightmare && percentage < 100) && <View style={styles.xpProgressSection}>
           <View style={styles.xpProgressHeader}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               {profile?.avatar_emoji ? (
@@ -648,39 +705,60 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
           </Animated.View>
 
           {showCoinBurst && <CoinBurst key={coinBurstNonce} />}
-        </View>
+        </View>}
 
-        <Row
-          label="Gold"
-          valueNode={
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-              {showGoldTransfer && displayGoldGain < 0 ? (
-                <>
-                  <Text style={[styles.rowValue, styles.rowValueHighlight]}>{displayGoldTotal.toLocaleString()}</Text>
-                  <Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 16, height: 16 }} resizeMode="contain" />
-                  <Text style={styles.rowValueSmall}>→</Text>
-                  <Text style={[styles.rowValue, styles.rowValueNegative]}>
-                    {displayGoldGain.toLocaleString()}
-                  </Text>
-                </>
-              ) : showGoldTransfer ? (
-                <>
-                  <Text style={[styles.rowValue, displayGoldGain >= 0 ? styles.rowValueHighlight : styles.rowValueNegative]}>
-                    {displayGoldGain > 0 ? `+${displayGoldGain.toLocaleString()}` : displayGoldGain.toLocaleString()}
-                  </Text>
-                  <Text style={styles.rowValueSmall}>→</Text>
-                  <Text style={[styles.rowValue, styles.rowValueHighlight]}>{displayGoldTotal.toLocaleString()}</Text>
-                  <Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 16, height: 16 }} resizeMode="contain" />
-                </>
-              ) : (
-                <>
-                  <Text style={[styles.rowValue, styles.rowValueHighlight]}>{displayGoldTotal.toLocaleString()}</Text>
-                  <Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 16, height: 16 }} resizeMode="contain" />
-                </>
-              )}
+        {isNightmare ? (
+          <View style={styles.nightmareGoldPanel}>
+            <View style={styles.nightmareGoldHeaderRow}>
+              <Image source={require('../../assets/avatars/demon.png')} style={{ width: 16, height: 16 }} resizeMode="contain" />
+              <Text style={[styles.nightmareGoldTag, goldEarned < 0 ? styles.nightmareGoldTagPenalty : styles.nightmareGoldTagReward]}>
+                {goldEarned < 0 ? 'PENALTY' : 'REWARD'}
+              </Text>
             </View>
-          }
-        />
+            <Text style={[styles.nightmareGoldAmount, goldEarned < 0 ? styles.nightmareGoldAmountPenalty : styles.nightmareGoldAmountReward]}>
+              {goldEarned > 0 ? '+' : ''}{goldEarned.toLocaleString()}
+            </Text>
+            <View style={styles.nightmareGoldBalanceRow}>
+              <Text style={styles.nightmareGoldBalanceLabel}>Balance</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Text style={styles.nightmareGoldBalanceValue}>{displayGoldTotal.toLocaleString()}</Text>
+                <Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 13, height: 13 }} resizeMode="contain" />
+              </View>
+            </View>
+          </View>
+        ) : (
+          <Row
+            label="Gold"
+            valueNode={
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                {showGoldTransfer && displayGoldGain < 0 ? (
+                  <>
+                    <Text style={[styles.rowValue, styles.rowValueHighlight]}>{displayGoldTotal.toLocaleString()}</Text>
+                    <Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 16, height: 16 }} resizeMode="contain" />
+                    <Text style={styles.rowValueSmall}>→</Text>
+                    <Text style={[styles.rowValue, styles.rowValueNegative]}>
+                      {displayGoldGain.toLocaleString()}
+                    </Text>
+                  </>
+                ) : showGoldTransfer ? (
+                  <>
+                    <Text style={[styles.rowValue, displayGoldGain >= 0 ? styles.rowValueHighlight : styles.rowValueNegative]}>
+                      {displayGoldGain > 0 ? `+${displayGoldGain.toLocaleString()}` : displayGoldGain.toLocaleString()}
+                    </Text>
+                    <Text style={styles.rowValueSmall}>→</Text>
+                    <Text style={[styles.rowValue, styles.rowValueHighlight]}>{displayGoldTotal.toLocaleString()}</Text>
+                    <Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 16, height: 16 }} resizeMode="contain" />
+                  </>
+                ) : (
+                  <>
+                    <Text style={[styles.rowValue, styles.rowValueHighlight]}>{displayGoldTotal.toLocaleString()}</Text>
+                    <Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 16, height: 16 }} resizeMode="contain" />
+                  </>
+                )}
+              </View>
+            }
+          />
+        )}
       </ViewShot>
 
       {/* Hidden capture card for sharing only (not shown in summary UI) */}
@@ -717,7 +795,7 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
       </View>
 
       <TouchableOpacity
-        style={[styles.playAgainButton, isNightmare && styles.playAgainButtonNightmare, isGauntlet && styles.playAgainButtonGauntlet]}
+        style={[styles.playAgainButton, isNightmare && styles.playAgainButtonNightmare, isGauntlet && tierAccent && { backgroundColor: tierAccent }]}
         onPress={async () => {
           if (quizType === 'millionaire') {
             if (tickets < 1) {
@@ -931,20 +1009,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 16,
-    gap: 10,
+    gap: 6,
   },
   containerNightmare: {
     backgroundColor: '#0d0000',
   },
-  ratingImage: { width: 108, height: 108 },
-  rating: { color: '#fff', fontSize: 28, fontWeight: 'bold' },
+  ratingGroup: { alignItems: 'center', gap: 4 },
+  ratingImage: { width: 80, height: 80 },
+  ratingImageLoss: { width: 110, height: 110 },
+  ratingImageGauntlet: { width: 120, height: 120 },
+  rating: { color: '#fff', fontSize: 22, fontWeight: 'bold' },
+  ratingLoss: { fontSize: 26 },
   ratingNightmare: { color: '#ff8888', fontStyle: 'italic' },
   card: {
     backgroundColor: '#1a1a2e',
     borderRadius: 16,
-    padding: 18,
+    padding: 14,
     width: '100%',
-    gap: 10,
+    gap: 7,
     borderWidth: 1,
     borderColor: '#2a2a4e',
   },
@@ -1055,6 +1137,52 @@ const styles = StyleSheet.create({
   rowValueSmall: { color: '#ccc', fontSize: 13, fontWeight: '600' },
   rowValueHighlight: { color: '#FFD700' },
   rowValueNegative: { color: '#f87171' },
+  nightmareGoldPanel: {
+    borderTopWidth: 1,
+    borderTopColor: '#3a0000',
+    paddingTop: 14,
+    paddingBottom: 4,
+    gap: 4,
+    alignItems: 'center',
+  },
+  nightmareGoldHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  nightmareGoldTag: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 2,
+  },
+  nightmareGoldTagPenalty: { color: '#ff4444' },
+  nightmareGoldTagReward: { color: '#FFD700' },
+  nightmareGoldAmount: {
+    fontSize: 30,
+    fontWeight: '900',
+    letterSpacing: 1,
+    marginVertical: 2,
+  },
+  nightmareGoldAmountPenalty: { color: '#ff4444' },
+  nightmareGoldAmountReward: { color: '#FFD700' },
+  nightmareGoldBalanceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    paddingHorizontal: 4,
+    marginTop: 6,
+  },
+  nightmareGoldBalanceLabel: {
+    color: '#888',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  nightmareGoldBalanceValue: {
+    color: '#ccc',
+    fontSize: 14,
+    fontWeight: '700',
+  },
   rowValueXp1: { color: '#94a3b8' },
   rowValueXp15: { color: '#34d399' },
   rowValueXp2: { color: '#fb923c' },

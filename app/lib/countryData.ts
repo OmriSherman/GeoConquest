@@ -1,5 +1,5 @@
 import { Image } from 'react-native';
-import { Country } from '../types';
+import { Country, QuizQuestion } from '../types';
 import { supabase } from './supabase';
 
 // ─── Local flag overrides (for countries whose remote flags are wrong/unavailable) ──
@@ -218,30 +218,44 @@ export function getRandomCountries(
   return shuffled.slice(0, count);
 }
 
+type QuizBuildOptions = {
+  reverseFirst?: boolean;
+};
+
 /** Builds an N-question session array (no repeats). */
-export function buildQuizQuestions(countries: Country[], count: number = 10) {
+export function buildQuizQuestions(countries: Country[], count: number = 10, options: QuizBuildOptions = {}): QuizQuestion[] {
   const shuffled = [...countries].sort(() => Math.random() - 0.5);
   const selected = shuffled.slice(0, count);
 
-  return selected.map((country) => {
+  return selected.map((country, index) => {
     const wrong = getRandomCountries(countries, country, 3);
-    const options = [...wrong, country].sort(() => Math.random() - 0.5);
-    const correctIndex = options.findIndex((o) => o.cca2 === country.cca2);
-    return { country, options, correctIndex };
+    const answerOptions = [...wrong, country].sort(() => Math.random() - 0.5);
+    const correctIndex = answerOptions.findIndex((o) => o.cca2 === country.cca2);
+    return {
+      country,
+      options: answerOptions,
+      correctIndex,
+      mode: options.reverseFirst && Math.random() < 0.3 ? 'reverse' : 'standard',
+    };
   });
 }
 
 /** Builds an N-question session for the Capitals Quiz */
-export function buildCapitalsQuizQuestions(countries: Country[], count: number = 10) {
+export function buildCapitalsQuizQuestions(countries: Country[], count: number = 10, options: QuizBuildOptions = {}): QuizQuestion[] {
   const validTargets = countries.filter(c => c.capital && c.capital.length > 0);
   const shuffled = [...validTargets].sort(() => Math.random() - 0.5);
   const selected = shuffled.slice(0, count);
 
-  return selected.map((country) => {
+  return selected.map((country, index) => {
     const wrong = getRandomCountries(validTargets, country, 3);
-    const options = [...wrong, country].sort(() => Math.random() - 0.5);
-    const correctIndex = options.findIndex((o) => o.cca2 === country.cca2);
-    return { country, options, correctIndex };
+    const answerOptions = [...wrong, country].sort(() => Math.random() - 0.5);
+    const correctIndex = answerOptions.findIndex((o) => o.cca2 === country.cca2);
+    return {
+      country,
+      options: answerOptions,
+      correctIndex,
+      mode: options.reverseFirst && Math.random() < 0.3 ? 'reverse' : 'standard',
+    };
   });
 }
 

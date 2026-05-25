@@ -221,6 +221,107 @@ export function buildAreaQuestion(
   };
 }
 
+export function buildCapitalReverseQuestion(
+  country: Country,
+  all: Country[],
+  difficulty: number,
+  goldReward: number,
+): MillionaireQuestion | null {
+  if (!country.capital) return null;
+
+  const withCapital = all.filter((c) => c.capital && c.cca2 !== country.cca2);
+  const distractors = getSmartDistractors(country, withCapital, difficulty, 3);
+  if (distractors.length < 3 || distractors.some((d) => !d.capital)) return null;
+
+  const optionCountries = [...distractors, country].sort(() => Math.random() - 0.5);
+  const correctIndex = optionCountries.findIndex((c) => c.cca2 === country.cca2);
+
+  return {
+    type: 'capital_reverse',
+    difficulty,
+    questionText: `What is the capital of ${country.name}?`,
+    subjectCountry: country,
+    options: optionCountries.map((c) => c.capital!),
+    optionCountries,
+    correctIndex,
+    flagUrl: country.flagUrl,
+    goldReward,
+  };
+}
+
+export function buildFlagReverseQuestion(
+  country: Country,
+  all: Country[],
+  difficulty: number,
+  goldReward: number,
+): MillionaireQuestion {
+  const distractors = getSmartDistractors(country, all, difficulty, 3);
+  const optionCountries = [...distractors, country].sort(() => Math.random() - 0.5);
+  const correctIndex = optionCountries.findIndex((o) => o.cca2 === country.cca2);
+
+  return {
+    type: 'flag_reverse',
+    difficulty,
+    questionText: `Which of these is the flag of ${country.name}?`,
+    subjectCountry: country,
+    options: optionCountries.map((c) => c.name),
+    optionCountries,
+    correctIndex,
+    goldReward,
+  };
+}
+
+export function buildShapeReverseQuestion(
+  country: Country,
+  all: Country[],
+  difficulty: number,
+  goldReward: number,
+): MillionaireQuestion | null {
+  if (country.area <= 1000) return null;
+
+  const validDistractors = all.filter((c) => c.area > 1000);
+  const distractors = getSmartDistractors(country, validDistractors, difficulty, 3);
+  if (distractors.length < 3) return null;
+
+  const optionCountries = [...distractors, country].sort(() => Math.random() - 0.5);
+  const correctIndex = optionCountries.findIndex((o) => o.cca2 === country.cca2);
+
+  return {
+    type: 'shape_reverse',
+    difficulty,
+    questionText: `Which of these is the shape of ${country.name}?`,
+    subjectCountry: country,
+    options: optionCountries.map((c) => c.name),
+    optionCountries,
+    correctIndex,
+    goldReward,
+  };
+}
+
+function buildAnyReverseQuestion(
+  country: Country,
+  all: Country[],
+  difficulty: number,
+  goldReward: number,
+): MillionaireQuestion | null {
+  const builders: Array<() => MillionaireQuestion | null> = [
+    () => buildFlagReverseQuestion(country, all, difficulty, goldReward),
+  ];
+  if (country.capital) {
+    builders.push(() => buildCapitalReverseQuestion(country, all, difficulty, goldReward));
+  }
+  if (country.area > 1000) {
+    builders.push(() => buildShapeReverseQuestion(country, all, difficulty, goldReward));
+  }
+
+  const shuffled = [...builders].sort(() => Math.random() - 0.5);
+  for (const build of shuffled) {
+    const q = build();
+    if (q) return q;
+  }
+  return null;
+}
+
 export function buildShapeQuestion(
   country: Country,
   all: Country[],
@@ -262,18 +363,18 @@ interface SlotPlan {
 }
 
 const SLOT_PLANS: SlotPlan[] = [
-  { minDiff: 1, maxDiff: 2, types: ['flag', 'shape'] },          // Q1
-  { minDiff: 1, maxDiff: 2, types: ['shape', 'flag'] },          // Q2
-  { minDiff: 2, maxDiff: 3, types: ['flag', 'shape'] },          // Q3
-  { minDiff: 3, maxDiff: 4, types: ['shape', 'flag', 'capital'] }, // Q4
-  { minDiff: 3, maxDiff: 4, types: ['flag', 'shape', 'capital'] }, // Q5
-  { minDiff: 4, maxDiff: 5, types: ['shape', 'flag', 'capital'] }, // Q6
-  { minDiff: 5, maxDiff: 6, types: ['shape', 'capital', 'border_yes', 'border_no'] }, // Q7
-  { minDiff: 5, maxDiff: 6, types: ['capital', 'shape', 'border_yes', 'border_no'] }, // Q8
-  { minDiff: 6, maxDiff: 7, types: ['shape', 'capital', 'border_yes', 'border_no'] }, // Q9
-  { minDiff: 7, maxDiff: 8, types: ['shape', 'flag', 'border_yes', 'capital', 'border_no'] }, // Q10
-  { minDiff: 7, maxDiff: 8, types: ['flag', 'shape', 'border_yes', 'capital', 'border_no'] }, // Q11
-  { minDiff: 8, maxDiff: 9, types: ['shape', 'flag', 'border_yes', 'capital', 'border_no'] }, // Q12
+  { minDiff: 1, maxDiff: 2, types: ['flag', 'shape'] },                                    // Q1
+  { minDiff: 1, maxDiff: 2, types: ['shape', 'flag'] },                                    // Q2
+  { minDiff: 2, maxDiff: 3, types: ['flag', 'shape'] },                                    // Q3
+  { minDiff: 3, maxDiff: 4, types: ['shape', 'flag', 'capital'] },                         // Q4
+  { minDiff: 3, maxDiff: 4, types: ['flag', 'shape', 'capital'] },                         // Q5
+  { minDiff: 4, maxDiff: 5, types: ['shape', 'flag', 'capital'] },                         // Q6
+  { minDiff: 5, maxDiff: 6, types: ['shape', 'capital', 'border_yes', 'border_no'] },      // Q7
+  { minDiff: 5, maxDiff: 6, types: ['capital', 'shape', 'border_yes', 'border_no'] },      // Q8
+  { minDiff: 6, maxDiff: 7, types: ['shape', 'capital', 'border_yes', 'border_no'] },      // Q9
+  { minDiff: 7, maxDiff: 8, types: ['shape', 'flag', 'border_yes', 'capital', 'border_no'] },  // Q10
+  { minDiff: 7, maxDiff: 8, types: ['flag', 'shape', 'border_yes', 'capital', 'border_no'] },  // Q11
+  { minDiff: 8, maxDiff: 9, types: ['shape', 'flag', 'border_yes', 'capital', 'border_no'] },  // Q12
   { minDiff: 9, maxDiff: 10, types: ['shape', 'flag', 'border_yes', 'capital', 'border_no'] }, // Q13
   { minDiff: 9, maxDiff: 10, types: ['flag', 'shape', 'border_yes', 'capital', 'border_no'] }, // Q14
   { minDiff: 9, maxDiff: 10, types: ['shape', 'flag', 'border_yes', 'capital', 'border_no'] }, // Q15
@@ -318,6 +419,14 @@ export function buildSingleMillionaireQuestion(
       }
     }
 
+    if (type === 'capital_reverse') {
+      question = buildCapitalReverseQuestion(subject, all, diff, goldReward);
+      if (question) {
+        usedCca2.add(subject.cca2);
+        break;
+      }
+    }
+
     if (type === 'border_yes') {
       question = buildBorderYesQuestion(subject, all, diff, goldReward);
       if (question) {
@@ -340,6 +449,14 @@ export function buildSingleMillionaireQuestion(
     const fallback = fallbackPool[Math.floor(Math.random() * fallbackPool.length)] ?? all[index % all.length];
     question = buildFlagQuestion(fallback, all, plan.minDiff, goldReward);
     usedCca2.add(fallback.cca2);
+  }
+
+  // 30% chance of flipping to a reverse question from Q3 onwards
+  if (index >= 2 && Math.random() < 0.30) {
+    const reversed = buildAnyReverseQuestion(
+      question.subjectCountry, all, question.difficulty, goldReward,
+    );
+    if (reversed) question = reversed;
   }
 
   return question;
@@ -419,7 +536,7 @@ export function buildNightmareQuestions(all: Country[]): MillionaireQuestion[] {
   for (let i = 0; i < 10; i++) {
     const typeChoices = [...types].sort(() => Math.random() - 0.5);
     let question: MillionaireQuestion | null = null;
-    const diff = 10;
+    const diff = 8 + Math.floor(Math.random() * 3); // 8, 9, or 10
 
     for (const type of typeChoices) {
       if (type === 'flag') {

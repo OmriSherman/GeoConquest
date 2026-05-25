@@ -27,10 +27,13 @@ import { useAuth } from '../context/AuthContext';
 import { useAlert } from '../context/AlertContext';
 import { supabase } from '../lib/supabase';
 import AnswerButton from '../components/AnswerButton';
+import QuitConfirmModal from '../components/QuitConfirmModal';
 import CountryShapeView from '../components/CountryShapeView';
 import { playDing, playWrong, playTick, playTextToSpeech, playMillionaireSwap } from '../lib/audio';
 import * as Speech from 'expo-speech';
 import { showRewardedAd } from '../lib/rewardedAds';
+
+const ANSWER_COLORS = ['#4FC3F7', '#F44336', '#FFD700', '#4CAF50']; // blue, red, yellow, green
 
 const AUTO_ADVANCE_DELAY_MS = 2500;
 const TIMER_SECONDS = 15;
@@ -153,6 +156,12 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
   const [showSecondChanceModal, setShowSecondChanceModal] = useState(false);
   const [secondChanceUsed, setSecondChanceUsed] = useState(false);
   const [secondChanceLoading, setSecondChanceLoading] = useState(false);
+  const [ready, setReady] = useState(false);
+  const readyRef = useRef(false);
+  readyRef.current = ready;
+  const allowLeaveRef = useRef(false);
+  const [showQuitModal, setShowQuitModal] = useState(false);
+  const onConfirmQuitRef = useRef<(() => void) | null>(null);
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const currentIndexRef = useRef(0);
@@ -163,6 +172,27 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
   const ladderScrollRef = useRef<ScrollView>(null);
   const [ladderWidth, setLadderWidth] = useState(0);
   const breathAnim = useRef(new Animated.Value(1)).current;
+
+  // Tab navigation guard — intercept bottom-tab presses while quiz is active
+  useFocusEffect(
+    React.useCallback(() => {
+      const parent = navigation.getParent();
+      if (!parent) return;
+      const unsubscribe = (parent as any).addListener('tabPress', (e: any) => {
+        if (!readyRef.current) return;
+        e.preventDefault();
+        onConfirmQuitRef.current = () => {
+          stopTimer();
+          Speech.stop();
+          if (autoAdvanceTimer.current) clearTimeout(autoAdvanceTimer.current);
+          allowLeaveRef.current = true;
+          navigation.popToTop();
+        };
+        setShowQuitModal(true);
+      });
+      return unsubscribe;
+    }, [navigation])
+  );
 
   // Breathing animation for "Push Forward" button
   useEffect(() => {
@@ -197,28 +227,26 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
     }
   }
 
-  function startTimer() {
+  function startTimerFrom(seconds: number) {
     stopTimer();
-    timeLeftRef.current = TIMER_SECONDS;
-    setTimeLeft(TIMER_SECONDS);
+    timeLeftRef.current = seconds;
+    setTimeLeft(seconds);
     timerRef.current = setInterval(() => {
       timeLeftRef.current -= 1;
       const t = timeLeftRef.current;
       setTimeLeft(t);
-      if (t > 0 && t <= 3) {
-        playTick();
-      }
-      if (t <= 0) {
-        stopTimer();
-        handleAutoTimeout();
-      }
+      if (t > 0 && t <= 3) playTick();
+      if (t <= 0) { stopTimer(); handleAutoTimeout(); }
     }, 1000);
   }
+
+  function startTimer() { startTimerFrom(TIMER_SECONDS); }
 
   function endGameWithLoss() {
     const failedIndex = currentIndexRef.current;
     const prize = 0;
 
+    allowLeaveRef.current = true;
     navigation.replace('QuizResults', {
       score: failedIndex, // number of correct answers
       total: 15,
@@ -253,13 +281,11 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
         const q = buildMillionaireQuestions(withoutAF);
         setQuestions(q);
         questionsRef.current = q;
-        startTimer();
         await spendTicket();
       } catch (e: any) {
         setError(e.message ?? 'Failed to load questions');
       } finally {
         setLoading(false);
-        quizStartRef.current = Date.now();
       }
     })();
 
@@ -289,13 +315,10 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active') {
-        // App has come to the foreground
-        if (!answered && !gameOver && !showWin && !loading && !error && !showWalkOrContinue) {
-          // Resume timer
-          startTimer();
+        if (ready && !answered && !gameOver && !showWin && !loading && !error && !showWalkOrContinue) {
+          startTimerFrom(timeLeftRef.current);
         }
       } else if (nextAppState.match(/inactive|background/)) {
-        // App has gone to the background
         Speech.stop();
         stopTimer();
       }
@@ -304,7 +327,23 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
     return () => {
       subscription.remove();
     };
-  }, [answered, gameOver, showWin, showWalkOrContinue, loading, error, timeLeft]);
+  }, [answered, gameOver, showWin, showWalkOrContinue, loading, error, timeLeft, ready]);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+      if (allowLeaveRef.current || !readyRef.current) return;
+      e.preventDefault();
+      onConfirmQuitRef.current = () => {
+        stopTimer();
+        Speech.stop();
+        if (autoAdvanceTimer.current) clearTimeout(autoAdvanceTimer.current);
+        allowLeaveRef.current = true;
+        navigation.dispatch(e.data.action);
+      };
+      setShowQuitModal(true);
+    });
+    return unsubscribe;
+  }, [navigation]);
 
   // Handle navigation focus (stop timer if user hits back button)
   useFocusEffect(
@@ -542,6 +581,7 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
   function walkAwayFromCheckpoint() {
     setShowWalkOrContinue(false);
     const prize = walkOrContinuePrize;
+    allowLeaveRef.current = true;
     navigation.replace('QuizResults', {
       score: currentIndexRef.current + 1,
       total: 15,
@@ -561,6 +601,7 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
   // ── End game handlers ──────────────────────────────────────────────────────
 
   function handleWinContinue() {
+    allowLeaveRef.current = true;
     navigation.replace('QuizResults', {
       score: 15,
       total: 15,
@@ -585,6 +626,27 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
     return (
       <View style={styles.centered}>
         <Text style={styles.errorText}>{error ?? 'No questions available'}</Text>
+      </View>
+    );
+  }
+
+  // ── Ready screen ──────────────────────────────────────────────────────────
+
+  if (!ready) {
+    return (
+      <View style={styles.readyContainer}>
+        <Image source={require('../../assets/avatars/gold_bag.png')} style={{ width: 80, height: 80, marginBottom: 20 }} resizeMode="contain" />
+        <Text style={styles.readyTitle}>MILLIONAIRE</Text>
+        <Text style={styles.readySubtitle}>15 questions. 15 seconds each.{'\n'}Answer them all to win the jackpot.</Text>
+        <TouchableOpacity
+          style={styles.readyBtn}
+          onPress={() => { quizStartRef.current = Date.now(); setReady(true); startTimer(); }}
+        >
+          <Text style={styles.readyBtnText}>LET'S GO</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.readyBackLink}>
+          <Text style={styles.readyBackLinkText}>Go Back</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -647,15 +709,15 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <TouchableOpacity style={styles.touchArea} onPress={skipToNext} activeOpacity={1}>
           <Animated.View style={{ opacity: fadeAnim }}>
-            {/* Flag image (flag-type questions) */}
-            {question.type === 'flag' && question.flagUrl && (
+            {/* Flag image (flag + capital_reverse) */}
+            {(question.type === 'flag' || question.type === 'capital_reverse') && question.flagUrl && (
               <View style={styles.flagContainer}>
                 <Image source={{ uri: question.flagUrl }} style={styles.flag} resizeMode="contain" />
               </View>
             )}
 
-            {/* Text card (non-flag, non-shape questions) */}
-            {question.type !== 'flag' && question.type !== 'shape' && (
+            {/* Text card (non-flag, non-shape, non-capital_reverse questions) */}
+            {question.type !== 'flag' && question.type !== 'shape' && question.type !== 'capital_reverse' && (
               <View style={styles.questionCard}>
                 {question.type.startsWith('border') && (
                   <Image
@@ -672,8 +734,8 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
                       <Text style={styles.capitalHighlight}>{question.subjectCountry.capital}</Text>
                       {' '}as its capital?
                     </Text>
-                    <TouchableOpacity 
-                      style={styles.speakerBtn} 
+                    <TouchableOpacity
+                      style={styles.speakerBtn}
                       onPress={() => {
                         Speech.stop();
                         playTextToSpeech(question.subjectCountry.capital || '');
@@ -683,7 +745,7 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
                     </TouchableOpacity>
                   </View>
                 ) : (
-                  <Text style={styles.questionCardText}>{question.questionText}</Text>
+                  <Text style={styles.questionCardText} numberOfLines={4} adjustsFontSizeToFit>{question.questionText}</Text>
                 )}
               </View>
             )}
@@ -691,7 +753,6 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
             {/* Shape display */}
             {question.type === 'shape' && (
               <View>
-                <Text style={styles.prompt}>{question.questionText}</Text>
                 <View style={styles.shapeContainer}>
                   <CountryShapeView
                     countryCode={question.subjectCountry.cca2}
@@ -699,11 +760,12 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
                     color="#FFD700"
                   />
                 </View>
+                <Text style={styles.prompt}>{question.questionText}</Text>
               </View>
             )}
 
-            {/* Prompt line (flag type only) */}
-            {question.type === 'flag' && (
+            {/* Prompt line (flag + capital_reverse) */}
+            {(question.type === 'flag' || question.type === 'capital_reverse') && (
               <Text style={styles.prompt}>{question.questionText}</Text>
             )}
 
@@ -743,37 +805,44 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
               </TouchableOpacity>
             </View>
 
-            {/* Answer buttons + audience percentages */}
+            {/* Answer buttons — 2×2 grid */}
             <View style={styles.answers}>
               {question.options.map((option, i) => {
                 if (hiddenOptions.has(i)) {
                   return <View key={i} style={styles.hiddenSlot} />;
                 }
-                let detail;
+                const detail = audienceVotes ? `${audienceVotes[i]}%` : undefined;
+                const accentColor = ANSWER_COLORS[i % ANSWER_COLORS.length];
+                const optCountry = question.optionCountries[i];
+                const isVisual = question.type === 'flag_reverse' || question.type === 'shape_reverse';
+                const visual = question.type === 'flag_reverse' && optCountry
+                  ? <Image source={{ uri: optCountry.flagUrl }} style={{ width: '100%', height: 64 }} resizeMode="contain" />
+                  : question.type === 'shape_reverse' && optCountry
+                  ? <CountryShapeView countryCode={optCountry.cca2} height={72} color="#FFD700" />
+                  : undefined;
                 return (
-                  <View key={i} style={styles.answerRow}>
-                    <View style={styles.answerBtnWrap}>
-                      <AnswerButton
-                        label={option}
-                        state={buttonStates[i]}
-                        onPress={() => handleAnswer(i)}
-                        detail={detail}
-                      />
-                    </View>
-                    {audienceVotes && (
-                      <AudienceVoteCircle
-                        percentage={audienceVotes[i]}
-                        isCorrect={i === question.correctIndex}
-                      />
-                    )}
+                  <View key={i} style={styles.answerBtnWrap}>
+                    <AnswerButton
+                      label={option}
+                      state={buttonStates[i]}
+                      onPress={() => handleAnswer(i)}
+                      detail={detail}
+                      detailColor={audienceVotes ? accentColor : undefined}
+                      visual={visual}
+                      showLabel={!isVisual}
+                      style={[
+                        { marginVertical: 0, flex: 1 },
+                        buttonStates[i] === 'default' && { borderColor: accentColor },
+                      ]}
+                    />
                   </View>
                 );
               })}
             </View>
 
-            {answered && !showWin && !showWalkOrContinue && (
-              <Text style={styles.tapHint}>Tap anywhere to continue →</Text>
-            )}
+            <Text style={[styles.tapHint, { opacity: (answered && !showWin && !showWalkOrContinue) ? 1 : 0 }]}>
+              Tap anywhere to continue →
+            </Text>
           </Animated.View>
         </TouchableOpacity>
       </ScrollView>
@@ -856,6 +925,12 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
           </View>
         </View>
       </Modal>
+
+      <QuitConfirmModal
+        visible={showQuitModal}
+        onStay={() => { setShowQuitModal(false); onConfirmQuitRef.current = null; }}
+        onQuit={() => { setShowQuitModal(false); onConfirmQuitRef.current?.(); onConfirmQuitRef.current = null; }}
+      />
     </View>
   );
 }
@@ -930,18 +1005,18 @@ const styles = StyleSheet.create({
   // Ladder strip
   ladderStrip: {
     paddingHorizontal: 8,
-    paddingVertical: 4,
-    gap: 4,
+    paddingVertical: 8,
+    gap: 5,
     alignItems: 'center',
   },
   ladderItem: {
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 8,
     backgroundColor: '#111',
     borderWidth: 1,
     borderColor: '#222',
-    minWidth: 36,
+    minWidth: 46,
     alignItems: 'center',
   },
   ladderItemCurrent: {
@@ -961,14 +1036,14 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
     elevation: 8,
   },
-  ladderText: { color: '#666', fontSize: 10, fontWeight: '600' },
+  ladderText: { color: '#666', fontSize: 13, fontWeight: '600' },
   ladderTextCurrent: { color: '#FFD700' },
 
   // Scrollable content
   scrollContent: { flexGrow: 1, paddingBottom: 8 },
   touchArea: { flex: 1, paddingHorizontal: 12 },
 
-  // Shape display (no alignItems so WebView stretches to full width)
+  // Shape display
   shapeContainer: {
     backgroundColor: '#1a1a2e',
     borderRadius: 16,
@@ -977,6 +1052,9 @@ const styles = StyleSheet.create({
     borderColor: '#2a2a4e',
     marginTop: 6,
     marginBottom: 4,
+    height: 170,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 
   // Flag display
@@ -988,7 +1066,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#2a2a4e',
-    height: 130,
+    height: 170,
     marginTop: 6,
     marginBottom: 4,
   },
@@ -998,7 +1076,7 @@ const styles = StyleSheet.create({
   questionCard: {
     backgroundColor: '#1a1a2e',
     borderRadius: 16,
-    padding: 14,
+    padding: 18,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
@@ -1006,15 +1084,16 @@ const styles = StyleSheet.create({
     marginTop: 6,
     marginBottom: 4,
     gap: 8,
-    minHeight: 90,
+    height: 170,
+    overflow: 'hidden',
   },
   subjectFlag: { width: 80, height: 50, borderRadius: 6 },
   questionCardText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 20,
     fontWeight: '600',
     textAlign: 'center',
-    lineHeight: 22,
+    lineHeight: 28,
   },
   capitalQuestionTextRow: {
     flexDirection: 'row',
@@ -1026,7 +1105,7 @@ const styles = StyleSheet.create({
   capitalHighlight: {
     color: '#FFD700',
     fontWeight: 'bold',
-    fontSize: 18,
+    fontSize: 22,
   },
   speakerBtn: {
     backgroundColor: '#3a3a5e',
@@ -1040,10 +1119,11 @@ const styles = StyleSheet.create({
   },
 
   prompt: {
-    color: '#aaa',
-    fontSize: 14,
+    color: '#ccc',
+    fontSize: 18,
+    fontWeight: '600',
     textAlign: 'center',
-    marginTop: 6,
+    marginTop: 8,
     marginBottom: 4,
   },
   controlsRow: {
@@ -1051,7 +1131,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 16,
-    marginVertical: 6,
+    marginTop: 12,
+    marginBottom: 12,
     gap: 10,
   },
 
@@ -1070,17 +1151,19 @@ const styles = StyleSheet.create({
   },
   lifelineBtnText: { color: '#FFD700', fontWeight: 'bold', fontSize: 12 },
 
-  // Answers
-  answers: { gap: 2, marginBottom: 4 },
-  answerRow: {
+  // Answers — 2×2 grid
+  answers: {
     flexDirection: 'row',
-    alignItems: 'center',
+    flexWrap: 'wrap',
     gap: 8,
+    marginBottom: 4,
   },
   answerBtnWrap: {
-    flex: 1,
+    width: '48%',
+    flexDirection: 'column',
+    minHeight: 80,
   },
-  hiddenSlot: { height: 48, marginVertical: 4 },
+  hiddenSlot: { width: '48%', minHeight: 80 },
 
   // Audience percentage circle
   audienceCircleWrap: {
@@ -1094,7 +1177,8 @@ const styles = StyleSheet.create({
     color: '#555',
     fontSize: 12,
     textAlign: 'center',
-    marginTop: 12,
+    marginTop: 16,
+    marginBottom: 8,
   },
 
   // Modals
@@ -1154,4 +1238,17 @@ const styles = StyleSheet.create({
   prizeCompareArrow: { color: '#4CAF50', fontSize: 22, fontWeight: 'bold' },
   dimBtn: { paddingVertical: 12, paddingHorizontal: 20, alignItems: 'center', borderWidth: 1, borderColor: '#3a3a5e', borderRadius: 10, width: '100%' },
   dimBtnText: { color: '#ccc', fontSize: 15, fontWeight: '500' },
+
+  // Ready screen
+  readyContainer: { flex: 1, backgroundColor: '#0a0a1a', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
+  readyTitle: { color: '#FFD700', fontSize: 28, fontWeight: 'bold', letterSpacing: 3, marginBottom: 12 },
+  readySubtitle: { color: '#888', fontSize: 14, textAlign: 'center', lineHeight: 22, marginBottom: 40 },
+  readyBtn: { backgroundColor: '#FFD700', paddingHorizontal: 40, paddingVertical: 15, borderRadius: 14 },
+  readyBtnText: { color: '#0a0a1a', fontSize: 16, fontWeight: 'bold', letterSpacing: 1.5 },
+  readyBackLink: { marginTop: 20 },
+  readyBackLinkText: { color: '#555', fontSize: 14 },
+
+  // Header
+  millionaireBackBtn: { color: '#555', fontSize: 16, fontWeight: 'bold', padding: 4 },
+
 });

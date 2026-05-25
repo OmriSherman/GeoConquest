@@ -31,7 +31,6 @@ interface GoldPackage {
   productId: string;
   gold: number;
   price: string; // fallback price (used if IAP unavailable)
-  emoji: string;
   title: string;
   subtitle: string;
   popular?: boolean;
@@ -44,7 +43,6 @@ const GOLD_PACKAGES: GoldPackage[] = [
     productId: 'gold_t1',
     gold: 20_000,
     price: '$2.99',
-    emoji: '⚔️',
     title: "Warlord's Stash",
     subtitle: 'Build up your gold reserves',
   },
@@ -53,7 +51,6 @@ const GOLD_PACKAGES: GoldPackage[] = [
     productId: 'gold_t2',
     gold: 140_000,
     price: '$12.99',
-    emoji: '🏰',
     title: 'Forgotten Vault',
     subtitle: 'Expand your territory',
     popular: true,
@@ -63,7 +60,6 @@ const GOLD_PACKAGES: GoldPackage[] = [
     productId: 'gold_t3',
     gold: 500_000,
     price: '$31.99',
-    emoji: '👑',
     title: 'Unclaimed Riches',
     subtitle: 'Premium collection for dedicated players',
     bestValue: true,

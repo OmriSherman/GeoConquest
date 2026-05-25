@@ -457,7 +457,7 @@ export default function HomeScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0a0a1a' },
-  content: { padding: 20, gap: 14, paddingBottom: 30 },
+  content: { padding: 12, gap: 14, paddingBottom: 30 },
 
   // Compact header: avatar + name + country on left, gold on right
   header: {

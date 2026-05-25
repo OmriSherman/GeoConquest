@@ -193,6 +193,8 @@ interface AuthContextValue {
   shareReferralLink: () => Promise<void>;
   unlockedItems: Set<string>;
   refreshUnlockedItems: () => Promise<void>;
+  pendingAvatarNotification: boolean;
+  clearAvatarNotification: () => void;
   refreshQuestStatus: () => Promise<void>;
   spendTicket: () => Promise<void>;
   addTickets: (amount: number) => Promise<void>;
@@ -225,6 +227,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [disabledUpgrades, setDisabledUpgrades] = useState<Set<string>>(new Set());
   const [dailyRewardAvailable, setDailyRewardAvailable] = useState(false);
   const [unlockedItems, setUnlockedItems] = useState<Set<string>>(new Set());
+  const [pendingAvatarNotification, setPendingAvatarNotification] = useState(false);
   const [nextQuizBoostActive, setNextQuizBoostActiveState] = useState(false);
   const [maps, setMaps] = useState(5);
   const [mapsNextRefillAt, setMapsNextRefillAt] = useState<Date | null>(null);
@@ -707,6 +710,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     // Unlock reward items if provided — always attempt, insert is idempotent (23505 = already owned)
+    let grantedAvatar = false;
     for (const item of rewardItems ?? []) {
       const { error: unlockError } = await supabase.from('user_unlocked_items').insert(
         { user_id: profile.id, item_id: item.itemId, item_type: item.type }
@@ -715,7 +719,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error(`Reward item could not be unlocked: ${unlockError.message}`);
       }
       setUnlockedItems(prev => new Set([...prev, item.itemId]));
+      if (item.type === 'avatar') grantedAvatar = true;
     }
+    if (grantedAvatar) setPendingAvatarNotification(true);
 
     // Grant ticket rewards — skip if already claimed (tickets were already granted)
     if (!alreadyClaimed && rewardTickets && rewardTickets > 0) {
@@ -1248,6 +1254,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         incrementQuizCount,
         shareReferralLink,
         unlockedItems,
+        pendingAvatarNotification,
+        clearAvatarNotification: () => setPendingAvatarNotification(false),
         refreshUnlockedItems,
         refreshQuestStatus,
         spendTicket,

@@ -19,7 +19,7 @@ import { useAlert } from '../context/AlertContext';
 import { LeaderboardEntry } from '../types';
 import AvatarDisplay from '../components/AvatarDisplay';
 import WorldMapView from '../components/WorldMapView';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { AVATAR_CHARACTERS, CUSTOM_AVATARS, CUSTOM_FLAGS, FLAG_OPTIONS } from '../lib/avatarData';
 import { calcQuizXP, getLevelInfo } from '../lib/xpSystem';
 import { playMillionairePrize } from '../lib/audio';
@@ -54,6 +54,10 @@ const ACHIEVEMENT_ICON_IMAGES: Record<string, any> = {
   png_bullseye:        require('../../assets/avatars/bullseye.png'),
   png_open_scroll:     require('../../assets/avatars/open_scroll.png'),
   png_compass:         require('../../assets/avatars/compass.png'),
+  png_ascended_sigil:  require('../../assets/avatars/ascended_sigil.png'),
+  png_atlas_rune:      require('../../assets/avatars/atlas_rune.png'),
+  png_eternal_seal:    require('../../assets/avatars/eternal_seal.png'),
+  png_the_singularity: require('../../assets/avatars/the_singularity.png'),
 };
 import { ACHIEVEMENTS_DATA } from '../lib/achievementsData';
 import { CUSTOM_FLAG_COMPONENTS, isCustomFlag } from '../lib/customFlags';
@@ -144,6 +148,7 @@ interface DailyXpRow {
 
 export default function LeaderboardScreen() {
   const { user, profile } = useAuth();
+  const navigation = useNavigation<any>();
   const { showAlert } = useAlert();
   const [leaderboardType, setLeaderboardType] = useState<'alltime' | 'daily'>('daily');
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
@@ -287,8 +292,6 @@ export default function LeaderboardScreen() {
     if (alreadySeen) return;
 
     await AsyncStorage.setItem(key, '1');
-    const medals = ['🥇', '🥈', '🥉'];
-    const medal = medals[rank - 1] ?? '🏅';
     const rankMsg = rank === 1
       ? 'You topped yesterday\'s leaderboard!'
       : `You finished #${rank} on yesterday's leaderboard!`;
@@ -297,7 +300,7 @@ export default function LeaderboardScreen() {
     playMillionairePrize();
     showAlert({
       icon: <Image source={require('../../assets/avatars/trophy.png')} style={{ width: 80, height: 80 }} resizeMode="contain" />,
-      title: `${medal} #${rank} Place!`,
+      title: `#${rank} Place!`,
       contentNode: (
         <View style={{ alignItems: 'center', gap: 6 }}>
           <Text style={{ color: '#ccc', fontSize: 14, textAlign: 'center', marginBottom: 8 }}>{rankMsg}</Text>
@@ -536,6 +539,18 @@ export default function LeaderboardScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Leaderboard</Text>
+        {!profile?.is_conquerer && (
+          <TouchableOpacity
+            style={styles.commanderBanner}
+            onPress={() => navigation.getParent()?.navigate('Premium')}
+            activeOpacity={0.85}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Image source={require('../../assets/avatars/crown.png')} style={{ width: 16, height: 16 }} resizeMode='contain' />
+              <Text style={styles.commanderBannerText}>Conqueror's Pass — Unlock Everything</Text>
+            </View>
+          </TouchableOpacity>
+        )}
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
           <Text style={styles.subtitle}>
             {leaderboardType === 'alltime'
@@ -597,7 +612,7 @@ export default function LeaderboardScreen() {
       </View>
 
       {leaderboardType === 'alltime' && (
-        <View style={{ flexDirection: 'row', paddingHorizontal: 16, paddingBottom: 10, paddingTop: 2 }}>
+        <View style={{ flexDirection: 'row', paddingHorizontal: 12, paddingBottom: 10, paddingTop: 2 }}>
           {ALLTIME_CATEGORIES.map((cat, i) => (
             <TouchableOpacity
               key={cat.key}
@@ -659,7 +674,7 @@ export default function LeaderboardScreen() {
         renderItem={({ item }) => {
           const isCurrentUser = item.id === user?.id;
           const isTop3 = item.rank <= 3;
-          const rankEmoji = item.rank === 1 ? '🥇' : item.rank === 2 ? '🥈' : item.rank === 3 ? '🥉' : '';
+          const medalSrc = item.rank === 1 ? require('../../assets/avatars/gold_medal.png') : item.rank === 2 ? require('../../assets/avatars/silver_medal.png') : require('../../assets/avatars/bronze_medal.png');
           const conquestPct = (item.conquest_pct ?? 0) as number;
           const levelInfo = getLevelInfo(item.xp ?? 0);
           const isDailyBoard = leaderboardType === 'daily';
@@ -681,7 +696,7 @@ export default function LeaderboardScreen() {
             >
               <View style={styles.rankContainer}>
                 {isTop3 ? (
-                  <Text style={styles.rankEmoji}>{rankEmoji}</Text>
+                  <Image source={medalSrc} style={{ width: 24, height: 24 }} resizeMode="contain" />
                 ) : (
                   <Text style={styles.rankNumber}>#{item.rank.toLocaleString()}</Text>
                 )}
@@ -789,6 +804,19 @@ function ProfileModalContent({
     ? new Date(profile.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
     : null;
 
+  const [previewItem, setPreviewItem] = useState<{ id: string; type: 'avatar' | 'flag'; label: string } | null>(null);
+
+  function getItemLabel(id: string, type: 'avatar' | 'flag'): string {
+    if (type === 'avatar') {
+      return CUSTOM_AVATARS.find(a => a.key === id)?.label
+        ?? AVATAR_CHARACTERS.find(a => a.emoji === id)?.label
+        ?? id;
+    }
+    return CUSTOM_FLAGS.find(f => f.key === id)?.label
+      ?? FLAG_OPTIONS.find(f => f.emoji === id)?.label
+      ?? id;
+  }
+
   // Separate inventory into avatars and flags (exclude upgrade items)
   const ownedAvatarIds = unlockedItemIds.filter(id => ALL_AVATAR_IDS.has(id));
   const ownedFlagIds = unlockedItemIds.filter(id => ALL_FLAG_IDS.has(id));
@@ -799,9 +827,8 @@ function ProfileModalContent({
   // Get trophy details for claimed ones
   const claimedTrophies = ACHIEVEMENTS_DATA.filter(a => claimedAchievementIds.includes(a.id));
 
-  const rankLabel = entry.rank <= 3
-    ? (entry.rank === 1 ? '🥇 #1' : entry.rank === 2 ? '🥈 #2' : '🥉 #3')
-    : `#${entry.rank.toLocaleString()}`;
+  const rankMedalSrc = entry.rank === 1 ? require('../../assets/avatars/gold_medal.png') : entry.rank === 2 ? require('../../assets/avatars/silver_medal.png') : require('../../assets/avatars/bronze_medal.png');
+  const rankLabelText = entry.rank <= 3 ? `#${entry.rank}` : `#${entry.rank.toLocaleString()}`;
 
   return (
     <View style={modal.container}>
@@ -832,7 +859,10 @@ function ProfileModalContent({
             />
             <View style={modal.identityInfo}>
               <Text style={modal.profileUsername}>{entry.username}{isMe ? ' (You)' : ''}</Text>
-              <Text style={modal.profileRank}>{rankLabel}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                {entry.rank <= 3 && <Image source={rankMedalSrc} style={{ width: 16, height: 16 }} resizeMode="contain" />}
+                <Text style={modal.profileRank}>{rankLabelText}</Text>
+              </View>
               {memberSince && <Text style={modal.memberSince}>Member since {memberSince}</Text>}
             </View>
           </View>
@@ -909,12 +939,18 @@ function ProfileModalContent({
                   <Text style={modal.inventorySubtitle}>Avatars ({ownedAvatarIds.length})</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={modal.inventoryScroll}>
                     {ownedAvatarIds.map(id => (
-                      <View key={id} style={[modal.inventoryItem, entry.avatar_emoji === id && modal.inventoryItemEquipped]}>
+                      <TouchableOpacity
+                        key={id}
+                        style={[modal.inventoryItem, entry.avatar_emoji === id && modal.inventoryItemEquipped]}
+                        onLongPress={() => setPreviewItem({ id, type: 'avatar', label: getItemLabel(id, 'avatar') })}
+                        delayLongPress={300}
+                        activeOpacity={0.8}
+                      >
                         <AvatarDisplay avatarId={id} size={36} />
                         {entry.avatar_emoji === id && (
                           <View style={modal.equippedDot} />
                         )}
-                      </View>
+                      </TouchableOpacity>
                     ))}
                   </ScrollView>
                 </>
@@ -927,7 +963,13 @@ function ProfileModalContent({
                     {ownedFlagIds.map(id => {
                       const FlagComp = isCustomFlag(id) ? CUSTOM_FLAG_COMPONENTS[id] : null;
                       return (
-                        <View key={id} style={[modal.inventoryItem, entry.avatar_flag === id && modal.inventoryItemEquipped]}>
+                        <TouchableOpacity
+                          key={id}
+                          style={[modal.inventoryItem, entry.avatar_flag === id && modal.inventoryItemEquipped]}
+                          onLongPress={() => setPreviewItem({ id, type: 'flag', label: getItemLabel(id, 'flag') })}
+                          delayLongPress={300}
+                          activeOpacity={0.8}
+                        >
                           {FlagComp
                             ? <FlagComp size={36} />
                             : <Text style={{ fontSize: 30, textAlign: 'center' }}>{id}</Text>
@@ -935,7 +977,7 @@ function ProfileModalContent({
                           {entry.avatar_flag === id && (
                             <View style={modal.equippedDot} />
                           )}
-                        </View>
+                        </TouchableOpacity>
                       );
                     })}
                   </ScrollView>
@@ -947,6 +989,30 @@ function ProfileModalContent({
         </ScrollView>
       )}
 
+      {/* Long-press item preview */}
+      {previewItem && (
+        <TouchableOpacity
+          style={modal.previewOverlay}
+          activeOpacity={1}
+          onPress={() => setPreviewItem(null)}
+        >
+          <View style={modal.previewCard}>
+            <View style={modal.previewImageWrap}>
+              {previewItem.type === 'avatar' ? (
+                <AvatarDisplay avatarId={previewItem.id} size={110} />
+              ) : (() => {
+                const FlagComp = isCustomFlag(previewItem.id) ? CUSTOM_FLAG_COMPONENTS[previewItem.id] : null;
+                return FlagComp
+                  ? <FlagComp size={110} />
+                  : <Text style={{ fontSize: 90, textAlign: 'center' }}>{previewItem.id}</Text>;
+              })()}
+            </View>
+            <Text style={modal.previewLabel}>{previewItem.label}</Text>
+            <Text style={modal.previewHint}>Tap anywhere to close</Text>
+          </View>
+        </TouchableOpacity>
+      )}
+
     </View>
   );
 }
@@ -955,12 +1021,24 @@ function ProfileModalContent({
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0a0a1a' },
+  commanderBanner: {
+    marginHorizontal: 0,
+    marginBottom: 10,
+    backgroundColor: '#1a0a2e',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#7B2FBE',
+    paddingVertical: 7,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  commanderBannerText: { color: '#FFD700', fontWeight: 'bold', fontSize: 13 },
   centered: {
     flex: 1, backgroundColor: '#0a0a1a',
     alignItems: 'center', justifyContent: 'center', gap: 12,
   },
   loadingText: { color: '#aaa', fontSize: 16 },
-  header: { padding: 20, paddingTop: 56 },
+  header: { padding: 12, paddingTop: 56 },
   title: { color: '#fff', fontSize: 28, fontWeight: 'bold' },
   subtitle: { color: '#aaa', fontSize: 13, marginTop: 4 },
   dailyRewardNoteRow: {
@@ -994,7 +1072,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
   },
-  tabRow: { flexDirection: 'row', paddingHorizontal: 20, marginBottom: 16, gap: 8 },
+  tabRow: { flexDirection: 'row', paddingHorizontal: 12, marginBottom: 16, gap: 8 },
   tab: {
     flex: 1, paddingVertical: 10, borderRadius: 10,
     backgroundColor: '#1a1a2e', borderWidth: 1, borderColor: '#2a2a4e',
@@ -1003,7 +1081,7 @@ const styles = StyleSheet.create({
   tabActive: { backgroundColor: '#FFD700', borderColor: '#FFD700' },
   tabText: { color: '#aaa', fontSize: 14, fontWeight: '600' },
   tabTextActive: { color: '#0a0a1a' },
-  searchRow: { paddingHorizontal: 20, marginBottom: 12 },
+  searchRow: { paddingHorizontal: 12, marginBottom: 12 },
   searchInput: {
     backgroundColor: '#1a1a2e',
     color: '#fff',
@@ -1014,7 +1092,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#2a2a4e',
   },
-  list: { paddingHorizontal: 20, paddingBottom: 20 },
+  list: { paddingHorizontal: 12, paddingBottom: 20 },
   emptyContainer: { alignItems: 'center', paddingVertical: 60, gap: 12 },
   emptyEmoji: { fontSize: 48 },
   emptyIcon: { width: 58, height: 58, opacity: 0.9 },
@@ -1030,7 +1108,6 @@ const styles = StyleSheet.create({
   rowHighlight: { borderColor: '#FFD700', backgroundColor: '#1a1a20' },
   rowTop3: { backgroundColor: '#1a1a30' },
   rankContainer: { width: 36, alignItems: 'center' },
-  rankEmoji: { fontSize: 22 },
   rankNumber: { color: '#666', fontSize: 13, fontWeight: 'bold' },
   userInfo: { flex: 1, gap: 2 },
   username: { color: '#fff', fontSize: 14, fontWeight: '600' },
@@ -1123,4 +1200,31 @@ const modal = StyleSheet.create({
     position: 'absolute', bottom: 2, right: 2,
     width: 8, height: 8, borderRadius: 4, backgroundColor: '#FFD700',
   },
+
+  // Item long-press preview
+  previewOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.82)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 100,
+  },
+  previewCard: {
+    backgroundColor: '#1a1a2e',
+    borderRadius: 24,
+    padding: 32,
+    alignItems: 'center',
+    gap: 16,
+    borderWidth: 1,
+    borderColor: '#FFD70066',
+    minWidth: 220,
+  },
+  previewImageWrap: {
+    width: 130, height: 130,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  previewLabel: {
+    color: '#fff', fontSize: 20, fontWeight: 'bold', textAlign: 'center',
+  },
+  previewHint: { color: '#555', fontSize: 11 },
 });

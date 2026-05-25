@@ -164,6 +164,16 @@ export const CUSTOM_AVATARS: CustomAvatarOption[] = [
     { key: 'png_eternal_emperor', label: 'Eternal Emperor', culture: '', price: 0, isPremium: false, questOnly: true },
     { key: 'png_void_ascendant',  label: 'Void Ascendant',  culture: '', price: 0, isPremium: false, questOnly: true },
 
+    // ── Gauntlet Quiz batch ───────────────────────────────────────────────────
+    { key: 'png_crucible',        label: 'Crucible',        culture: '', price: 0,     isPremium: false, cosmetic: true },
+    { key: 'png_penguin_admiral', label: 'Penguin Admiral', culture: '', price: 1500,  isPremium: true,  requiresLevel: 18 },
+    { key: 'png_bear_berserker',  label: 'Bear Berserker',  culture: '', price: 2000,  isPremium: true,  requiresLevel: 30 },
+    { key: 'png_doom_paladin',    label: 'Doom Paladin',    culture: '', price: 0,     isPremium: false, questOnly: true },
+    { key: 'png_siege_lord',      label: 'Siege Lord',      culture: '', price: 10000, isPremium: true,  requiresLevel: 120 },
+    { key: 'png_sorceress',       label: 'Sorceress',       culture: '', price: 10000, isPremium: true,  requiresLevel: 90 },
+    { key: 'png_farewell',        label: 'Farewell',        culture: '', price: 4000,  isPremium: true,  requiresLevel: 45 },
+    { key: 'png_cold_judgment',   label: 'Cold Judgment',   culture: '', price: 12000, isPremium: true,  requiresLevel: 140 },
+
 ];
 
 

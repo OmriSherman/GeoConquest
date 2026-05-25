@@ -81,6 +81,7 @@ export interface QuizQuestion {
   country: Country;
   options: Country[]; // 4 options, includes correct answer
   correctIndex: number;
+  mode?: 'standard' | 'reverse';
 }
 
 export interface QuizSession {
@@ -145,12 +146,15 @@ export type QuizStackParamList = {
     goldEarned: number;
     quizType: QuizType;
     elapsedSeconds?: number;
+    tierAccent?: string;
+    tierLabel?: string;
+    tierBg?: string;
   };
 };
 
 // ─── Millionaire Quiz ─────────────────────────────────────────────────────────
 
-export type MillionaireQuestionType = 'flag' | 'shape' | 'capital' | 'border_yes' | 'border_no' | 'area_largest';
+export type MillionaireQuestionType = 'flag' | 'shape' | 'capital' | 'capital_reverse' | 'flag_reverse' | 'shape_reverse' | 'border_yes' | 'border_no' | 'area_largest';
 
 export interface MillionaireQuestion {
   type: MillionaireQuestionType;

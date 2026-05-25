@@ -34,6 +34,7 @@ export interface Achievement {
         quizCount?: number;
         excellentScoreCount?: number;
         trailBestScore?: number;
+        gauntletBestScore?: number;
         dailyFirstPlaceWins?: number;
         perfectAccuracyCount?: number;
     }) => [number, number];
@@ -318,6 +319,16 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
         rewardGold: 3000,
         rewardTickets: 1,
         getProgress: (stats) => [Math.min(stats.trailBestScore ?? 0, 50), 50],
+    },
+    {
+        id: 'gauntlet_ascendant',
+        title: 'Ascendant',
+        description: 'Reach level 100 in the Gauntlet.',
+        icon: 'png_crucible',
+        rewardGold: 10000,
+        rewardTickets: 5,
+        rewardItem: { type: 'avatar', itemId: 'png_doom_paladin', label: 'Doom Paladin' },
+        getProgress: (stats) => [Math.min(stats.gauntletBestScore ?? 0, 100), 100],
     },
     {
         id: 'perfect_accuracy_15',

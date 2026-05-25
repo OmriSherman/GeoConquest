@@ -1,11 +1,11 @@
 import { QuizType } from '../types';
 
 // ─── Level Curve ──────────────────────────────────────────────────────────────
-// xpToNextLevel(n) = round((100 * 1.06^(n-1)) * 1.25)  — +25% tougher level-up curve
-// Level 1→2: 125 XP, Level 49→50: ~2,049 XP, Level 99→100: ~37,750 XP
+// xpToNextLevel(n) = round(100 * n^0.807)  — polynomial, naturally flattens
+// L1: 100 XP | L50: ~2,347 XP | L100: ~4,112 XP | L300: ~10,000 XP
 
 export function xpToNextLevel(n: number): number {
-  return Math.round(100 * Math.pow(1.06, n - 1) * 1.25);
+  return Math.round(100 * Math.pow(n, 0.807));
 }
 
 /** Given accumulated total XP, return current level, XP into that level, and XP needed for next. */
@@ -60,7 +60,7 @@ export function calcQuizXP(
   }
 
   if (quizType === 'gauntlet') {
-    return score * 30;
+    return score * 25;
   }
 
   if (quizType === 'millionaire') {

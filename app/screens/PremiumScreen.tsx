@@ -619,7 +619,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingBottom: 8,
   },
   urgencyText: { color: '#9B59B6', fontSize: 13, fontWeight: '600' },
@@ -627,7 +627,7 @@ const styles = StyleSheet.create({
 
   // Scroll
   scroll: { flex: 1 },
-  scrollContent: { paddingHorizontal: 16, paddingTop: 8 },
+  scrollContent: { paddingHorizontal: 12, paddingTop: 8 },
 
   // Close
   closeBtn: {
@@ -875,7 +875,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#0e0e1f',
     borderTopWidth: 1,
     borderTopColor: '#2a2a4e',
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingTop: 12,
   },
   ctaPrimary: {

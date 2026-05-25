@@ -28,7 +28,6 @@ import { CUSTOM_FLAG_COMPONENTS, isCustomFlag } from '../lib/customFlags';
 
 // Item image map for custom items (non-avatar, non-flag)
 const ITEM_IMAGES: Record<string, any> = {
-  suit_up: require('../../assets/avatars/suit_up.png'),
   png_beast_mark: require('../../assets/avatars/beast_mark.png'),
   upgrade_capitals: require('../../assets/avatars/building.png'),
   upgrade_borders: require('../../assets/avatars/border.png'),
@@ -72,6 +71,7 @@ const ACHIEVEMENT_ICON_IMAGES: Record<string, any> = {
   png_world_ender:     require('../../assets/avatars/world_ender.png'),
   png_divine_high_king: require('../../assets/avatars/divine_high_king.png'),
   png_void_eye:        require('../../assets/avatars/void_eye.png'),
+  png_crucible:        require('../../assets/avatars/crucible.png'),
   // Transcendent quest icons
   png_ascended_sigil:  require('../../assets/avatars/ascended_sigil.png'),
   png_atlas_rune:      require('../../assets/avatars/atlas_rune.png'),
@@ -84,7 +84,7 @@ function RewardItemPreview({ itemId, type, size = 22 }: { itemId: string; type: 
   const imgSrc = ITEM_IMAGES[itemId];
   if (imgSrc) return <Image source={imgSrc} style={{ width: size, height: size, borderRadius: 4 }} resizeMode="contain" />;
   if (type === 'item') {
-    return <Text style={{ fontSize: size, lineHeight: size + 2 }}>🎁</Text>;
+    return <Image source={require('../../assets/avatars/treasure_chest.png')} style={{ width: size, height: size }} resizeMode="contain" />;
   }
   if (type === 'flag') {
     const FlagComp = isCustomFlag(itemId) ? CUSTOM_FLAG_COMPONENTS[itemId] : null;
@@ -235,6 +235,7 @@ type StatsType = {
   playerLevel?: number;
   excellentScoreCount?: number;
   trailBestScore?: number;
+  gauntletBestScore?: number;
   dailyFirstPlaceWins?: number;
   perfectAccuracyCount?: number;
 };
@@ -324,7 +325,10 @@ function renderAchievementCard(
                     <View style={styles.claimButtonInner}>
                       <Text style={styles.claimButtonText}>Claim</Text>
                       {!useRewardButton && achievement.rewardGold > 0 && (
-                        <Text style={styles.claimButtonText}>💰 {achievement.rewardGold.toLocaleString()}</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                          <Image source={require('../../assets/avatars/gold_bag.png')} style={{ width: 13, height: 13 }} resizeMode="contain" />
+                          <Text style={styles.claimButtonText}>{achievement.rewardGold.toLocaleString()}</Text>
+                        </View>
                       )}
                       {!useRewardButton && rewardItems.length === 1 && (
                         <View style={styles.claimItemPreview}>
@@ -340,14 +344,20 @@ function renderAchievementCard(
                     style={[styles.rewardsBadge, isPremiumSection && styles.rewardsBadgePremium, isCosmic && styles.rewardsBadgeCosmic, isNightmareCard && styles.rewardsBadgeNightmare]}
                     onPress={() => blockPaywall ? onPaywall!() : showRewards(achievement)}
                   >
-                    <Text style={[styles.rewardsBadgeText, isPremiumSection && { color: '#9B59B6' }, isCosmic && { color: '#a78bfa' }, isNightmareCard && { color: '#ff8888' }]}>🎁 Rewards</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <Image source={require('../../assets/avatars/treasure_chest.png')} style={{ width: 13, height: 13 }} resizeMode="contain" />
+                      <Text style={[styles.rewardsBadgeText, isPremiumSection && { color: '#9B59B6' }, isCosmic && { color: '#a78bfa' }, isNightmareCard && { color: '#ff8888' }]}>Rewards</Text>
+                    </View>
                   </TouchableOpacity>
                 )}
               </View>
             ) : (
               <View style={styles.rewardPill}>
                 {!useRewardButton && achievement.rewardGold > 0 && (
-                  <Text style={[styles.rewardHint, isPremiumSection && { color: '#9B59B6' }, isCosmic && { color: '#a78bfa' }, isNightmareCard && { color: '#ff8888' }]}>💰 {achievement.rewardGold.toLocaleString()}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                    <Image source={require('../../assets/avatars/gold_bag.png')} style={{ width: 12, height: 12 }} resizeMode="contain" />
+                    <Text style={[styles.rewardHint, isPremiumSection && { color: '#9B59B6' }, isCosmic && { color: '#a78bfa' }, isNightmareCard && { color: '#ff8888' }]}>{achievement.rewardGold.toLocaleString()}</Text>
+                  </View>
                 )}
                 {!useRewardButton && rewardItems.length === 1 && (
                   <View style={styles.rewardItemRow}>
@@ -360,7 +370,10 @@ function renderAchievementCard(
                     style={[styles.rewardsBadge, isPremiumSection && styles.rewardsBadgePremium, isCosmic && styles.rewardsBadgeCosmic, isNightmareCard && styles.rewardsBadgeNightmare]}
                     onPress={() => blockPaywall ? onPaywall!() : showRewards(achievement)}
                   >
-                    <Text style={[styles.rewardsBadgeText, isPremiumSection && { color: '#9B59B6' }, isCosmic && { color: '#a78bfa' }, isNightmareCard && { color: '#ff8888' }]}>🎁 Rewards</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <Image source={require('../../assets/avatars/treasure_chest.png')} style={{ width: 13, height: 13 }} resizeMode="contain" />
+                      <Text style={[styles.rewardsBadgeText, isPremiumSection && { color: '#9B59B6' }, isCosmic && { color: '#a78bfa' }, isNightmareCard && { color: '#ff8888' }]}>Rewards</Text>
+                    </View>
                   </TouchableOpacity>
                 )}
               </View>
@@ -399,6 +412,7 @@ export default function AchievementsScreen() {
   const [ownedItemsSet, setOwnedItemsSet] = useState<Set<string>>(new Set());
   const [excellentScoreCount, setExcellentScoreCount] = useState(0);
   const [trailBestScore, setTrailBestScore] = useState(0);
+  const [gauntletBestScore, setGauntletBestScore] = useState(0);
   const [dailyFirstPlaceWins, setDailyFirstPlaceWins] = useState(0);
   const [perfectAccuracyCount, setPerfectAccuracyCount] = useState(0);
 
@@ -527,6 +541,15 @@ export default function AchievementsScreen() {
         .limit(1);
       setTrailBestScore(trailRows?.[0]?.score ?? 0);
 
+      // Ascendant quest: best score in Gauntlet quiz
+      const { data: gauntletRows } = await supabase
+        .from('gauntlet_scores')
+        .select('score')
+        .eq('user_id', profile.id)
+        .order('score', { ascending: false })
+        .limit(1);
+      setGauntletBestScore(gauntletRows?.[0]?.score ?? 0);
+
       // Daily Champion quest: number of times finished #1 in daily challenge
       const { data: champRows } = await supabase
         .from('daily_leaderboard_rewards')
@@ -571,8 +594,8 @@ export default function AchievementsScreen() {
       </View>
     ) : undefined;
     const lines: string[] = [];
-    if (ach.rewardGold > 0) lines.push(`💰 ${ach.rewardGold.toLocaleString()} gold`);
-    if (ach.rewardTickets) lines.push(`🎟️ ${ach.rewardTickets} Ticket${ach.rewardTickets > 1 ? 's' : ''}`);
+    if (ach.rewardGold > 0) lines.push(`${ach.rewardGold.toLocaleString()} gold`);
+    if (ach.rewardTickets) lines.push(`${ach.rewardTickets} Ticket${ach.rewardTickets > 1 ? 's' : ''}`);
     items.forEach(item => lines.push(`+ ${item.label}`));
     showAlert({ title: `${ach.title} — Rewards`, icon, message: lines.join('\n') });
   }
@@ -618,6 +641,7 @@ export default function AchievementsScreen() {
     quizCount: profile?.quiz_count ?? 0,
     excellentScoreCount,
     trailBestScore,
+    gauntletBestScore,
     dailyFirstPlaceWins,
     perfectAccuracyCount,
   };
@@ -652,6 +676,19 @@ export default function AchievementsScreen() {
           ]}
         />
       </View>
+
+      {!profile?.is_conquerer && (
+        <TouchableOpacity
+          style={styles.commanderBanner}
+          onPress={() => navigation.getParent()?.navigate('Premium')}
+          activeOpacity={0.85}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Image source={require('../../assets/avatars/crown.png')} style={{ width: 16, height: 16 }} resizeMode='contain' />
+            <Text style={styles.commanderBannerText}>Conqueror's Pass — Unlock Everything</Text>
+          </View>
+        </TouchableOpacity>
+      )}
 
       {ACHIEVEMENTS_DATA.map((achievement) => {
         // Prerequisite lock — shown as ??? void card until prerequisite is claimed
@@ -775,8 +812,20 @@ export default function AchievementsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0a0a1a' },
+  commanderBanner: {
+    marginHorizontal: 0,
+    marginBottom: 10,
+    backgroundColor: '#1a0a2e',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#7B2FBE',
+    paddingVertical: 7,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  commanderBannerText: { color: '#FFD700', fontWeight: 'bold', fontSize: 13 },
   center: { flex: 1, backgroundColor: '#0a0a1a', justifyContent: 'center', alignItems: 'center' },
-  content: { padding: 16, paddingTop: 50, paddingBottom: 40 },
+  content: { padding: 12, paddingTop: 50, paddingBottom: 40 },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',

@@ -12,7 +12,30 @@
       "PowerShell(py -m pip install numpy --quiet)",
       "PowerShell(Get-Command py -ErrorAction SilentlyContinue)",
       "PowerShell(py --version 2>&1)",
-      "Bash(py scripts/split_avatars.py crucible penguin_admiral bear_berserker doom_paladin siege_lord sorceress farewell cold_judgment --cols 3 --rows 3 --bg \"#FF00FF\" --snippet)"
+      "Bash(py scripts/split_avatars.py crucible penguin_admiral bear_berserker doom_paladin siege_lord sorceress farewell cold_judgment --cols 3 --rows 3 --bg \"#FF00FF\" --snippet)",
+      "Bash(npx tsc *)",
+      "Bash(py -c ' *)",
+      "WebFetch(domain:github.com)",
+      "Bash(python remove_bg.py \"assets\\\\avatars\\\\pre-process\\\\Gemini_Generated_Image_imi1omimi1omimi1.png\" cursed_dice red_heart footprint_trail demons_gamble stop_it)",
+      "Bash(python3 remove_bg.py \"assets\\\\avatars\\\\pre-process\\\\Gemini_Generated_Image_imi1omimi1omimi1.png\" cursed_dice red_heart footprint_trail demons_gamble stop_it)",
+      "Bash(py remove_bg.py \"assets\\\\avatars\\\\pre-process\\\\Gemini_Generated_Image_imi1omimi1omimi1.png\" cursed_dice red_heart footprint_trail demons_gamble stop_it)",
+      "Bash(py remove_bg.py preview \"assets\\\\avatars\\\\pre-process\\\\Gemini_Generated_Image_imi1omimi1omimi1.png\")",
+      "Bash(py remove_bg.py split \"assets\\\\avatars\\\\pre-process\\\\Gemini_Generated_Image_imi1omimi1omimi1.png\" 2 3 cursed_dice red_heart footprint_trail demons_gamble stop_it)",
+      "Bash(Remove-Item \"c:\\\\Users\\\\Omri\\\\Desktop\\\\GeoConquest\\\\GeoConquest\\\\assets\\\\avatars\\\\sprite_6.png\")",
+      "Bash(del \"c:\\\\Users\\\\Omri\\\\Desktop\\\\GeoConquest\\\\GeoConquest\\\\assets\\\\avatars\\\\sprite_6.png\")",
+      "Bash(node -e \"require\\('jimp'\\)\")",
+      "Bash(node -e \"require\\('sharp'\\)\")",
+      "Bash(python -c \"from PIL import Image; print\\('PIL OK'\\)\")",
+      "Bash(npm install *)",
+      "Bash(node -e \"require\\('jimp'\\); console.log\\('jimp OK'\\)\")",
+      "Bash(node scripts/remove_magenta.js)",
+      "Bash(node -e \"const j = require\\('jimp'\\); console.log\\(Object.keys\\(j\\).slice\\(0,10\\)\\)\")",
+      "Bash(node -e \"const {Jimp} = require\\('jimp'\\); console.log\\(Object.getOwnPropertyNames\\(Jimp\\).slice\\(0,15\\)\\)\")",
+      "Bash(node -e \"const {Jimp}=require\\('jimp'\\); const j=new Jimp\\({width:10,height:10,color:0}\\); console.log\\(Object.getOwnPropertyNames\\(Object.getPrototypeOf\\(j\\)\\).filter\\(n=>n.includes\\('crop'\\)||n.includes\\('clone'\\)\\)\\)\")",
+      "mcp__claude_ai_Supabase__list_projects",
+      "Bash(findstr /R /I \"[\\\\x80-\\\\xFF]\" app\\\\*.tsx app\\\\*.ts app\\\\screens\\\\*.tsx app\\\\screens\\\\*.ts app\\\\components\\\\*.tsx app\\\\components\\\\*.ts app\\\\lib\\\\*.tsx app\\\\lib\\\\*.ts app\\\\context\\\\*.tsx app\\\\context\\\\*.ts)",
+      "Bash(python3 -c ' *)",
+      "Bash(node -e ' *)"
     ]
   }
 }

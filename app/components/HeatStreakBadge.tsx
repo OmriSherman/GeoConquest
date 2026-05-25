@@ -9,7 +9,9 @@
  */
 
 import React, { useEffect, useRef } from 'react';
-import { Animated, StyleSheet, Text, View } from 'react-native';
+import { Animated, Image, StyleSheet, Text, View } from 'react-native';
+
+const FLAME_IMG = require('../../assets/avatars/flame.png');
 
 interface Props {
   combo: number;
@@ -64,7 +66,8 @@ export default function HeatStreakBadge({ combo }: Props) {
     : '#3a0000';
 
   const multiplier = (1 + (combo - 1) * 0.1).toFixed(1);
-  const label = combo >= 10 ? `🔥🔥 ${multiplier}x` : `🔥 ${multiplier}x`;
+  const flameSize = combo >= 10 ? 16 : 14;
+  const textStyle = combo >= 10 ? [styles.text, styles.textMax] : styles.text;
 
   return (
     <Animated.View
@@ -77,9 +80,13 @@ export default function HeatStreakBadge({ combo }: Props) {
         },
       ]}
     >
-      <Text style={[styles.text, combo >= 10 && styles.textMax]}>
-        {label}
-      </Text>
+      <View style={styles.row}>
+        <Image source={FLAME_IMG} style={{ width: flameSize, height: flameSize }} resizeMode="contain" />
+        {combo >= 10 && (
+          <Image source={FLAME_IMG} style={{ width: flameSize, height: flameSize }} resizeMode="contain" />
+        )}
+        <Text style={textStyle}>{multiplier}x</Text>
+      </View>
     </Animated.View>
   );
 }
@@ -91,6 +98,11 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1.5,
     alignSelf: 'center',
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
   },
   text: {
     color: '#ff8888',

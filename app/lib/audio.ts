@@ -72,6 +72,11 @@ export function playDevilLaugh() {
   return playSfx(require('../assets/sfx/devil_laugh.m4a'));
 }
 
+/** Cursed dice roll — nightmare curse reveal */
+export function playDiceRoll() {
+  return playSfx(require('../assets/sfx/dice.mp3'));
+}
+
 // ── Synthesised sounds (AudioEngine WebView) ────────────────────────────────
 
 /** No-op — AudioEngine initialises itself when mounted. */

@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Image, Modal, StyleSheet, Text, TouchableOpacity, View, ScrollView } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { QuizStackParamList } from '../types';
@@ -33,19 +34,18 @@ const QUIZ_ICON_IMAGES: Record<string, any> = {
   '💰': require('../../assets/avatars/gold_bag.png'),
 };
 
-const TerrorIcon = ({ size = 48 }) => (
-  <Image
-    source={require('../../assets/avatars/demon_hand.png')}
-    style={{ width: size, height: size, transform: [{ rotate: '180deg' }] }}
-    resizeMode="contain"
-  />
-);
 
 const QUIZZES = [
   {
+    screen: 'MillionaireQuiz' as const,
+    title: 'Millionaire Quiz',
+    goldAmount: '10,000',
+    goldSuffix: '/ 1,000 XP max prize',
+    emoji: '💰',
+  },
+  {
     screen: 'FlagQuiz' as const,
     title: 'Flag Quiz',
-    description: 'Identify the country from its flag',
     goldAmount: '10',
     goldSuffix: '/ 5 XP per correct',
     emoji: '🏴',
@@ -53,7 +53,6 @@ const QUIZZES = [
   {
     screen: 'ShapeQuiz' as const,
     title: 'Shape Quiz',
-    description: 'Recognize countries by their silhouette',
     goldAmount: '15',
     goldSuffix: '/ 7 XP per correct',
     emoji: '🗺️',
@@ -61,7 +60,6 @@ const QUIZZES = [
   {
     screen: 'CapitalsQuiz' as const,
     title: 'Capitals Quiz',
-    description: 'Match the capital city to its country',
     goldAmount: '18',
     goldSuffix: '/ 12 XP per correct',
     emoji: '🏛️',
@@ -69,7 +67,6 @@ const QUIZZES = [
   {
     screen: 'BordersQuiz' as const,
     title: 'Borders Quiz',
-    description: 'Find the country that does NOT share a border',
     goldAmount: '20',
     goldSuffix: '/ 15 XP per correct',
     emoji: '🧩',
@@ -77,18 +74,9 @@ const QUIZZES = [
   {
     screen: 'TrailQuiz' as const,
     title: 'Trail Quiz',
-    description: 'Hop across neighboring countries by name/capital',
     goldAmount: '22',
     goldSuffix: '/ 16 XP per correct',
     emoji: '🧭',
-  },
-  {
-    screen: 'MillionaireQuiz' as const,
-    title: 'Millionaire Quiz',
-    description: 'Answer 15 questions for the grand prize!',
-    goldAmount: '10,000',
-    goldSuffix: '/ 1,000 XP max prize',
-    emoji: '💰',
   },
 ];
 
@@ -99,9 +87,11 @@ export default function QuizMenuScreen({ navigation }: Props) {
   const { questHighlightId } = useGame();
   const [showGoldShop, setShowGoldShop] = useState(false);
   const [showTicketModal, setShowTicketModal] = useState(false);
+  const [nightmareCompleted, setNightmareCompleted] = useState(false);
   const [showMapsModal, setShowMapsModal] = useState(false);
   const [mapsRemainingSeconds, setMapsRemainingSeconds] = useState(0);
   const [actionLoading, setActionLoading] = useState(false);
+  const navigatingRef = useRef(false);
   const tickets = profile?.tickets ?? 0;
   const gold = profile?.gold_balance ?? 0;
   const playerLevel = getLevelInfo(profile?.xp ?? 0).level;
@@ -196,8 +186,13 @@ export default function QuizMenuScreen({ navigation }: Props) {
 
   useFocusEffect(
     useCallback(() => {
+      navigatingRef.current = false;
       syncMaps();
-    }, [])
+      const key = profile?.id
+        ? `@achievements/${profile.id}/nightmare_completed`
+        : '@achievements/nightmare_completed';
+      AsyncStorage.getItem(key).then(val => setNightmareCompleted(val === 'true'));
+    }, [profile?.id])
   );
 
   useEffect(() => {
@@ -279,6 +274,19 @@ export default function QuizMenuScreen({ navigation }: Props) {
         </View>
       </View>
 
+      {!profile?.is_conquerer && (
+        <TouchableOpacity
+          style={styles.commanderBanner}
+          onPress={() => navigation.getParent()?.navigate('Premium')}
+          activeOpacity={0.85}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Image source={require('../../assets/avatars/crown.png')} style={{ width: 16, height: 16 }} resizeMode='contain' />
+            <Text style={styles.commanderBannerText}>Conqueror's Pass — Unlock Everything</Text>
+          </View>
+        </TouchableOpacity>
+      )}
+
       <ScrollView contentContainerStyle={styles.container}>
         {QUIZZES.map((quiz) => {
           let isLocked = false;
@@ -309,9 +317,8 @@ export default function QuizMenuScreen({ navigation }: Props) {
             <QuizCard
               key={quiz.screen}
               title={quiz.title}
-              description={quiz.description}
               goldRewardParts={{ amount: quiz.goldAmount, suffix: quiz.goldSuffix }}
-              iconNode={QUIZ_ICON_IMAGES[quiz.emoji] ? <Image source={QUIZ_ICON_IMAGES[quiz.emoji]} style={{ width: 32, height: 32 }} resizeMode="contain" /> : undefined}
+              iconNode={QUIZ_ICON_IMAGES[quiz.emoji] ? <Image source={QUIZ_ICON_IMAGES[quiz.emoji]} style={{ width: 42, height: 42 }} resizeMode="contain" /> : undefined}
               emoji={QUIZ_ICON_IMAGES[quiz.emoji] ? undefined : quiz.emoji}
               isLocked={isLocked}
               cardState={lockReason === 'trail_level' ? 'leveled' : (isLocked ? 'unique' : undefined)}
@@ -321,8 +328,12 @@ export default function QuizMenuScreen({ navigation }: Props) {
                   <Text style={{ color: '#aaa', fontSize: 12 }}>1 ticket</Text>
                 </View>
               ) : lockReason === 'trail_level' ? (
-                <Text style={{ color: '#8ab4ff', fontSize: 12, fontWeight: '700' }}>🔒 Lvl 50</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Image source={require('../../assets/avatars/lock.png')} style={{ width: 12, height: 12 }} resizeMode="contain" />
+                  <Text style={{ color: '#8ab4ff', fontSize: 12, fontWeight: '700' }}>Lvl 50</Text>
+                </View>
               ) : undefined}
+              style={isMillionaire ? { borderColor: '#FFD700', borderWidth: 1 } : undefined}
               shouldBlink={shouldBlink}
               onPress={async () => {
                 if (isLocked) {
@@ -353,13 +364,17 @@ export default function QuizMenuScreen({ navigation }: Props) {
                     message: 'You need at least 1 ticket to play the Millionaire Quiz.\n\nEarn tickets from daily rewards or buy them in Shop → Items.',
                   });
                 } else if (isMillionaire) {
+                  if (navigatingRef.current) return;
+                  navigatingRef.current = true;
                   navigation.navigate(quiz.screen);
                 } else if (!skipMapCheck && maps <= 0) {
                   setShowMapsModal(true);
                 } else {
+                  if (navigatingRef.current) return;
+                  navigatingRef.current = true;
                   if (!skipMapCheck) {
                     const ok = await deductMap();
-                    if (!ok) { setShowMapsModal(true); return; }
+                    if (!ok) { navigatingRef.current = false; setShowMapsModal(true); return; }
                   }
                   navigation.navigate(quiz.screen);
                 }
@@ -369,25 +384,69 @@ export default function QuizMenuScreen({ navigation }: Props) {
         })}
 
         {(() => {
+          const gauntletLocked = playerLevel < 100;
+          return (
+            <QuizCard
+              title="The Gauntlet"
+              goldRewardParts={{ amount: '25', suffix: '/ 25 XP per correct' }}
+              iconNode={<Image source={require('../../assets/avatars/galaxy.png')} style={{ width: 42, height: 42 }} resizeMode="contain" />}
+              isLocked={gauntletLocked}
+              cardState={gauntletLocked ? 'leveled' : undefined}
+              costBadge={gauntletLocked
+                ? <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><Image source={require('../../assets/avatars/lock.png')} style={{ width: 12, height: 12 }} resizeMode="contain" /><Text style={{ color: '#8ab4ff', fontSize: 12, fontWeight: '700' }}>Lvl 100</Text></View>
+                : <Text style={{ color: '#ff6b35', fontSize: 11, fontWeight: '800', letterSpacing: 1 }}>ENDGAME</Text>
+              }
+              style={{ borderColor: '#ff6b35', borderWidth: 1.5 }}
+              onPress={async () => {
+                if (gauntletLocked) {
+                  showAlert({
+                    variant: 'leveled',
+                    title: 'Gauntlet Locked',
+                    message: `Reach Level 100 to unlock The Gauntlet.\n\nCurrent level: ${playerLevel}`,
+                  });
+                  return;
+                }
+                if (!skipMapCheck && maps <= 0) {
+                  setShowMapsModal(true);
+                  return;
+                }
+                if (navigatingRef.current) return;
+                navigatingRef.current = true;
+                if (!skipMapCheck) {
+                  const ok = await deductMap();
+                  if (!ok) { navigatingRef.current = false; setShowMapsModal(true); return; }
+                }
+                navigation.navigate('Gauntlet' as any);
+              }}
+            />
+          );
+        })()}
+
+        {(() => {
           const isBought = unlockedItems.has('upgrade_nightmare');
           const isEnabled = !disabledUpgrades.has('upgrade_nightmare');
           const isUnlocked = isBought && isEnabled;
 
           return (
             <QuizCard
-              title={isUnlocked ? "Nightmare Quiz" : "???"}
-              description={isUnlocked ? "Is it worth it...?" : ""}
-              goldReward={isUnlocked ? "" : "???"}
-              iconNode={<TerrorIcon />}
+              title={isUnlocked ? "The Nightmare" : "???"}
+              goldRewardParts={isUnlocked ? {
+                amount: nightmareCompleted ? '2,000' : '50,000',
+                suffix: nightmareCompleted ? '/ repeat reward' : '/ one-time reward',
+              } : undefined}
+              goldReward={!isUnlocked ? "???" : undefined}
+              iconNode={<Image source={require('../../assets/avatars/beast_mark.png')} style={{ width: 42, height: 42 }} resizeMode="contain" />}
               onPress={async () => {
                 if (isUnlocked) {
                   if (!skipMapCheck && maps <= 0) {
                     setShowMapsModal(true);
                     return;
                   }
+                  if (navigatingRef.current) return;
+                  navigatingRef.current = true;
                   if (!skipMapCheck) {
                     const ok = await deductMap();
-                    if (!ok) { setShowMapsModal(true); return; }
+                    if (!ok) { navigatingRef.current = false; setShowMapsModal(true); return; }
                   }
                   navigation.navigate('NightmareQuiz' as any);
                 }
@@ -402,43 +461,6 @@ export default function QuizMenuScreen({ navigation }: Props) {
                 elevation: 10,
               }}
             />
-          );
-        })()}
-
-        {(() => {
-          return (
-            <TouchableOpacity
-              activeOpacity={0.85}
-              style={gauntletStyles.card}
-              onPress={async () => {
-                if (!skipMapCheck && maps <= 0) {
-                  setShowMapsModal(true);
-                  return;
-                }
-                if (!skipMapCheck) {
-                  const ok = await deductMap();
-                  if (!ok) { setShowMapsModal(true); return; }
-                }
-                navigation.navigate('Gauntlet' as any);
-              }}
-            >
-              <View style={gauntletStyles.badge}>
-                <Text style={gauntletStyles.badgeText}>ENDGAME MODE</Text>
-              </View>
-              <View style={gauntletStyles.body}>
-                <View style={gauntletStyles.iconWrap}>
-                  <Image source={require('../../assets/avatars/flame.png')} style={{ width: 44, height: 44 }} resizeMode="contain" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={gauntletStyles.title}>The Gauntlet</Text>
-                  <Text style={gauntletStyles.desc}>Survive endless questions. One wrong answer ends your run.</Text>
-                </View>
-                <View style={gauntletStyles.costBox}>
-                  <Image source={require('../../assets/avatars/ancient_map.png')} style={{ width: 14, height: 14 }} resizeMode="contain" />
-                  <Text style={gauntletStyles.costText}>1 map</Text>
-                </View>
-              </View>
-            </TouchableOpacity>
           );
         })()}
 
@@ -593,11 +615,23 @@ export default function QuizMenuScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#0a0a1a' },
+  commanderBanner: {
+    marginHorizontal: 12,
+    marginBottom: 10,
+    backgroundColor: '#1a0a2e',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#7B2FBE',
+    paddingVertical: 7,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  commanderBannerText: { color: '#FFD700', fontWeight: 'bold', fontSize: 13 },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: 12,
     paddingTop: 56,
     paddingBottom: 12,
   },
@@ -626,7 +660,6 @@ const styles = StyleSheet.create({
   currencyIconTicket: {
     backgroundColor: '#1a0a2a',
   },
-  currencyIconText: { fontSize: 15 },
   currencyAmount: {
     color: '#FFD700',
     fontSize: 13,
@@ -696,70 +729,3 @@ const styles = StyleSheet.create({
   goldText: { color: '#FFD700', fontWeight: 'bold' },
 });
 
-const gauntletStyles = StyleSheet.create({
-  card: {
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: '#ff6b35',
-    backgroundColor: '#1a0a00',
-    overflow: 'hidden',
-    marginBottom: 8,
-    shadowColor: '#ff6b35',
-    shadowOpacity: 0.6,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  badge: {
-    backgroundColor: '#ff6b35',
-    alignSelf: 'stretch',
-    alignItems: 'center',
-    paddingVertical: 3,
-  },
-  badgeText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 2,
-  },
-  body: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    gap: 12,
-  },
-  iconWrap: {
-    width: 56,
-    height: 56,
-    borderRadius: 12,
-    backgroundColor: '#2a1000',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  title: {
-    color: '#ff6b35',
-    fontSize: 16,
-    fontWeight: '800',
-    marginBottom: 3,
-  },
-  desc: {
-    color: '#aaa',
-    fontSize: 12,
-    lineHeight: 17,
-  },
-  costBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#2a1a00',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ff6b35',
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-  },
-  costText: {
-    color: '#ff6b35',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-});

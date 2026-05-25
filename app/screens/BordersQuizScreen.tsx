@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
-  ScrollView,
+  Image,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import { useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { QuizStackParamList, QuizQuestion } from '../types';
 import { buildBordersQuizQuestions, fetchCountries, getOfflineFullCountries, getCca3ToCca2Map } from '../lib/countryData';
@@ -17,13 +18,16 @@ import { useGame } from '../context/GameContext';
 import { useAuth } from '../context/AuthContext';
 import AvatarDisplay from '../components/AvatarDisplay';
 import AnswerButton from '../components/AnswerButton';
+import EarningsStrip from '../components/EarningsStrip';
 import BordersMapView from '../components/BordersMapView';
 import { playDingStreak, playWrong } from '../lib/audio';
 import HeatStreakBadge from '../components/HeatStreakBadge';
 import ConfettiCannon from 'react-native-confetti-cannon';
+import QuitConfirmModal from '../components/QuitConfirmModal';
 
 const GOLD_PER_CORRECT = 20;
 const AUTO_ADVANCE_DELAY_MS = 2500;
+const ANSWER_COLORS = ['#4FC3F7', '#F44336', '#FFD700', '#4CAF50'];
 
 type Props = {
   navigation: StackNavigationProp<QuizStackParamList, 'BordersQuiz'>;
@@ -40,10 +44,20 @@ export default function BordersQuizScreen({ navigation }: Props) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [score, setScore] = useState(0);
   const [goldEarned, setGoldEarned] = useState(0);
+  const [goldDelta, setGoldDelta] = useState(0);
+  const [animTrigger, setAnimTrigger] = useState(0);
+  const [answeredCount, setAnsweredCount] = useState(0);
   const [buttonStates, setButtonStates] = useState<AnswerState[]>(['default', 'default', 'default', 'default']);
   const [currentCombo, setCurrentCombo] = useState(0);
   const [showConfetti, setShowConfetti] = useState(false);
   const [answered, setAnswered] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const readyRef = useRef(false);
+  readyRef.current = ready;
+  const allowLeaveRef = useRef(false);
+  const [showQuitModal, setShowQuitModal] = useState(false);
+  const onConfirmQuitRef = useRef<(() => void) | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,6 +71,40 @@ export default function BordersQuizScreen({ navigation }: Props) {
   const quizStartRef = useRef<number>(0);
   const elapsedIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [elapsedSec, setElapsedSec] = useState(0);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      const parent = navigation.getParent();
+      if (!parent) return;
+      const unsubscribe = (parent as any).addListener('tabPress', (e: any) => {
+        if (!readyRef.current) return;
+        e.preventDefault();
+        onConfirmQuitRef.current = () => {
+          if (autoAdvanceTimer.current) clearTimeout(autoAdvanceTimer.current);
+          if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current);
+          allowLeaveRef.current = true;
+          navigation.popToTop();
+        };
+        setShowQuitModal(true);
+      });
+      return unsubscribe;
+    }, [navigation])
+  );
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+      if (allowLeaveRef.current || !readyRef.current) return;
+      e.preventDefault();
+      onConfirmQuitRef.current = () => {
+        if (autoAdvanceTimer.current) clearTimeout(autoAdvanceTimer.current);
+        if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current);
+        allowLeaveRef.current = true;
+        navigation.dispatch(e.data.action);
+      };
+      setShowQuitModal(true);
+    });
+    return unsubscribe;
+  }, [navigation]);
 
   useEffect(() => {
     (async () => {
@@ -80,10 +128,6 @@ export default function BordersQuizScreen({ navigation }: Props) {
           : (e.message ?? 'Failed to load countries'));
       } finally {
         setLoading(false);
-        quizStartRef.current = Date.now();
-        elapsedIntervalRef.current = setInterval(() => {
-          setElapsedSec(Math.floor((Date.now() - quizStartRef.current) / 1000));
-        }, 1000);
       }
     })();
 
@@ -94,7 +138,7 @@ export default function BordersQuizScreen({ navigation }: Props) {
   }, []);
 
   function handleAnswer(selectedIndex: number) {
-    if (answered) return;
+    if (answered || paused) return;
     setAnswered(true);
 
     const question = questionsRef.current[currentIndexRef.current];
@@ -120,6 +164,8 @@ export default function BordersQuizScreen({ navigation }: Props) {
       goldRef.current += totalEarned;
       setScore(scoreRef.current);
       setGoldEarned(goldRef.current);
+      setGoldDelta(totalEarned);
+      setAnimTrigger(t => t + 1);
       addGold(totalEarned);
     } else {
       comboRef.current = 0;
@@ -128,11 +174,13 @@ export default function BordersQuizScreen({ navigation }: Props) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
 
+    setAnsweredCount(c => c + 1);
+
     autoAdvanceTimer.current = setTimeout(advanceQuestion, AUTO_ADVANCE_DELAY_MS);
   }
 
   function skipToNext() {
-    if (!answered) return;
+    if (!answered || paused) return;
     if (autoAdvanceTimer.current) {
       clearTimeout(autoAdvanceTimer.current);
       autoAdvanceTimer.current = null;
@@ -144,6 +192,7 @@ export default function BordersQuizScreen({ navigation }: Props) {
     const nextIndex = currentIndexRef.current + 1;
     if (nextIndex >= TOTAL_QUESTIONS) {
       if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current);
+      allowLeaveRef.current = true;
       navigation.replace('QuizResults', {
         score: scoreRef.current,
         total: TOTAL_QUESTIONS,
@@ -205,6 +254,31 @@ export default function BordersQuizScreen({ navigation }: Props) {
     );
   }
 
+  if (!ready) {
+    return (
+      <View style={styles.readyContainer}>
+        <Image source={require('../../assets/avatars/border.png')} style={{ width: 80, height: 80, marginBottom: 20 }} resizeMode="contain" />
+        <Text style={styles.readyTitle}>BORDERS QUIZ</Text>
+        <Text style={styles.readySubtitle}>Find the country that doesn't border the target.</Text>
+        <TouchableOpacity
+          style={styles.readyBtn}
+          onPress={() => {
+            quizStartRef.current = Date.now();
+            elapsedIntervalRef.current = setInterval(() => {
+              setElapsedSec(Math.floor((Date.now() - quizStartRef.current) / 1000));
+            }, 1000);
+            setReady(true);
+          }}
+        >
+          <Text style={styles.readyBtnText}>LET'S GO</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.readyBackLink}>
+          <Text style={styles.readyBackLinkText}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   const question = questions[currentIndex];
   // Calculate all neighbors for the map
   const cca3Map = getCca3ToCca2Map();
@@ -213,7 +287,18 @@ export default function BordersQuizScreen({ navigation }: Props) {
   return (
     <TouchableWithoutFeedback onPress={skipToNext}>
       <View style={styles.container}>
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {paused && (
+          <View style={[StyleSheet.absoluteFill, styles.pauseOverlay]}>
+            <TouchableOpacity style={styles.resumeBtn} onPress={() => setPaused(false)}>
+              <Text style={styles.resumeBtnText}>RESUME</Text>
+            </TouchableOpacity>
+            <Text style={styles.pauseTitle}>PAUSED</Text>
+            <TouchableOpacity onPress={() => { if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current); allowLeaveRef.current = true; navigation.goBack(); }}>
+              <Text style={styles.quitText}>Quit</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
           <View style={styles.header}>
             <Text style={styles.progress}>{currentIndex + 1} / {TOTAL_QUESTIONS}</Text>
             <View style={styles.progressBarWrapper}>
@@ -227,38 +312,60 @@ export default function BordersQuizScreen({ navigation }: Props) {
               ) : null}
             </View>
             <Text style={styles.timerText}>⏱ {String(Math.floor(elapsedSec / 60)).padStart(2, '0')}:{String(elapsedSec % 60).padStart(2, '0')}</Text>
-            <HeatStreakBadge combo={currentCombo} />
+            <TouchableOpacity onPress={() => { if (!answered) { if (autoAdvanceTimer.current) { clearTimeout(autoAdvanceTimer.current); autoAdvanceTimer.current = null; } setPaused(true); } }} style={styles.pauseBtn}>
+              <View style={styles.pauseIconBar} />
+              <View style={styles.pauseIconBar} />
+            </TouchableOpacity>
           </View>
 
-          <Animated.View style={[styles.questionArea, { opacity: fadeAnim }]}>
-            <Text style={styles.prompt}>Which country doesn't border {question.country.name}?</Text>
+          <EarningsStrip
+            goldTotal={goldEarned}
+            goldDelta={goldDelta}
+            animTrigger={animTrigger}
+            accuracy={answeredCount > 0 ? Math.round((score / answeredCount) * 100) : null}
+            combo={currentCombo}
+          />
 
-            <View style={styles.shapeContainer}>
-              <BordersMapView
-                targetCode={question.country.cca2}
-                neighborCodes={allActualNeighbors}
-                height={140}
-              />
-            </View>
+          <Animated.View style={[styles.quizBody, { opacity: fadeAnim }]}>
+            <View style={styles.questionCenter}>
+              <Text style={styles.prompt}>Which country doesn't border {question.country.name}?</Text>
 
-            <View style={styles.answers}>
-              {question.options.map((option, i) => (
-                <AnswerButton
-                  key={`${currentIndex}-${option.cca2}`}
-                  label={option.name}
-                  state={buttonStates[i]}
-                  onPress={() => handleAnswer(i)}
+              <View style={styles.shapeContainer}>
+                <BordersMapView
+                  targetCode={question.country.cca2}
+                  neighborCodes={allActualNeighbors}
+                  height={140}
                 />
-              ))}
+              </View>
             </View>
 
-            {answered && <Text style={styles.tapHint}>Tap anywhere to continue →</Text>}
-            
-            {showConfetti && (
-              <ConfettiCannon count={40} origin={{ x: -10, y: 0 }} explosionSpeed={350} fallSpeed={2000} fadeOut />
-            )}
+            <View style={styles.answersSection}>
+              <View style={styles.answers}>
+                {question.options.map((option, i) => (
+                  <AnswerButton
+                    key={`${currentIndex}-${option.cca2}`}
+                    label={option.name}
+                    style={[styles.answerGridButton, buttonStates[i] === 'default' && { borderColor: ANSWER_COLORS[i % ANSWER_COLORS.length] }]}
+                    state={buttonStates[i]}
+                    onPress={() => handleAnswer(i)}
+                  />
+                ))}
+              </View>
+
+              <Text style={[styles.tapHint, { opacity: answered ? 1 : 0 }]}>
+                Tap anywhere to continue →
+              </Text>
+
+              {showConfetti && (
+                <ConfettiCannon count={40} origin={{ x: -10, y: 0 }} explosionSpeed={350} fallSpeed={2000} fadeOut />
+              )}
+            </View>
           </Animated.View>
-        </ScrollView>
+      <QuitConfirmModal
+        visible={showQuitModal}
+        onStay={() => { setShowQuitModal(false); onConfirmQuitRef.current = null; }}
+        onQuit={() => { setShowQuitModal(false); onConfirmQuitRef.current?.(); onConfirmQuitRef.current = null; }}
+      />
       </View>
     </TouchableWithoutFeedback>
   );
@@ -267,6 +374,24 @@ export default function BordersQuizScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0a0a1a' },
   scrollContent: { flexGrow: 1, paddingBottom: 20 },
+  earningsStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    gap: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#151530',
+  },
+  earningsItem: { flexDirection: 'row', alignItems: 'baseline', gap: 3 },
+  earningsGoldText: { color: '#FFD700', fontSize: 16, fontWeight: 'bold' },
+  earningsScoreText: { color: '#4CAF50', fontSize: 16, fontWeight: 'bold' },
+  earningsLabel: { color: '#666', fontSize: 13 },
+  earningsDivider: { width: 1, height: 16, backgroundColor: '#2a2a4e' },
+  quizBody: { flex: 1 },
+  questionCenter: { flex: 1, justifyContent: 'center', paddingHorizontal: 20, paddingTop: 8, paddingBottom: 28 },
+  answersSection: { paddingHorizontal: 20, paddingBottom: 20 },
   centered: { flex: 1, backgroundColor: '#0a0a1a', alignItems: 'center', justifyContent: 'center', gap: 12 },
   loadingText: { color: '#aaa', fontSize: 16 },
   errorText: { color: '#f44336', fontSize: 16, textAlign: 'center', padding: 24 },
@@ -280,8 +405,26 @@ const styles = StyleSheet.create({
   comboText: { color: '#ff8888', fontWeight: 'bold', fontSize: 13 },
   scoreFill: { height: '100%', backgroundColor: '#FFD700', borderRadius: 2 },
   questionArea: { padding: 20 },
-  prompt: { color: '#fff', fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginBottom: 16, marginTop: 4 },
+  prompt: { color: '#fff', fontSize: 20, fontWeight: 'bold', textAlign: 'center', marginBottom: 16, marginTop: 4 },
   shapeContainer: { backgroundColor: '#1a1a2e', borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#2a2a4e', marginBottom: 20 },
-  answers: { gap: 8 },
+  answers: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  answerGridButton: { width: '48%', minHeight: 84, marginVertical: 0, paddingHorizontal: 10 },
   tapHint: { color: '#555', fontSize: 12, textAlign: 'center', marginTop: 16 },
+
+  backBtn: { color: '#555', fontSize: 16, fontWeight: 'bold', padding: 4 },
+  pauseBtn: { flexDirection: 'row', gap: 3, alignItems: 'center', padding: 6 },
+  pauseIconBar: { width: 4, height: 14, backgroundColor: '#FFD700', borderRadius: 2 },
+  pauseOverlay: { backgroundColor: '#0a0a1a', justifyContent: 'flex-start', alignItems: 'center', paddingTop: 100, zIndex: 100 },
+  pauseTitle: { color: '#FFD700', fontSize: 32, fontWeight: 'bold', letterSpacing: 4, marginBottom: 20, marginTop: 20 },
+  resumeBtn: { borderWidth: 2, borderColor: '#FFD700', paddingHorizontal: 36, paddingVertical: 13, borderRadius: 14 },
+  resumeBtnText: { color: '#FFD700', fontSize: 16, fontWeight: 'bold', letterSpacing: 1 },
+  quitText: { color: '#555', fontSize: 14, fontWeight: '600' },
+
+  readyContainer: { flex: 1, backgroundColor: '#0a0a1a', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
+  readyTitle: { color: '#FFD700', fontSize: 28, fontWeight: 'bold', letterSpacing: 3, marginBottom: 12 },
+  readySubtitle: { color: '#888', fontSize: 14, textAlign: 'center', lineHeight: 22, marginBottom: 40 },
+  readyBtn: { backgroundColor: '#FFD700', paddingHorizontal: 40, paddingVertical: 15, borderRadius: 14 },
+  readyBtnText: { color: '#0a0a1a', fontSize: 16, fontWeight: 'bold', letterSpacing: 1.5 },
+  readyBackLink: { marginTop: 20 },
+  readyBackLinkText: { color: '#555', fontSize: 14 },
 });

@@ -4,7 +4,6 @@ import {
   Animated,
   Image,
   Modal,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -12,19 +11,23 @@ import {
   View,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import { useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { QuizStackParamList, QuizQuestion, Country, cca2ToFlagEmoji } from '../types';
 import { buildQuizQuestions, fetchCountries, getOfflineFlagCountries, getCca3ToCca2Map } from '../lib/countryData';
 import { useGame } from '../context/GameContext';
 import AnswerButton from '../components/AnswerButton';
+import EarningsStrip from '../components/EarningsStrip';
 import WorldMapView from '../components/WorldMapView';
 import { playDingStreak, playWrong } from '../lib/audio';
 import HeatStreakBadge from '../components/HeatStreakBadge';
 import { useAuth } from '../context/AuthContext';
 import AvatarDisplay from '../components/AvatarDisplay';
+import QuitConfirmModal from '../components/QuitConfirmModal';
 
 const GOLD_PER_CORRECT = 10;
 const AUTO_ADVANCE_DELAY_MS = 2500;
+const ANSWER_COLORS = ['#4FC3F7', '#F44336', '#FFD700', '#4CAF50'];
 
 type Props = {
   navigation: StackNavigationProp<QuizStackParamList, 'FlagQuiz'>;
@@ -42,6 +45,9 @@ export default function FlagQuizScreen({ navigation }: Props) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [score, setScore] = useState(0);
   const [goldEarned, setGoldEarned] = useState(0);
+  const [goldDelta, setGoldDelta] = useState(0);
+  const [animTrigger, setAnimTrigger] = useState(0);
+  const [answeredCount, setAnsweredCount] = useState(0);
   const [buttonStates, setButtonStates] = useState<AnswerState[]>([
     'default', 'default', 'default', 'default',
   ]);
@@ -51,6 +57,13 @@ export default function FlagQuizScreen({ navigation }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [showInfoModal, setShowInfoModal] = useState(false);
   const [infoCountry, setInfoCountry] = useState<Country | null>(null);
+  const [ready, setReady] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const readyRef = useRef(false);
+  readyRef.current = ready;
+  const allowLeaveRef = useRef(false);
+  const [showQuitModal, setShowQuitModal] = useState(false);
+  const onConfirmQuitRef = useRef<(() => void) | null>(null);
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const currentIndexRef = useRef(0);
@@ -64,6 +77,40 @@ export default function FlagQuizScreen({ navigation }: Props) {
   const [elapsedSec, setElapsedSec] = useState(0);
   const [flagLoadError, setFlagLoadError] = useState(false);
 
+  useFocusEffect(
+    React.useCallback(() => {
+      const parent = navigation.getParent();
+      if (!parent) return;
+      const unsubscribe = (parent as any).addListener('tabPress', (e: any) => {
+        if (!readyRef.current) return;
+        e.preventDefault();
+        onConfirmQuitRef.current = () => {
+          if (autoAdvanceTimer.current) clearTimeout(autoAdvanceTimer.current);
+          if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current);
+          allowLeaveRef.current = true;
+          navigation.popToTop();
+        };
+        setShowQuitModal(true);
+      });
+      return unsubscribe;
+    }, [navigation])
+  );
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+      if (allowLeaveRef.current || !readyRef.current) return;
+      e.preventDefault();
+      onConfirmQuitRef.current = () => {
+        if (autoAdvanceTimer.current) clearTimeout(autoAdvanceTimer.current);
+        if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current);
+        allowLeaveRef.current = true;
+        navigation.dispatch(e.data.action);
+      };
+      setShowQuitModal(true);
+    });
+    return unsubscribe;
+  }, [navigation]);
+
   useEffect(() => {
     (async () => {
       try {
@@ -75,19 +122,16 @@ export default function FlagQuizScreen({ navigation }: Props) {
           countries = getOfflineFlagCountries();
         }
         const withoutAF = countries.filter(c => c.cca2 !== 'AF');
-        const q = buildQuizQuestions(withoutAF, TOTAL_QUESTIONS);
+        const q = buildQuizQuestions(withoutAF, TOTAL_QUESTIONS, { reverseFirst: true });
         // Prefetch flag images (no-op if flagUrl is empty in offline mode)
-        await Promise.allSettled(q.filter(q => q.country.flagUrl).map(q => Image.prefetch(q.country.flagUrl)));
+        const flagUrls = q.flatMap(q => [q.country.flagUrl, ...q.options.map(o => o.flagUrl)]).filter(Boolean);
+        await Promise.allSettled(flagUrls.map(url => Image.prefetch(url)));
         setQuestions(q);
         questionsRef.current = q;
       } catch (e: any) {
         setError(e.message ?? 'Failed to load countries');
       } finally {
         setLoading(false);
-        quizStartRef.current = Date.now();
-        elapsedIntervalRef.current = setInterval(() => {
-          setElapsedSec(Math.floor((Date.now() - quizStartRef.current) / 1000));
-        }, 1000);
       }
     })();
 
@@ -98,7 +142,7 @@ export default function FlagQuizScreen({ navigation }: Props) {
   }, []);
 
   function handleAnswer(selectedIndex: number) {
-    if (answered) return;
+    if (answered || paused) return;
     setAnswered(true);
 
     const question = questionsRef.current[currentIndexRef.current];
@@ -124,6 +168,8 @@ export default function FlagQuizScreen({ navigation }: Props) {
       goldRef.current += totalEarned;
       setScore(scoreRef.current);
       setGoldEarned(goldRef.current);
+      setGoldDelta(totalEarned);
+      setAnimTrigger(t => t + 1);
       addGold(totalEarned);
     } else {
       comboRef.current = 0;
@@ -132,13 +178,15 @@ export default function FlagQuizScreen({ navigation }: Props) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
 
+    setAnsweredCount(c => c + 1);
+
     // Auto-advance after delay (can be skipped by tapping)
     autoAdvanceTimer.current = setTimeout(advanceQuestion, AUTO_ADVANCE_DELAY_MS);
   }
 
   function skipToNext() {
-    if (!answered) return;
-    if (showInfoModal) return; // Don't skip while viewing info
+    if (!answered || paused) return;
+    if (showInfoModal) return;
     if (autoAdvanceTimer.current) {
       clearTimeout(autoAdvanceTimer.current);
       autoAdvanceTimer.current = null;
@@ -155,6 +203,7 @@ export default function FlagQuizScreen({ navigation }: Props) {
     const nextIndex = currentIndexRef.current + 1;
     if (nextIndex >= TOTAL_QUESTIONS) {
       if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current);
+      allowLeaveRef.current = true;
       navigation.replace('QuizResults', {
         score: scoreRef.current,
         total: TOTAL_QUESTIONS,
@@ -221,15 +270,49 @@ export default function FlagQuizScreen({ navigation }: Props) {
     );
   }
 
+  if (!ready) {
+    return (
+      <View style={styles.readyContainer}>
+        <Image source={require('../../assets/avatars/flags.png')} style={{ width: 80, height: 80, marginBottom: 20 }} resizeMode="contain" />
+        <Text style={styles.readyTitle}>FLAG QUIZ</Text>
+        <Text style={styles.readySubtitle}>Identify countries by their flags.</Text>
+        <TouchableOpacity
+          style={styles.readyBtn}
+          onPress={() => {
+            quizStartRef.current = Date.now();
+            elapsedIntervalRef.current = setInterval(() => {
+              setElapsedSec(Math.floor((Date.now() - quizStartRef.current) / 1000));
+            }, 1000);
+            setReady(true);
+          }}
+        >
+          <Text style={styles.readyBtnText}>LET'S GO</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.readyBackLink}>
+          <Text style={styles.readyBackLinkText}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   const question = questions[currentIndex];
+  const isReverseQuestion = question.mode === 'reverse';
 
   return (
     <TouchableWithoutFeedback onPress={skipToNext}>
       <View style={styles.container}>
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
+        {paused && (
+          <View style={[StyleSheet.absoluteFill, styles.pauseOverlay]}>
+            <TouchableOpacity style={styles.resumeBtn} onPress={() => setPaused(false)}>
+              <Text style={styles.resumeBtnText}>RESUME</Text>
+            </TouchableOpacity>
+            <Text style={styles.pauseTitle}>PAUSED</Text>
+            <TouchableOpacity onPress={() => { if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current); allowLeaveRef.current = true; navigation.goBack(); }}>
+              <Text style={styles.quitText}>Quit</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
           {/* Header */}
           <View style={styles.header}>
             <Text style={styles.progress}>
@@ -246,53 +329,82 @@ export default function FlagQuizScreen({ navigation }: Props) {
               ) : null}
             </View>
             <Text style={styles.timerText}>⏱ {String(Math.floor(elapsedSec / 60)).padStart(2, '0')}:{String(elapsedSec % 60).padStart(2, '0')}</Text>
-            <HeatStreakBadge combo={currentCombo} />
+            <TouchableOpacity onPress={() => { if (!answered) { if (autoAdvanceTimer.current) { clearTimeout(autoAdvanceTimer.current); autoAdvanceTimer.current = null; } setPaused(true); } }} style={styles.pauseBtn}>
+              <View style={styles.pauseIconBar} />
+              <View style={styles.pauseIconBar} />
+            </TouchableOpacity>
           </View>
 
-          {/* Question */}
-          <Animated.View style={[styles.questionArea, { opacity: fadeAnim }]}>
-            <Text style={styles.prompt}>Which country does this flag belong to?</Text>
+          <EarningsStrip
+            goldTotal={goldEarned}
+            goldDelta={goldDelta}
+            animTrigger={animTrigger}
+            accuracy={answeredCount > 0 ? Math.round((score / answeredCount) * 100) : null}
+            combo={currentCombo}
+          />
 
-            <View style={styles.flagContainer}>
-              {question.country.flagUrl && !flagLoadError ? (
-                <Image
-                  source={{ uri: question.country.flagUrl }}
-                  style={styles.flag}
-                  resizeMode="contain"
-                  onError={() => setFlagLoadError(true)}
-                />
-              ) : (
-                <Text style={styles.flagEmoji}>{cca2ToFlagEmoji(question.country.cca2)}</Text>
-              )}
-              
-              {/* Info button — floating strictly inside the flag area */}
-              {answered && (
-                <TouchableOpacity style={styles.infoBadge} onPress={openCountryInfo}>
-                  <Text style={styles.infoBadgeIcon}>ℹ️</Text>
-                  <Text style={styles.infoBadgeText}>Learn</Text>
-                </TouchableOpacity>
-              )}
+          <Animated.View style={[styles.quizBody, { opacity: fadeAnim }]}>
+            <View style={styles.questionCenter}>
+              <Text style={styles.prompt}>
+                {isReverseQuestion
+                  ? `Which flag belongs to ${question.country.name}?`
+                  : 'Which country does this flag belong to?'}
+              </Text>
+
+              <View style={styles.flagContainer}>
+                {isReverseQuestion ? (
+                  <Text style={styles.reverseSubjectText} numberOfLines={2} adjustsFontSizeToFit>
+                    {question.country.name}
+                  </Text>
+                ) : question.country.flagUrl && !flagLoadError ? (
+                  <Image
+                    source={{ uri: question.country.flagUrl }}
+                    style={styles.flag}
+                    resizeMode="contain"
+                    onError={() => setFlagLoadError(true)}
+                  />
+                ) : (
+                  <Text style={styles.flagEmoji}>{cca2ToFlagEmoji(question.country.cca2)}</Text>
+                )}
+
+                {answered && (
+                  <TouchableOpacity style={styles.infoBadge} onPress={openCountryInfo}>
+                    <Text style={styles.infoBadgeIcon}>ℹ️</Text>
+                    <Text style={styles.infoBadgeText}>Learn</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
 
-            {/* Answer buttons */}
-            <View style={styles.answers}>
-              {question.options.map((option, i) => (
-                <AnswerButton
-                  key={`${currentIndex}-${option.cca2}`}
-                  label={option.name}
-                  state={buttonStates[i]}
-                  onPress={() => handleAnswer(i)}
-                />
-              ))}
-            </View>
+            <View style={styles.answersSection}>
+              <View style={styles.answers}>
+                {question.options.map((option, i) => {
+                  const flagVisual = isReverseQuestion ? (
+                    option.flagUrl ? (
+                      <Image source={{ uri: option.flagUrl }} style={styles.answerFlag} resizeMode="contain" />
+                    ) : (
+                      <Text style={styles.answerFlagEmoji}>{cca2ToFlagEmoji(option.cca2)}</Text>
+                    )
+                  ) : undefined;
+                  return (
+                    <AnswerButton
+                      key={`${currentIndex}-${option.cca2}`}
+                      label={option.name}
+                      showLabel={!isReverseQuestion}
+                      visual={flagVisual}
+                      style={[styles.answerGridButton, buttonStates[i] === 'default' && { borderColor: ANSWER_COLORS[i % ANSWER_COLORS.length] }]}
+                      state={buttonStates[i]}
+                      onPress={() => handleAnswer(i)}
+                    />
+                  );
+                })}
+              </View>
 
-            {/* Tap to continue hint */}
-            {answered && (
-              <Text style={styles.tapHint}>Tap anywhere to continue →</Text>
-            )}
-            
+              <Text style={[styles.tapHint, { opacity: answered ? 1 : 0 }]}>
+                Tap anywhere to continue →
+              </Text>
+            </View>
           </Animated.View>
-        </ScrollView>
 
         {/* Country Info Modal — zoomed to country */}
         <Modal
@@ -366,6 +478,12 @@ export default function FlagQuizScreen({ navigation }: Props) {
             </View>
           </View>
         </Modal>
+
+        <QuitConfirmModal
+          visible={showQuitModal}
+          onStay={() => { setShowQuitModal(false); onConfirmQuitRef.current = null; }}
+          onQuit={() => { setShowQuitModal(false); onConfirmQuitRef.current?.(); onConfirmQuitRef.current = null; }}
+        />
       </View>
     </TouchableWithoutFeedback>
   );
@@ -374,6 +492,24 @@ export default function FlagQuizScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0a0a1a' },
   scrollContent: { flexGrow: 1, paddingBottom: 20 },
+  earningsStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    gap: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#151530',
+  },
+  earningsItem: { flexDirection: 'row', alignItems: 'baseline', gap: 3 },
+  earningsGoldText: { color: '#FFD700', fontSize: 16, fontWeight: 'bold' },
+  earningsScoreText: { color: '#4CAF50', fontSize: 16, fontWeight: 'bold' },
+  earningsLabel: { color: '#666', fontSize: 13 },
+  earningsDivider: { width: 1, height: 16, backgroundColor: '#2a2a4e' },
+  quizBody: { flex: 1 },
+  questionCenter: { flex: 1, justifyContent: 'center', paddingHorizontal: 20, paddingTop: 8, paddingBottom: 28 },
+  answersSection: { paddingHorizontal: 20, paddingBottom: 20 },
   centered: {
     flex: 1,
     backgroundColor: '#0a0a1a',
@@ -408,8 +544,9 @@ const styles = StyleSheet.create({
   scoreFill: { height: '100%', backgroundColor: '#FFD700', borderRadius: 2 },
   questionArea: { flex: 1, padding: 20 },
   prompt: {
-    color: '#aaa',
-    fontSize: 14,
+    color: '#ccc',
+    fontSize: 18,
+    fontWeight: '600',
     textAlign: 'center',
     marginBottom: 16,
     marginTop: 4,
@@ -427,6 +564,14 @@ const styles = StyleSheet.create({
   },
   flag: { width: '100%', height: '100%' },
   flagEmoji: { fontSize: 96, textAlign: 'center' },
+  reverseSubjectText: {
+    color: '#FFD700',
+    fontSize: 28,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    lineHeight: 34,
+    paddingHorizontal: 12,
+  },
   // Info button — nested absolute to save UI height
   infoBadge: {
     position: 'absolute',
@@ -448,7 +593,10 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: 'bold',
   },
-  answers: { gap: 4 },
+  answers: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  answerGridButton: { width: '48%', minHeight: 84, marginVertical: 0, paddingHorizontal: 10 },
+  answerFlag: { width: '100%', height: 54 },
+  answerFlagEmoji: { fontSize: 42, textAlign: 'center' },
   tapHint: {
     color: '#555',
     fontSize: 12,
@@ -509,4 +657,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   closeButtonText: { color: '#0a0a1a', fontWeight: 'bold', fontSize: 16 },
+
+  backBtn: { color: '#555', fontSize: 16, fontWeight: 'bold', padding: 4 },
+  pauseBtn: { flexDirection: 'row', gap: 3, alignItems: 'center', padding: 6 },
+  pauseIconBar: { width: 4, height: 14, backgroundColor: '#FFD700', borderRadius: 2 },
+  pauseOverlay: { backgroundColor: '#0a0a1a', justifyContent: 'flex-start', alignItems: 'center', paddingTop: 100, zIndex: 100 },
+  pauseTitle: { color: '#FFD700', fontSize: 32, fontWeight: 'bold', letterSpacing: 4, marginBottom: 20, marginTop: 20 },
+  resumeBtn: { borderWidth: 2, borderColor: '#FFD700', paddingHorizontal: 36, paddingVertical: 13, borderRadius: 14 },
+  resumeBtnText: { color: '#FFD700', fontSize: 16, fontWeight: 'bold', letterSpacing: 1 },
+  quitText: { color: '#555', fontSize: 14, fontWeight: '600' },
+
+  readyContainer: { flex: 1, backgroundColor: '#0a0a1a', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
+  readyTitle: { color: '#FFD700', fontSize: 28, fontWeight: 'bold', letterSpacing: 3, marginBottom: 12 },
+  readySubtitle: { color: '#888', fontSize: 14, textAlign: 'center', lineHeight: 22, marginBottom: 40 },
+  readyBtn: { backgroundColor: '#FFD700', paddingHorizontal: 40, paddingVertical: 15, borderRadius: 14 },
+  readyBtnText: { color: '#0a0a1a', fontSize: 16, fontWeight: 'bold', letterSpacing: 1.5 },
+  readyBackLink: { marginTop: 20 },
+  readyBackLinkText: { color: '#555', fontSize: 14 },
 });
