@@ -2,7 +2,7 @@
   "expo": {
     "name": "GeoConquest",
     "slug": "geoconquest",
-    "version": "1.2.0",
+    "version": "1.2.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -11,9 +11,9 @@
       "enabled": false
     },
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#0a0a1a"
     },
     "scheme": "geoconquest",
     "ios": {
@@ -22,8 +22,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0a0a1a"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,

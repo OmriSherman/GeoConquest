@@ -503,9 +503,9 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
             text: 'Watch Ad',
             style: 'cta',
             onPress: async () => {
-              const { rewarded } = await showRewardedAd();
-              if (!rewarded) {
-                showAlert({ title: 'Ad Unavailable', message: 'Could not load an ad right now. Try again later.' });
+              const adResult = await showRewardedAd();
+              if (!adResult.rewarded) {
+                showAlert({ title: 'Ad Unavailable', message: `Could not load an ad right now. Try again later.\n\n[${adResult.reason ?? 'unknown'}${adResult.errorCode ? ` · ${adResult.errorCode}` : ''}${adResult.errorMessage ? `\n${adResult.errorMessage}` : ''}]` });
                 return;
               }
               await setNextQuizBoostActive(true);
@@ -562,9 +562,9 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
   async function handleWatchAdForMap() {
     setMapsActionLoading(true);
     try {
-      const { rewarded } = await showRewardedAd();
-      if (!rewarded) {
-        showAlert({ title: 'Ad Unavailable', message: 'Could not load a rewarded ad right now. Please try again.' });
+      const adResult = await showRewardedAd();
+      if (!adResult.rewarded) {
+        showAlert({ title: 'Ad Unavailable', message: `Could not load a rewarded ad right now. Please try again.\n\n[${adResult.reason ?? 'unknown'}${adResult.errorCode ? ` · ${adResult.errorCode}` : ''}${adResult.errorMessage ? `\n${adResult.errorMessage}` : ''}]` });
         return;
       }
       await grantAdMap();
@@ -639,7 +639,7 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
       )}
 
       <View style={styles.ratingGroup}>
-        <View style={{ width: 120, height: 120, alignItems: 'center', justifyContent: 'center' }}>
+        <View style={{ alignItems: 'center', justifyContent: 'center' }}>
           {tierLabel === 'ETERNITY' && (
             <>
               <Animated.View pointerEvents="none" style={{ position: 'absolute', width: 260, height: 260, borderRadius: 130, backgroundColor: '#fbbf24', opacity: eternityGlowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.18, 0.42] }) }} />
@@ -1015,9 +1015,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#0d0000',
   },
   ratingGroup: { alignItems: 'center', gap: 4 },
-  ratingImage: { width: 80, height: 80 },
-  ratingImageLoss: { width: 110, height: 110 },
-  ratingImageGauntlet: { width: 120, height: 120 },
+  ratingImage: { width: 104, height: 104 },
+  ratingImageLoss: { width: 143, height: 143 },
+  ratingImageGauntlet: { width: 156, height: 156 },
   rating: { color: '#fff', fontSize: 22, fontWeight: 'bold' },
   ratingLoss: { fontSize: 26 },
   ratingNightmare: { color: '#ff8888', fontStyle: 'italic' },

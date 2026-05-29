@@ -147,9 +147,9 @@ export default function QuizMenuScreen({ navigation }: Props) {
     if (!profile) return;
     setActionLoading(true);
     try {
-      const { rewarded } = await showRewardedAd();
-      if (!rewarded) {
-        showAlert({ title: 'Ad Unavailable', message: 'Could not load a rewarded ad right now. Please try again.' });
+      const adResult = await showRewardedAd();
+      if (!adResult.rewarded) {
+        showAlert({ title: 'Ad Unavailable', message: `Could not load a rewarded ad right now. Please try again.\n\n[${adResult.reason ?? 'unknown'}${adResult.errorCode ? ` · ${adResult.errorCode}` : ''}${adResult.errorMessage ? `\n${adResult.errorMessage}` : ''}]` });
         return;
       }
       await purchaseTickets(1, 0);
@@ -168,9 +168,9 @@ export default function QuizMenuScreen({ navigation }: Props) {
     if (!profile) return;
     setActionLoading(true);
     try {
-      const { rewarded } = await showRewardedAd();
-      if (!rewarded) {
-        showAlert({ title: 'Ad Unavailable', message: 'Could not load a rewarded ad right now. Please try again.' });
+      const adResult = await showRewardedAd();
+      if (!adResult.rewarded) {
+        showAlert({ title: 'Ad Unavailable', message: `Could not load a rewarded ad right now. Please try again.\n\n[${adResult.reason ?? 'unknown'}${adResult.errorCode ? ` · ${adResult.errorCode}` : ''}${adResult.errorMessage ? `\n${adResult.errorMessage}` : ''}]` });
         return;
       }
       await grantAdMap();
@@ -299,7 +299,7 @@ export default function QuizMenuScreen({ navigation }: Props) {
             isLocked = !unlockedItems.has('upgrade_borders');
             if (isLocked) lockReason = 'upgrade_borders';
           } else if (quiz.screen === 'TrailQuiz') {
-            isLocked = playerLevel < 50;
+            isLocked = playerLevel < 40;
             if (isLocked) lockReason = 'trail_level';
           }
 
@@ -330,7 +330,7 @@ export default function QuizMenuScreen({ navigation }: Props) {
               ) : lockReason === 'trail_level' ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                   <Image source={require('../../assets/avatars/lock.png')} style={{ width: 12, height: 12 }} resizeMode="contain" />
-                  <Text style={{ color: '#8ab4ff', fontSize: 12, fontWeight: '700' }}>Lvl 50</Text>
+                  <Text style={{ color: '#8ab4ff', fontSize: 12, fontWeight: '700' }}>Lvl 40</Text>
                 </View>
               ) : undefined}
               style={isMillionaire ? { borderColor: '#FFD700', borderWidth: 1 } : undefined}
@@ -341,7 +341,7 @@ export default function QuizMenuScreen({ navigation }: Props) {
                     showAlert({
                       variant: 'leveled',
                       title: 'Trail Quiz Locked',
-                      message: `Reach Level 50 to unlock Trail Quiz.\n\nCurrent level: ${playerLevel}`,
+                      message: `Reach Level 40 to unlock Trail Quiz.\n\nCurrent level: ${playerLevel}`,
                     });
                   } else {
                     const isCapitals = quiz.screen === 'CapitalsQuiz';
@@ -384,7 +384,7 @@ export default function QuizMenuScreen({ navigation }: Props) {
         })}
 
         {(() => {
-          const gauntletLocked = playerLevel < 100;
+          const gauntletLocked = playerLevel < 75;
           return (
             <QuizCard
               title="The Gauntlet"
@@ -393,7 +393,7 @@ export default function QuizMenuScreen({ navigation }: Props) {
               isLocked={gauntletLocked}
               cardState={gauntletLocked ? 'leveled' : undefined}
               costBadge={gauntletLocked
-                ? <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><Image source={require('../../assets/avatars/lock.png')} style={{ width: 12, height: 12 }} resizeMode="contain" /><Text style={{ color: '#8ab4ff', fontSize: 12, fontWeight: '700' }}>Lvl 100</Text></View>
+                ? <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><Image source={require('../../assets/avatars/lock.png')} style={{ width: 12, height: 12 }} resizeMode="contain" /><Text style={{ color: '#8ab4ff', fontSize: 12, fontWeight: '700' }}>Lvl 75</Text></View>
                 : <Text style={{ color: '#ff6b35', fontSize: 11, fontWeight: '800', letterSpacing: 1 }}>ENDGAME</Text>
               }
               style={{ borderColor: '#ff6b35', borderWidth: 1.5 }}
@@ -402,7 +402,7 @@ export default function QuizMenuScreen({ navigation }: Props) {
                   showAlert({
                     variant: 'leveled',
                     title: 'Gauntlet Locked',
-                    message: `Reach Level 100 to unlock The Gauntlet.\n\nCurrent level: ${playerLevel}`,
+                    message: `Reach Level 75 to unlock The Gauntlet.\n\nCurrent level: ${playerLevel}`,
                   });
                   return;
                 }

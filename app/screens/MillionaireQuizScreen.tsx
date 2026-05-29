@@ -459,8 +459,9 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
   async function handleSecondChanceAd() {
     setSecondChanceLoading(true);
     try {
-      const { rewarded } = await showRewardedAd();
-      if (!rewarded) {
+      const adResult = await showRewardedAd();
+      if (!adResult.rewarded) {
+        console.warn(`[Ads] Second chance failed: ${adResult.reason} · ${adResult.errorCode ?? ''} · ${adResult.errorMessage ?? ''}`);
         setShowSecondChanceModal(false);
         setGameOver(true);
         setTimeout(endGameWithLoss, 1500);

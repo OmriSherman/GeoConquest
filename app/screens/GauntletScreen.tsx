@@ -72,13 +72,13 @@ interface GQuestion {
 // ─── Tier System ──────────────────────────────────────────────────────────────
 
 const TIERS = [
-  { minScore: 84, label: 'ETERNITY', accent: '#fbbf24', bg: '#080500', cardBg: '#130a00', btnBorder: '#fbbf2440' },
-  { minScore: 72, label: 'OBLIVION', accent: '#f43f5e', bg: '#0a0008', cardBg: '#1a000f', btnBorder: '#f43f5e40' },
-  { minScore: 60, label: 'INFERNO',  accent: '#ef4444', bg: '#0b0003', cardBg: '#180008', btnBorder: '#ef444440' },
-  { minScore: 48, label: 'HELL',     accent: '#ff6b35', bg: '#0b0300', cardBg: '#160700', btnBorder: '#ff6b3540' },
-  { minScore: 36, label: 'VOID',     accent: '#9b5cf6', bg: '#04000e', cardBg: '#0d001f', btnBorder: '#9b5cf640' },
-  { minScore: 24, label: 'ABYSS',    accent: '#818cf8', bg: '#03030f', cardBg: '#0a0a1e', btnBorder: '#818cf840' },
-  { minScore: 12, label: 'PERIL',    accent: '#22c55e', bg: '#00080a', cardBg: '#001210', btnBorder: '#22c55e40' },
+  { minScore: 70, label: 'ETERNITY', accent: '#fbbf24', bg: '#080500', cardBg: '#130a00', btnBorder: '#fbbf2440' },
+  { minScore: 60, label: 'OBLIVION', accent: '#f43f5e', bg: '#0a0008', cardBg: '#1a000f', btnBorder: '#f43f5e40' },
+  { minScore: 50, label: 'INFERNO',  accent: '#ef4444', bg: '#0b0003', cardBg: '#180008', btnBorder: '#ef444440' },
+  { minScore: 40, label: 'HELL',     accent: '#ff6b35', bg: '#0b0300', cardBg: '#160700', btnBorder: '#ff6b3540' },
+  { minScore: 30, label: 'VOID',     accent: '#9b5cf6', bg: '#04000e', cardBg: '#0d001f', btnBorder: '#9b5cf640' },
+  { minScore: 20, label: 'ABYSS',    accent: '#818cf8', bg: '#03030f', cardBg: '#0a0a1e', btnBorder: '#818cf840' },
+  { minScore: 10, label: 'PERIL',    accent: '#22c55e', bg: '#00080a', cardBg: '#001210', btnBorder: '#22c55e40' },
   { minScore:  0, label: 'DANGER',   accent: '#4D96FF', bg: '#02040e', cardBg: '#00091c', btnBorder: '#4D96FF40' },
 ];
 
@@ -943,7 +943,7 @@ export default function GauntletScreen({ navigation }: Props) {
           <View style={styles.shieldIcons}>
             {[0, 1, 2].map(i => (
               <View key={i} style={[styles.shieldIcon, i < shields ? { backgroundColor: tier.accent + '20', borderColor: tier.accent } : { backgroundColor: 'transparent', borderColor: '#1a1a2a' }]}>
-                <Image source={require('../../assets/avatars/war_medal.png')} style={{ width: 12, height: 12, opacity: i < shields ? 1 : 0.12 }} resizeMode="contain" />
+                <Image source={require('../../assets/gauntlet/gauntlet_danger.png')} style={{ width: 12, height: 12, opacity: i < shields ? 1 : 0.12 }} resizeMode="contain" />
               </View>
             ))}
           </View>
@@ -1097,7 +1097,7 @@ export default function GauntletScreen({ navigation }: Props) {
 
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.shieldOverlay, { opacity: shieldFlashAnim }]}>
         <View style={styles.shieldOverlayInner}>
-          <Image source={require('../../assets/avatars/war_medal.png')} style={{ width: 36, height: 36 }} resizeMode="contain" />
+          <Image source={require('../../assets/gauntlet/gauntlet_danger.png')} style={{ width: 36, height: 36 }} resizeMode="contain" />
           <Text style={styles.shieldOverlayText}>SHIELD ABSORBED</Text>
         </View>
       </Animated.View>
@@ -1131,7 +1131,7 @@ export default function GauntletScreen({ navigation }: Props) {
       {showShieldAcquire && (
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.shieldAcquireOverlay, { opacity: shieldAcquireAnim }]}>
           <Animated.View style={[styles.shieldAcquireInner, { transform: [{ scale: shieldAcquireScale }] }]}>
-            <Image source={require('../../assets/avatars/war_medal.png')} style={{ width: 48, height: 48 }} resizeMode="contain" />
+            <Image source={require('../../assets/gauntlet/gauntlet_danger.png')} style={{ width: 48, height: 48 }} resizeMode="contain" />
             <Text style={[styles.shieldAcquireText, { color: tier.accent }]}>SHIELD ACQUIRED</Text>
           </Animated.View>
         </Animated.View>
@@ -1344,7 +1344,7 @@ const styles = StyleSheet.create({
   pauseTitle:   { fontSize: 34, fontWeight: 'bold', letterSpacing: 5, marginBottom: 16 },
   resumeBtn:    { borderWidth: 2, paddingHorizontal: 40, paddingVertical: 14, borderRadius: 14 },
   resumeBtnText:{ fontSize: 16, fontWeight: 'bold', letterSpacing: 1.5 },
-  quitText:     { color: '#444', fontSize: 14, fontWeight: '600' },
+  quitText:     { color: '#444', fontSize: 14, fontWeight: '600', marginTop: 28 },
 
   // ── Shape map draggable ───────────────────────────────────────────────────
   shapeSilhouetteContainer: {

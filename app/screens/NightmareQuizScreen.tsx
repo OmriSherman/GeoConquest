@@ -1059,7 +1059,7 @@ const styles = StyleSheet.create({
   pauseTitle: { color: '#ff4444', fontSize: 32, fontWeight: 'bold', letterSpacing: 4, marginBottom: 20, marginTop: 20 },
   resumeBtn: { borderWidth: 2, borderColor: '#ff4444', paddingHorizontal: 36, paddingVertical: 13, borderRadius: 14 },
   resumeBtnText: { color: '#ff4444', fontSize: 16, fontWeight: 'bold', letterSpacing: 1 },
-  quitText: { color: '#8b0000', fontSize: 14, fontWeight: '600' },
+  quitText: { color: '#8b0000', fontSize: 14, fontWeight: '600', marginTop: 28 },
 
   readyContainer: { flex: 1, backgroundColor: '#1a0000', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
   readyTitle: { color: '#ff4444', fontSize: 28, fontWeight: 'bold', letterSpacing: 3, marginBottom: 12 },

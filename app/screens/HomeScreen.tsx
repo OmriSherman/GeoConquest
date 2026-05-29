@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   FlatList,
   Image,
+  Linking,
   Modal,
   ScrollView,
   Share,
@@ -34,6 +35,9 @@ import XpRingDisplay from '../components/XpRingDisplay';
 import { getLevelInfo } from '../lib/xpSystem';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+
+const APP_VERSION = '1.2.1';
+const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.geoconquest.app';
 
 const WORLD_LAND_AREA = 150_000_000; // km²
 const TOTAL_QUESTS = ACHIEVEMENTS_DATA.length;
@@ -150,6 +154,47 @@ export default function HomeScreen({ navigation }: any) {
       });
     }
     maybeShowWelcome();
+  }, []);
+
+  useEffect(() => {
+    async function checkForUpdate() {
+      try {
+        const { data } = await supabase
+          .from('app_config')
+          .select('value')
+          .eq('key', 'latest_android_version')
+          .single();
+        if (!data?.value) return;
+        const latest = data.value as string;
+        const storageKey = `@update_popup_${latest}`;
+        const alreadyShown = await AsyncStorage.getItem(storageKey);
+        if (alreadyShown) return;
+        const [lMaj, lMin, lPatch] = latest.split('.').map(Number);
+        const [cMaj, cMin, cPatch] = APP_VERSION.split('.').map(Number);
+        const isOutdated =
+          lMaj > cMaj || (lMaj === cMaj && lMin > cMin) || (lMaj === cMaj && lMin === cMin && lPatch > cPatch);
+        if (!isOutdated) return;
+        await AsyncStorage.setItem(storageKey, '1');
+        showAlert({
+          icon: (
+            <Image
+              source={require('../../assets/avatars/globe.png')}
+              style={{ width: 72, height: 72 }}
+              resizeMode="contain"
+            />
+          ),
+          title: `v${latest} is Available!`,
+          message: `You're on v${APP_VERSION}. Update to get the latest features and fixes.`,
+          buttons: [
+            { text: 'Update Now', style: 'cta', onPress: () => Linking.openURL(PLAY_STORE_URL) },
+            { text: 'Later', style: 'cancel' },
+          ],
+        });
+      } catch {
+        // silently ignore — version check is non-critical
+      }
+    }
+    checkForUpdate();
   }, []);
 
   useEffect(() => {

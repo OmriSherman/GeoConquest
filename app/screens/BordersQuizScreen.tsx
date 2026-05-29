@@ -289,10 +289,11 @@ export default function BordersQuizScreen({ navigation }: Props) {
       <View style={styles.container}>
         {paused && (
           <View style={[StyleSheet.absoluteFill, styles.pauseOverlay]}>
+            <Image source={require('../../assets/avatars/stop_it.png')} style={styles.pauseStopIt} resizeMode="contain" />
+            <Text style={styles.pauseTitle}>PAUSED</Text>
             <TouchableOpacity style={styles.resumeBtn} onPress={() => setPaused(false)}>
               <Text style={styles.resumeBtnText}>RESUME</Text>
             </TouchableOpacity>
-            <Text style={styles.pauseTitle}>PAUSED</Text>
             <TouchableOpacity onPress={() => { if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current); allowLeaveRef.current = true; navigation.goBack(); }}>
               <Text style={styles.quitText}>Quit</Text>
             </TouchableOpacity>
@@ -418,7 +419,8 @@ const styles = StyleSheet.create({
   pauseTitle: { color: '#FFD700', fontSize: 32, fontWeight: 'bold', letterSpacing: 4, marginBottom: 20, marginTop: 20 },
   resumeBtn: { borderWidth: 2, borderColor: '#FFD700', paddingHorizontal: 36, paddingVertical: 13, borderRadius: 14 },
   resumeBtnText: { color: '#FFD700', fontSize: 16, fontWeight: 'bold', letterSpacing: 1 },
-  quitText: { color: '#555', fontSize: 14, fontWeight: '600' },
+  quitText: { color: '#555', fontSize: 14, fontWeight: '600', marginTop: 28 },
+  pauseStopIt: { width: 140, height: 140, marginBottom: 12 },
 
   readyContainer: { flex: 1, backgroundColor: '#0a0a1a', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
   readyTitle: { color: '#FFD700', fontSize: 28, fontWeight: 'bold', letterSpacing: 3, marginBottom: 12 },

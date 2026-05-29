@@ -689,5 +689,5 @@ const styles = StyleSheet.create({
   pauseTitle: { color: '#fff', fontSize: 32, fontWeight: 'bold', letterSpacing: 4, marginBottom: 32 },
   resumeBtn: { borderWidth: 2, borderColor: '#4d96ff', paddingHorizontal: 36, paddingVertical: 13, borderRadius: 14, marginBottom: 8 },
   resumeBtnText: { color: '#4d96ff', fontSize: 16, fontWeight: 'bold', letterSpacing: 1 },
-  quitText: { color: '#555', fontSize: 14, fontWeight: '600', marginTop: 8 },
+  quitText: { color: '#555', fontSize: 14, fontWeight: '600', marginTop: 28 },
 });
