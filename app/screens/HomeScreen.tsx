@@ -36,7 +36,7 @@ import { getLevelInfo } from '../lib/xpSystem';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 
-const APP_VERSION = '1.2.2';
+const APP_VERSION = '1.2.3';
 const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.geoconquest.app';
 
 const WORLD_LAND_AREA = 150_000_000; // km²

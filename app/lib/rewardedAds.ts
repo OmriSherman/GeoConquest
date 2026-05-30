@@ -101,7 +101,7 @@ async function loadAndShowRewardedAd(unitId: string): Promise<RewardedAdResult> 
       resolve(result);
     };
 
-    addSub(rewarded.addAdEventListener(AdEventType.LOADED, () => {
+    addSub(rewarded.addAdEventListener(RewardedAdEventType.LOADED, () => {
       rewarded.show().catch((err: any) =>
         cleanup({
           rewarded: false,
