@@ -72,7 +72,12 @@ async function loadAndShowRewardedAd(unitId: string): Promise<RewardedAdResult> 
     return { rewarded: false, reason: 'ads_exports_missing' };
   }
 
-  const rewarded = RewardedAd.createForAdRequest(unitId, { requestNonPersonalizedAdsOnly: true });
+  let rewarded: any;
+  try {
+    rewarded = RewardedAd.createForAdRequest(unitId, { requestNonPersonalizedAdsOnly: true });
+  } catch (err: any) {
+    return { rewarded: false, reason: 'create_failed', errorMessage: String(err?.message ?? err) };
+  }
 
   return await new Promise((resolve) => {
     let didEarnReward = false;
@@ -124,7 +129,11 @@ async function loadAndShowRewardedAd(unitId: string): Promise<RewardedAdResult> 
     }));
 
     timeoutId = setTimeout(() => cleanup({ rewarded: false, reason: 'timeout' }), 30000);
-    rewarded.load();
+    try {
+      rewarded.load();
+    } catch (err: any) {
+      cleanup({ rewarded: false, reason: 'load_call_failed', errorMessage: String(err?.message ?? err) });
+    }
   });
 }
 
@@ -168,8 +177,9 @@ export async function showRewardedAd(opts?: { adUnitId?: string }): Promise<Rewa
     }
     return finalResult;
   } catch (err: any) {
-    console.warn(`[Ads] Unexpected rewarded ad error: ${String(err?.message ?? err)}`);
-    return { rewarded: false, reason: 'unexpected_error' };
+    const msg = String(err?.message ?? err);
+    console.warn(`[Ads] Unexpected rewarded ad error: ${msg}`);
+    return { rewarded: false, reason: 'unexpected_error', errorMessage: msg };
   }
 }
 
