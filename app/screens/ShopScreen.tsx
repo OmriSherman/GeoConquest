@@ -200,10 +200,10 @@ export default function ShopScreen() {
               const { count } = await bulkPurchaseCountries(countries);
               playPurchasedItem();
               setShowConfetti(true);
-              showToast(`Conquered ${count} countries!`);
+              showToast({ title: 'Conquered!', message: `${count} countries added to your empire.` });
             } catch (e: any) {
               playReject();
-              showToast(e?.message ?? 'Purchase failed');
+              showToast({ title: 'Purchase Failed', message: e?.message ?? 'Something went wrong.' });
             } finally {
               setBulkBuying(false);
             }

@@ -35,7 +35,20 @@
       "mcp__claude_ai_Supabase__list_projects",
       "Bash(findstr /R /I \"[\\\\x80-\\\\xFF]\" app\\\\*.tsx app\\\\*.ts app\\\\screens\\\\*.tsx app\\\\screens\\\\*.ts app\\\\components\\\\*.tsx app\\\\components\\\\*.ts app\\\\lib\\\\*.tsx app\\\\lib\\\\*.ts app\\\\context\\\\*.tsx app\\\\context\\\\*.ts)",
       "Bash(python3 -c ' *)",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Bash(git -C c:/Users/Omri/Desktop/GeoConquest/GeoConquest log --oneline -5)",
+      "Bash(git -C c:/Users/Omri/Desktop/GeoConquest/GeoConquest diff HEAD -- app/components/HeatStreakBadge.tsx)",
+      "Bash(git -C c:/Users/Omri/Desktop/GeoConquest/GeoConquest show HEAD:app/components/HeatStreakBadge.tsx)",
+      "Bash(git -C c:/Users/Omri/Desktop/GeoConquest/GeoConquest show HEAD:app/screens/AvatarShopScreen.tsx)",
+      "Bash(git -C c:/Users/Omri/Desktop/GeoConquest/GeoConquest show HEAD:app/screens/ShopScreen.tsx)",
+      "Bash(git -C c:/Users/Omri/Desktop/GeoConquest/GeoConquest show HEAD:app/screens/CrateShopScreen.tsx)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "PowerShell(& \"C:\\\\Users\\\\Omri\\\\AppData\\\\Local\\\\Programs\\\\nodejs\\\\eas.ps1\" --version 2>&1)",
+      "Bash(git -C \"c:/Users/Omri/Desktop/GeoConquest/GeoConquest\" diff 8c54a07 HEAD -- package.json)",
+      "Bash(git -C \"c:/Users/Omri/Desktop/GeoConquest/GeoConquest\" show 8c54a07:app.json)",
+      "Bash(git -C \"c:/Users/Omri/Desktop/GeoConquest/GeoConquest\" show 8c54a07:package.json)",
+      "Bash(git -C \"c:/Users/Omri/Desktop/GeoConquest/GeoConquest\" show 8c54a07:package-lock.json)"
     ]
   }
 }
