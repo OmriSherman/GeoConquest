@@ -59,7 +59,7 @@ const GOLD_PACKAGES: GoldPackage[] = [
     id: 'gold_t3',
     productId: 'gold_t3',
     gold: 500_000,
-    price: '$31.99',
+    price: '$29.99',
     title: 'Unclaimed Riches',
     subtitle: 'Premium collection for dedicated players',
     bestValue: true,

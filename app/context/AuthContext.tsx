@@ -3,6 +3,7 @@ import { Alert, Platform, Share } from 'react-native';
 import { Session, User } from '@supabase/supabase-js';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { supabase } from '../lib/supabase';
 import { Profile } from '../types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -176,6 +177,7 @@ interface AuthContextValue {
   signUp: (email: string, password: string) => Promise<{ user: User | null; session: Session | null }>;
   signIn: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
+  signInWithApple: () => Promise<void>;
   signOut: () => Promise<void>;
   setUsername: (username: string, avatarEmoji?: string, avatarFlag?: string, country?: string | null, referralCode?: string | null) => Promise<void>;
   purchaseAvatarItem: (itemType: 'avatar' | 'flag', itemId: string, cost: number) => Promise<void>;
@@ -582,6 +584,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  async function signInWithApple() {
+    const credential = await AppleAuthentication.signInAsync({
+      requestedScopes: [
+        AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+        AppleAuthentication.AppleAuthenticationScope.EMAIL,
+      ],
+    });
+    if (!credential.identityToken) throw new Error('Apple Sign In did not return an identity token.');
+    const { error } = await supabase.auth.signInWithIdToken({
+      provider: 'apple',
+      token: credential.identityToken,
+    });
+    if (error) throw error;
+  }
+
   async function signOut() {
     try {
       if (profile?.id) {
@@ -865,12 +882,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error;
 
     if (data && data.length > 0) {
-      const { success, new_balance, new_streak, reward_amount } = data[0];
+      const { success, new_balance, new_streak } = data[0];
       if (success) {
         const cycleDay = ((new_streak as number - 1) % 7) + 1;
         const baseTicketBonus = DAILY_TICKETS_BY_DAY[cycleDay - 1];
         const ticketBonus = baseTicketBonus * rewardMultiplier;
-        const baseGoldReward = reward_amount as number;
+        const baseGoldReward = DAILY_GOLD_BY_DAY[cycleDay - 1];
         const totalGoldReward = baseGoldReward * rewardMultiplier;
         const extraGoldReward = totalGoldReward - baseGoldReward;
         const newGoldBalance = (new_balance as number) + extraGoldReward;
@@ -1238,6 +1255,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signUp,
         signIn,
         signInWithGoogle,
+        signInWithApple,
         signOut,
         setUsername: setUsernameAction,
         purchaseAvatarItem,

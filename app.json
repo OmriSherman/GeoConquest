@@ -20,7 +20,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.geoconquest.app",
       "entitlements": {
-        "com.apple.developer.game-center": true
+        "com.apple.developer.game-center": true,
+        "com.apple.developer.applesignin": ["Default"]
       },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
@@ -43,6 +44,7 @@
     },
     "plugins": [
       "expo-web-browser",
+      "expo-apple-authentication",
       "react-native-iap",
       "expo-secure-store",
       [

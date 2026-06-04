@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useAuth } from '../context/AuthContext';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { supabase } from '../lib/supabase';
 import { AuthStackParamList } from '../types';
 
@@ -22,12 +23,13 @@ type Props = {
 };
 
 export default function LoginScreen({ navigation }: Props) {
-  const { signIn, signInWithGoogle } = useAuth();
+  const { signIn, signInWithGoogle, signInWithApple } = useAuth();
   const bgSource = require('../../assets/login screen bg.gif');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
   const [showForgot, setShowForgot] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotLoading, setForgotLoading] = useState(false);
@@ -83,6 +85,19 @@ export default function LoginScreen({ navigation }: Props) {
     }
   }
 
+  async function handleAppleSignIn() {
+    setAppleLoading(true);
+    try {
+      await signInWithApple();
+    } catch (err: any) {
+      if ((err as any).code !== 'ERR_REQUEST_CANCELED') {
+        Alert.alert('Apple Sign In Failed', err.message ?? 'Something went wrong');
+      }
+    } finally {
+      setAppleLoading(false);
+    }
+  }
+
   return (
     <ImageBackground
       source={bgSource}
@@ -116,6 +131,17 @@ export default function LoginScreen({ navigation }: Props) {
                   {googleLoading ? 'Connecting…' : 'Continue with Google'}
                 </Text>
               </TouchableOpacity>
+
+              {/* Apple Sign In — iOS only */}
+              {Platform.OS === 'ios' && (
+                <AppleAuthentication.AppleAuthenticationButton
+                  buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                  buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
+                  cornerRadius={12}
+                  style={{ width: '100%', height: 50, marginTop: 10 }}
+                  onPress={handleAppleSignIn}
+                />
+              )}
 
               {/* Divider */}
               <View style={styles.divider}>

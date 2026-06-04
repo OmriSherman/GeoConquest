@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useAuth } from '../context/AuthContext';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { AuthStackParamList } from '../types';
 
 type Props = {
@@ -20,12 +21,13 @@ type Props = {
 };
 
 export default function SignUpScreen({ navigation }: Props) {
-  const { signUp, signInWithGoogle } = useAuth();
+  const { signUp, signInWithGoogle, signInWithApple } = useAuth();
   const bgSource = require('../../assets/login screen bg.gif');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
 
   useEffect(() => {
     const resolved = Image.resolveAssetSource(bgSource);
@@ -64,6 +66,19 @@ export default function SignUpScreen({ navigation }: Props) {
     }
   }
 
+  async function handleAppleSignIn() {
+    setAppleLoading(true);
+    try {
+      await signInWithApple();
+    } catch (err: any) {
+      if ((err as any).code !== 'ERR_REQUEST_CANCELED') {
+        Alert.alert('Apple Sign In Failed', err.message ?? 'Something went wrong');
+      }
+    } finally {
+      setAppleLoading(false);
+    }
+  }
+
   return (
     <ImageBackground
       source={bgSource}
@@ -93,6 +108,17 @@ export default function SignUpScreen({ navigation }: Props) {
                   {googleLoading ? 'Connecting…' : 'Continue with Google'}
                 </Text>
               </TouchableOpacity>
+
+              {/* Apple Sign In — iOS only */}
+              {Platform.OS === 'ios' && (
+                <AppleAuthentication.AppleAuthenticationButton
+                  buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP}
+                  buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
+                  cornerRadius={12}
+                  style={{ width: '100%', height: 50, marginTop: 10 }}
+                  onPress={handleAppleSignIn}
+                />
+              )}
 
               <View style={styles.divider}>
                 <View style={styles.dividerLine} />
