@@ -198,6 +198,7 @@ interface AuthContextValue {
   pendingAvatarNotification: boolean;
   clearAvatarNotification: () => void;
   refreshQuestStatus: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
   spendTicket: () => Promise<void>;
   addTickets: (amount: number) => Promise<void>;
   purchaseTicket: (cost: number) => Promise<void>;
@@ -425,6 +426,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setDailyRewardAvailable(false);
       }
     }
+  }
+
+  async function refreshProfile() {
+    const userId = profile?.id ?? session?.user?.id;
+    if (!userId) return;
+    await fetchProfile(userId);
   }
 
 
@@ -1276,6 +1283,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         clearAvatarNotification: () => setPendingAvatarNotification(false),
         refreshUnlockedItems,
         refreshQuestStatus,
+        refreshProfile,
         spendTicket,
         addTickets,
         purchaseTicket,
