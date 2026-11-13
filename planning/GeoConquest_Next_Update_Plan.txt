@@ -1,6 +1,6 @@
 GEOCONQUEST - NEXT UPDATE PLAN
 ==============================
-Status: planning in progress (no code changes yet)
+Status: ALL 6 FEATURES DESIGNED (no code changes yet)
 Last updated: 2026-11-13
 
 Features in this update:
@@ -9,7 +9,7 @@ Features in this update:
   3. Weekly Challenge winners announcement
   4. Passport tab (stamps + quests + conquests + collection)
   5. Economy config controlled from the admin dashboard
-  6. New mode: Compass (country direction)
+  6. New mode: Compass Quiz (country direction)
 
 
 ------------------------------------------------------------
@@ -389,17 +389,51 @@ DECISIONS (user accepted all suggestions)
   - Minimum level requirements are editable (user addition).
 
 ------------------------------------------------------------
-FEATURE 6: COMPASS MODE  (to design)
+FEATURE 6: COMPASS QUIZ  (DESIGNED)
 ------------------------------------------------------------
-Suggested so far:
-  - Random "from" country centred on the map, target named; pairs
-    reasonably far apart, tiny islands excluded
-  - "Correct direction" = the straight line as drawn on the app's flat
-    (Mercator) map, so the answer matches what players see
-  - Scoring: within 10 deg full, within 30 deg partial, else wrong
-  - Drag the arrow around a compass dial (1 deg steps, N/E/S/W), Confirm
-  - After answering: map zooms out to show both countries, draws the
-    correct line next to the player's arrow, shows the error in degrees
-  - 10 rounds, 15s timer, free like Flags
-  - Counts toward quests and stamps (stamp = target country)
-  - Name ideas: Compass / True North / Bearing
+NAME: "Compass Quiz"
+
+GAMEPLAY (DECIDED)
+  - Map centres on a highlighted "from" country and names a target:
+    "Which way is Japan?" Pairs reasonably far apart; tiny islands
+    excluded.
+  - Compass dial over the map (N/E/S/W marked); drag the arrow in 1 deg
+    steps, press Confirm.
+  - Reveal: map zooms out to show both countries, draws the correct
+    line next to the player's arrow, shows "You were off by 12 deg".
+  - Correct direction = straight line on the app's flat (Mercator) map,
+    so the answer matches what the player sees.
+  - Scoring: within 10 deg = full points, within 30 deg = partial,
+    worse = wrong.
+  - 10 rounds, 15-second timer per round.
+  - Counts toward daily quests, weekly "Compass Precision" format, and
+    stamps (stamp chance applies to the TARGET country).
+  - quiz_results.quiz_type needs a new 'compass' value.
+
+DIFFICULTY
+  - Use a simple approach for now (sensible pair selection).
+  - A separate, broader difficulty feature is planned AFTER this update
+    and will apply to Compass Quiz as well.
+
+ACCESS
+  - Free to play (no ticket cost), but GATED by some unlock condition.
+    Still TBD whether it's level, gold (one-time unlock) or quest based.
+    Whatever is chosen should be editable from the dashboard
+    (Economy config -> Levels / Shop).
+
+
+============================================================
+SUGGESTED BUILD ORDER
+============================================================
+  0. HOTFIX: purchase exploits (server-side prices + level checks)
+  1. Economy config (game_config table, app config loader, dashboard
+     tab, server functions read config, server-side quiz rewards)
+  2. Daily Quests (replaces Daily Leaderboard + login reward)
+  3. Passport tab (Main | Stamps | Quests | Collection) + stamp drops
+  4. Weekly Challenge + winners announcement
+  5. Compass Quiz
+
+LATER / NOT IN THIS UPDATE
+  - Monthly quest (Duolingo style), stamp milestone quests, Hall of
+    Fame, 1st-place crown, fanfare/drumroll SFX, push notifications,
+    the broader difficulty feature.
