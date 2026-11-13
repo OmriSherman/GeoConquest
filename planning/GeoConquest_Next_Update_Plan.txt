@@ -269,26 +269,62 @@ LATER (not in this update)
     or with existing sounds).
 
 ------------------------------------------------------------
-FEATURE 4: PASSPORT  (to design)
+FEATURE 4: PASSPORT  (in design)
 ------------------------------------------------------------
-Suggested so far:
-  - Passport replaces Home + Quests -> tabs: Passport, Quizzes, Shop,
-    Leaderboard
-  - Subtabs: Stamps | Quests | Conquests (owned countries) | Collection
-    (owned avatars + upgrades, with equipping)
-  - Home content moves: stats -> Passport header, profile menu ->
-    behind avatar in header, Top Explorers -> Leaderboard
-  - Stamp chance: 0.1% per correct answer is ~1 stamp per 100 quizzes,
-    so suggested a ~3% base (dashboard-adjustable) + guaranteed stamp
-    after N dry quizzes + rarity tiers by country difficulty
-  - Stamp = the country the question was about; only rolls countries
-    the player doesn't have yet
-  - Small "Stamp found!" chip mid-quiz, full animation on results
-  - Animation: passport opens, stamp slams down (squash), ink spreads,
-    small screen shake, heavy haptic, "THUNK" + paper sound, rarity glow
-  - Stamp art generated automatically (vector), not hand-drawn
-  - Stamp milestone quests (10/50/100, full continent) + share image
+PURPOSE
+  Stamps exist to EXTEND the game's completion: a long-term collection
+  that keeps players playing. Rare on purpose.
 
+TABS
+  Passport | Quizzes | Shop | Leaderboard
+  (Passport replaces both Home and Quests)
+
+MAIN PASSPORT PAGE
+  - Header: avatar, flag, name, level ring, gold ("passport ID page");
+    tap avatar -> profile menu / Sign Out.
+  - All current Home content moves here (Your Empire stats, progress,
+    invite a friend, etc.).
+  - Top Explorers mini-leaderboard is DROPPED from this page; its spot
+    is filled with the Daily Quests section.
+  - Subtabs: Stamps | Quests | Conquests | Collection
+      Stamps     - passport book, one page per continent, grid of stamp
+                   slots (collected = stamp art, missing = faint
+                   outline), counter "37 / 250 - Africa 5 / 54"
+      Quests     - current Achievements/Quests screen
+      Conquests  - bought countries (empire progress, km2, owned list,
+                   world map)
+      Collection - owned avatars + upgrades
+
+STAMP DROP RULES (DECIDED)
+  - Chance: 0.3% per CORRECT ANSWER (dashboard-adjustable).
+  - Per QUESTION, not per quiz: any correct answer about a country, in
+    ANY mode, can drop that country's stamp.
+  - No duplicates: once you own a country's stamp, that country can't
+    drop again. Only uncollected countries roll.
+  - Math check: ~10 correct per quiz -> ~3% per quiz -> about 1 stamp
+    per 33 quizzes early on, slowing down as the collection fills.
+    Full 250 is a very long-term goal (intended).
+
+STAMP ART (DECIDED - generic, no per-country art)
+  - The country's flag, recoloured to red/ink tones (red multiply
+    tint over the flag image, so the design stays visible), inside
+    two red concentric circles, slightly rotated + faded edges for
+    an "inked" look. Optional: country name curved along the ring.
+  - Same component for every country; no hand-drawn assets.
+
+STAMP COLLECTED MOMENT
+  - Small "Stamp found: Peru!" chip mid-quiz (doesn't pause timer).
+  - Full animation on the results screen: passport slides up and
+    opens, stamp slams down (squash), ink spreads, slight screen
+    shake, heavy haptic. SFX: later.
+
+OPEN QUESTIONS (suggested answer in [brackets])
+  P1. Rarity tiers still wanted, or is a flat 0.3% enough? [Flat]
+  P2. Guaranteed stamp after N dry quizzes? [No - rarity is the point]
+  P3. Stamp milestone quests (10/25/50, full continent)? [Yes]
+  P4. Share a passport page as an image? [Yes]
+  P5. Avatars bought in Shop, equipped in Collection? [Yes]
+  P6. Default subtab when opening Passport? [Main page / Stamps]
 
 ------------------------------------------------------------
 FEATURE 5: ECONOMY CONFIG IN THE DASHBOARD  (to design)
