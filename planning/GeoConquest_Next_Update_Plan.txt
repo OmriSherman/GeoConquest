@@ -328,27 +328,65 @@ LATER
   - Stamp milestone quests (10/25/50 stamps, full continent).
 
 ------------------------------------------------------------
-FEATURE 5: ECONOMY CONFIG IN THE DASHBOARD  (to design)
+FEATURE 5: ECONOMY CONFIG IN THE DASHBOARD  (DESIGNED)
 ------------------------------------------------------------
-Findings from the current code:
-  - Prices/rewards are hard-coded in many places (ticket cost 2000 and
-    8500 pack in both Shop and Quiz Menu screens, avatar list, daily
-    reward cycle, leaderboard prize in app + database, referral 1500,
-    database purchase functions).
-  - Quiz gold is calculated on the phone, then saved.
-  - Dashboard is a single HTML page (GitHub Pages) using the admin
-    database key; it already has a read-only Economy tab.
-Suggested so far:
-  - New game_config table (key, value, description, updated_at);
-    players read it, only the admin key writes it; app loads it at
-    launch with built-in fallback defaults
-  - Editable: quiz gold/XP per mode, ticket/pack prices, chest rewards,
-    weekly prizes, referral bonus, country/avatar/upgrade prices, crate
-    odds, stamp chance, quest templates & rewards
-  - Move gold reward calculation to the server (anti-cheat)
-  - Changes apply on next app open / return to foreground
-  - Change history + validation in the dashboard
+!! SECURITY FINDINGS (fix FIRST, as a separate small hotfix) !!
+  - purchase_country(p_country_code, p_cost): the APP sends the price
+    and the server trusts it. A modified client can buy any country
+    for 0 gold, or send a NEGATIVE cost, which ADDS gold (infinite gold
+    in one call).
+  - purchase_avatar_item(..., p_cost): same issue.
+  - Level requirements (avatars like FrogLord lvl 50, Trail Quiz lvl 50,
+    etc.) are only checked in the app, not on the server.
+  - Hotfix: server computes prices itself (country price from the
+    countries table area; avatar price from a server-side price list),
+    rejects cost <= 0, and checks level requirements. App stops sending
+    prices. (Assumes the repo's migrations match what is live.)
+  - Also review purchase_quiz_upgrade and open_crate for the same
+    pattern during the hotfix.
 
+DESIGN
+  1. game_config table: key, value, category, description, min, max,
+     updated_at. Readable by all players, writable only by the
+     dashboard (admin key). game_config_history table logs every
+     change (old value, new value, time).
+  2. App: loads config at launch + on return to foreground, caches it,
+     falls back to built-in defaults. All hard-coded numbers replaced
+     with config lookups.
+  3. Server: every purchase / reward function reads prices and rewards
+     from game_config itself and never trusts a number from the app
+     (countries, avatars, upgrades, crates, quests, chests, weekly
+     prizes, quiz rewards).
+  4. Dashboard: new "Game Config" tab - grouped by category, inline
+     edit, min/max validation, confirmation summary before saving
+     ("Ticket price: 2000 -> 2500"), change history. Daily quest
+     templates and weekly formats get their own editable tables here.
+
+EDITABLE SETTINGS
+  Shop         ticket price, ticket pack price, country price formula
+               (currently max(20, area / 100)) + per-country overrides,
+               avatar prices (all in DB -> sales / repricing), upgrade
+               prices, crate prices + odds
+  Quizzes      gold + XP per correct answer per mode, ticket cost per mode
+  Levels (NEW) minimum level for each avatar, each upgrade, each quiz
+               mode (e.g. Trail lvl 50), and each quest that has one;
+               enforced on the SERVER too
+  Daily Quests rewards per tier, chest contents, templates + numbers
+  Weekly       1st-3rd prizes, participation reward, enabled formats
+  Stamps       drop chance (0.3%)
+  Real money   gold amount per store pack (store sets the money price)
+  Other        referral bonus, Conqueror multipliers
+
+DECISIONS (user accepted all suggestions)
+  - Fix the purchase exploits first as a separate small update.
+  - Quiz gold/XP calculated on the SERVER in this update.
+  - Country price: formula (divider + minimum) + optional per-country
+    overrides.
+  - All avatar prices move to the database.
+  - Gold amount per real-money pack is editable.
+  - Changes apply on next app open / return to foreground.
+  - Dashboard stays single-admin with the admin key.
+  - Minimum level requirements are editable (user addition).
 
 ------------------------------------------------------------
 FEATURE 6: COMPASS MODE  (to design)
