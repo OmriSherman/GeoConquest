@@ -269,7 +269,7 @@ LATER (not in this update)
     or with existing sounds).
 
 ------------------------------------------------------------
-FEATURE 4: PASSPORT  (in design)
+FEATURE 4: PASSPORT  (DESIGNED)
 ------------------------------------------------------------
 PURPOSE
   Stamps exist to EXTEND the game's completion: a long-term collection
@@ -279,21 +279,20 @@ TABS
   Passport | Quizzes | Shop | Leaderboard
   (Passport replaces both Home and Quests)
 
-MAIN PASSPORT PAGE
+MAIN PASSPORT PAGE (DECIDED) - opens by default
   - Header: avatar, flag, name, level ring, gold ("passport ID page");
     tap avatar -> profile menu / Sign Out.
-  - All current Home content moves here (Your Empire stats, progress,
-    invite a friend, etc.).
-  - Top Explorers mini-leaderboard is DROPPED from this page; its spot
-    is filled with the Daily Quests section.
-  - Subtabs: Stamps | Quests | Conquests | Collection
+  - Content: the conquest map (owned countries / empire progress),
+    your Daily Quests, and current progress. That's it.
+  - Top Explorers mini-leaderboard is dropped.
+  - Subtabs: Main | Stamps | Quests | Collection
+      Main       - conquest map + Daily Quests + current progress
       Stamps     - passport book, one page per continent, grid of stamp
                    slots (collected = stamp art, missing = faint
                    outline), counter "37 / 250 - Africa 5 / 54"
       Quests     - current Achievements/Quests screen
-      Conquests  - bought countries (empire progress, km2, owned list,
-                   world map)
-      Collection - owned avatars + upgrades
+      Collection - owned avatars + upgrades; avatars are EQUIPPED here
+                   (bought in the Shop)
 
 STAMP DROP RULES (DECIDED)
   - Chance: 0.3% per CORRECT ANSWER (dashboard-adjustable).
@@ -318,13 +317,15 @@ STAMP COLLECTED MOMENT
     opens, stamp slams down (squash), ink spreads, slight screen
     shake, heavy haptic. SFX: later.
 
-OPEN QUESTIONS (suggested answer in [brackets])
-  P1. Rarity tiers still wanted, or is a flat 0.3% enough? [Flat]
-  P2. Guaranteed stamp after N dry quizzes? [No - rarity is the point]
-  P3. Stamp milestone quests (10/25/50, full continent)? [Yes]
-  P4. Share a passport page as an image? [Yes]
-  P5. Avatars bought in Shop, equipped in Collection? [Yes]
-  P6. Default subtab when opening Passport? [Main page / Stamps]
+DECISIONS
+  - Flat 0.3% for every country (no rarity tiers).
+  - No guaranteed stamp / no pity timer.
+  - Share a passport page as an image: yes.
+  - Avatars equipped in Collection (inside Passport).
+  - Default page: Main.
+
+LATER
+  - Stamp milestone quests (10/25/50 stamps, full continent).
 
 ------------------------------------------------------------
 FEATURE 5: ECONOMY CONFIG IN THE DASHBOARD  (to design)
