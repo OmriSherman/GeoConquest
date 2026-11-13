@@ -203,8 +203,8 @@ OPEN QUESTIONS  (user accepted suggested defaults for W1-W4;
   W2. Mode-independent format (B): no mode, or a featured mode with a
       small bonus? [No mode]
   W3. Millionaire / Nightmare in rotation with a free entry? [Yes]
-  W4. Leagues by level or one global board? [Leagues if player count
-      allows]
+  W4. Leagues by level or one global board? DECIDED: one global board,
+      no leagues for now.
   W5. Attempts limit per format?
   W6. Prizes for 1st-3rd + participation reward / badge?
 
@@ -223,7 +223,7 @@ Earlier suggested defaults to revisit:
 
 
 ------------------------------------------------------------
-FEATURE 3: WEEKLY WINNERS ANNOUNCEMENT  (in design)
+FEATURE 3: WEEKLY WINNERS ANNOUNCEMENT  (DESIGNED)
 ------------------------------------------------------------
 WHEN
   - Full-screen popup the first time each player opens the app after
@@ -254,13 +254,19 @@ HOW RESULTS ARE PRODUCED
     result (fast, cheat-proof). Replaces the current approach of
     computing the daily winner when someone opens the leaderboard.
 
-OPEN QUESTIONS (suggested answer in [brackets])
-  A1. Per league or one global podium? [Per league]
-  A2. Hall of Fame history of past weeks? [Yes, simple list]
-  A3. Lasting mark for 1st place (crown next to name for a week)? [Yes]
-  A4. Share placement as an image? [Yes, top 3 and "Top X%"]
-  A5. Fewer than 3 qualified? [Show filled places only; skip if none]
-  A6. Fanfare / drumroll sounds: user's own or free CC0 ones?
+DECISIONS
+  - One global podium (no leagues).
+  - Podium entries show what the home page shows for a player: name,
+    avatar, flag, plus score and prize.
+  - Share as image: available to EVERYONE ("I placed #47 / Top 4%"),
+    with a nicer card for the top 3.
+  - Fewer than 3 qualified: show filled places only; skip if none.
+
+LATER (not in this update)
+  - Hall of Fame history of past weeks.
+  - Crown / lasting mark for 1st place.
+  - Fanfare / drumroll sound effects (animation ships without them,
+    or with existing sounds).
 
 ------------------------------------------------------------
 FEATURE 4: PASSPORT  (to design)
