@@ -157,12 +157,52 @@ FEATURE 2: WEEKLY CHALLENGE  (next to design)
 Requirement: must be PERCENTAGE / result based, not totals, because
 "most XP" or "most gold" gives high-level players a huge edge.
 
-Starting ideas:
-  - Best % in this week's fixed quiz (same question set for everyone,
-    fastest time as tiebreaker)
-  - Highest average accuracy across the week (minimum number of quizzes)
-  - Biggest improvement over your own previous week
-  - Level brackets / leagues so new players don't compete with veterans
+DECISIONS SO FAR
+  - Each week = one FORMAT + one random QUIZ MODE
+    (e.g. "Speed & Accuracy - Capitals").
+  - Random rotation. Last week's format can't repeat; last week's mode
+    can't repeat (pushes players into modes they don't usually play).
+  - Paid/locked modes (Millionaire, Nightmare) either excluded or given
+    a free entry that week.
+  - User favourites: Speed & Accuracy, Gold Efficiency.
+
+FORMATS (all percentage / ratio based)
+  A  Speed & Accuracy (*)  % correct x speed bonus in the week's mode
+  B  Gold Efficiency (*)   gold spent / gold earned this week
+  C  Consistency           % of this week's quizzes scoring >= 80%
+                           (min 5 quizzes)
+  D  Level Rush            XP earned this week / XP needed for your
+                           next level
+  E  Quest Hunter          % of the week's 21 daily quests completed;
+                           ties -> earliest to finish
+  F  Personal Best         % improvement on your own best in the mode
+  G  Lightning Round       % correct among answers given in < 3 seconds
+  H  Redemption            % of previously-missed countries answered
+                           right this week
+  I  Explorer              % correct on countries never answered before
+  (*) = user's favourites
+
+GOLD EFFICIENCY GUARDRAILS
+  - Only gold EARNED THIS WEEK counts (no spending old savings).
+  - Gold bought with real money excluded (not pay-to-win).
+  - Minimum to qualify (e.g. earn >= 2,000 gold this week).
+  - Score capped at 100%; ties -> earliest to reach it.
+  - Side benefit: acts as a gold sink for the economy.
+
+OPEN QUESTIONS
+  W1. Which formats ship? [A, B, C, D, E, G at launch; F, H, I later -
+      they need per-country answer history]
+  W2. Mode-independent formats (B, D, E): no mode, or a featured mode
+      with a small bonus? [No mode]
+  W3. Millionaire / Nightmare in rotation with a free entry? [Yes]
+  W4. Leagues by level or one global board? [Leagues if player count
+      allows]
+  W5. Attempts limit per format?
+  W6. Prizes for 1st-3rd + participation reward / badge?
+
+Earlier ideas (superseded by the formats above):
+  - Best % in a fixed quiz, average accuracy, improvement over last
+    week, level leagues
 
 Earlier suggested defaults to revisit:
   - Week: Monday 00:00 UTC to Sunday 23:59 UTC
