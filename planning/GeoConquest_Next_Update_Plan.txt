@@ -1,0 +1,248 @@
+GEOCONQUEST - NEXT UPDATE PLAN
+==============================
+Status: planning in progress (no code changes yet)
+Last updated: 2026-11-13
+
+Features in this update:
+  1. Daily Quests (replaces the Daily Leaderboard)        <-- DESIGNED (this file)
+  2. Weekly Challenge (percentage-based)                    <-- next
+  3. Weekly Challenge winners announcement
+  4. Passport tab (stamps + quests + conquests + collection)
+  5. Economy config controlled from the admin dashboard
+  6. New mode: Compass (country direction)
+
+
+------------------------------------------------------------
+FEATURE 1: DAILY QUESTS
+------------------------------------------------------------
+
+DECISIONS SO FAR
+  - REMOVE the Daily Leaderboard entirely (Daily tab, the #1 daily
+    prize, and its server logic). Leaderboard keeps: Weekly + All-time.
+  - REMOVE the "reward just for logging in". Nothing is granted for
+    opening the app anymore.
+  - ADD 3 daily quests per player, Duolingo style:
+      * "Daily Quests" section with a countdown to reset
+      * One row per quest: title, progress bar (e.g. 20 / 20), chest icon
+  - Each quest has a reward chest. The HARDEST quest's chest is the
+    "Daily Chest" (the reward that used to come from logging in).
+  - Quests may overlap in objective (e.g. "Earn XP" and "Complete 3
+    quizzes" fill together), like Duolingo.
+  - Every quest is a TEMPLATE with a number that can change, so one
+    template gives an Easy, Medium and Hard version. New quest types =
+    one new template, not new code per quest.
+  - Note: the newest app version (with the daily chest logic) is not in
+    this repo, so this is a pure design and will be reconciled with that
+    code when implementation starts.
+
+
+1A. TEMPLATE QUESTS (one template -> three difficulty levels)
+
+  #   Template                                   Easy        Medium              Hard
+  --- ------------------------------------------ ----------- ------------------- --------------------
+  VOLUME
+  1   Complete {N} quizzes (any mode)            1           3                   6
+  2   Answer {N} questions correctly             10          30                  60
+  3   Earn {N} XP                                low         mid                 high   (see Q2)
+  4   Earn {N} gold from quizzes                 low         mid                 high   (see Q2)
+  5   Play for {N} minutes                       3           8                   15
+
+  ACCURACY
+  6   Score {X}% or more in a quiz               70%         85%                 100%
+  7   Score {X}% or more in {N} quizzes          70% x2      80% x2              90% x3
+  8   Get the first {N} questions right,         5           10                  a whole quiz
+      no mistakes
+
+  STREAKS
+  9   Get {N} correct answers in a row           5           10                  20
+  10  Get {N}-in-a-row streaks in {M}            -           5 x2                8 x3
+      different quizzes
+
+  SPEED
+  11  Finish a quiz in under {T} seconds         120s        75s                 45s
+  12  Answer {N} questions correctly in under    5           15                  30
+      3 seconds each
+
+  VARIETY
+  13  Play a {mode} quiz                         Easy Flags/ Capitals/Shapes/    Trail/Millionaire/
+                                                 Flags       Borders             Nightmare
+  14  Play {N} different quiz modes              2           3                   4
+  15  Get {N} correct answers in {mode}          5 Flags     10 Capitals         10 Borders
+
+  GEOGRAPHY
+  16  Answer {N} questions about {continent}     5 Europe    10 Asia/Americas    10 Africa/Oceania
+      correctly
+  17  Answer {N} "hard" countries correctly      2           5                   10
+      (uses the app's country difficulty data)
+  18  Answer about {N} different countries       10          25                  50
+      correctly
+  19  Get a country right that you've never      1           3                   6
+      answered correctly before
+
+  MODE MILESTONES
+  20  Millionaire: reach question {N}            -           5                   10
+  21  Trail: finish a trail of {N} steps         short       medium              long
+  22  Nightmare: survive {N} questions           -           5                   10
+  23  Compass (new mode): point within 20 deg    3           6                   10
+      of the target {N} times
+
+
+1B. QUESTS ABOUT LEARNING AND OTHER FEATURES
+
+  #   Quest                                                   Tier
+  --- ------------------------------------------------------- ------------------------------
+  24  Get a country right that you got wrong in the last      Easy / Medium
+      7 days
+  25  Use "Learn more" on {N} countries                       Easy
+  26  Collect a Passport stamp                                Hard (luck-based: only offer on
+                                                              lucky days, or let it be swapped)
+  27  Play this week's Weekly Challenge                       Medium (sends players to Weekly)
+  28  Claim a quest from the Quests tab                       Easy
+  29  Spend {N} gold in the Shop                              Easy / Medium (gold sink, but can
+                                                              feel like pressure to spend)
+  30  Watch a rewarded ad                                     Easy (ad revenue; some dislike it)
+  31  Beat your best score in {mode}                          Hard
+  32  Get a perfect score in Easy Flags                       Easy (a sure win for new players)
+
+
+1C. RULES FOR PICKING EACH DAY'S 3 QUESTS
+  - One Easy, one Medium and one Hard every day.
+  - Overlap allowed, but no two quests from the same template on the
+    same day.
+  - Never give a quest the player can't do: no Nightmare without the
+    Dark Scroll, no Millionaire with 0 tickets, no locked modes.
+  - Time limit: the Hard quest should take about 15-20 minutes of play
+    at most.
+  - Bias toward neglected modes: favour modes the player hasn't played
+    lately (helps discovery).
+  - Ease in new players: for their first 3 days, only easy-ish versions.
+  - Weights and amounts live in the database: every template, its
+    numbers per tier, how often it's picked, and its reward are stored
+    in a table, editable / switchable from the admin dashboard.
+
+
+1D. REWARDS (suggested, to confirm)
+  - Easy chest: a little gold.
+  - Medium chest: gold + XP.
+  - Hard chest: the Daily Chest (keeps the escalating 7-day cycle,
+    now driven by a streak of days completing the Hard quest; missing
+    a day resets it).
+  - Conqueror subscribers: 3x on the Daily Chest (moved from the old
+    login reward); update Premium screen text.
+  - Opening animation: tap chest -> it shakes and opens, rewards fly
+    out, confetti + reward sound.
+
+
+1E. OPEN QUESTIONS (my suggested answer in [brackets])
+  Q1. Which templates ship in the first release?
+      [1, 2, 3, 6, 9, 11, 13, 14, 16, 17, 19, 24, 31, 32 - no new
+      features needed and every category is covered]
+  Q2. Should XP / gold quests scale with player level? A level-80
+      player earns XP much faster, so a flat "Earn 200 XP" is trivial.
+      [Yes: target based on the player's average daily XP, or drop
+      these from the Hard tier]
+  Q3. Should ad-related (#30) and spend-gold (#29) quests exist at all?
+  Q4. Can players swap out a quest they don't like? [1 free swap a day]
+  Q5. Reset time? [Midnight UTC]
+  Q6. Monthly quest (Duolingo's "November Quest: earn 35 Quest Points")?
+      [Nice to have; later update unless wanted now]
+  Q7. Older app versions still claiming the old login reward / daily
+      leaderboard prize: keep working until they update, or stop now?
+      [Stop now, so nobody is rewarded twice]
+
+
+------------------------------------------------------------
+FEATURE 2: WEEKLY CHALLENGE  (next to design)
+------------------------------------------------------------
+Requirement: must be PERCENTAGE / result based, not totals, because
+"most XP" or "most gold" gives high-level players a huge edge.
+
+Starting ideas:
+  - Best % in this week's fixed quiz (same question set for everyone,
+    fastest time as tiebreaker)
+  - Highest average accuracy across the week (minimum number of quizzes)
+  - Biggest improvement over your own previous week
+  - Level brackets / leagues so new players don't compete with veterans
+
+Earlier suggested defaults to revisit:
+  - Week: Monday 00:00 UTC to Sunday 23:59 UTC
+  - Attempts: 1 free, extra attempts cost a ticket, best score counts
+  - Challenge picked by an automatic rotation of templates, with a
+    dashboard override
+  - Prizes for 1st-3rd (+ maybe participation reward, exclusive
+    avatar/frame for 1st), amounts set in the dashboard
+  - New "Weekly" tab on the Leaderboard
+
+
+------------------------------------------------------------
+FEATURE 3: WEEKLY WINNERS ANNOUNCEMENT  (to design)
+------------------------------------------------------------
+Suggested so far:
+  - Popup on the first app open after the week ends (shown once) +
+    a permanent "Last week's champions" card on the Leaderboard
+  - Shows 1st-3rd: name, avatar, score, time, challenge name/description
+  - Also shows the player's own rank ("You placed #47")
+  - Winners get a special celebration popup where they claim the prize
+  - Push notifications: not in this update (not set up in the app yet)
+
+
+------------------------------------------------------------
+FEATURE 4: PASSPORT  (to design)
+------------------------------------------------------------
+Suggested so far:
+  - Passport replaces Home + Quests -> tabs: Passport, Quizzes, Shop,
+    Leaderboard
+  - Subtabs: Stamps | Quests | Conquests (owned countries) | Collection
+    (owned avatars + upgrades, with equipping)
+  - Home content moves: stats -> Passport header, profile menu ->
+    behind avatar in header, Top Explorers -> Leaderboard
+  - Stamp chance: 0.1% per correct answer is ~1 stamp per 100 quizzes,
+    so suggested a ~3% base (dashboard-adjustable) + guaranteed stamp
+    after N dry quizzes + rarity tiers by country difficulty
+  - Stamp = the country the question was about; only rolls countries
+    the player doesn't have yet
+  - Small "Stamp found!" chip mid-quiz, full animation on results
+  - Animation: passport opens, stamp slams down (squash), ink spreads,
+    small screen shake, heavy haptic, "THUNK" + paper sound, rarity glow
+  - Stamp art generated automatically (vector), not hand-drawn
+  - Stamp milestone quests (10/50/100, full continent) + share image
+
+
+------------------------------------------------------------
+FEATURE 5: ECONOMY CONFIG IN THE DASHBOARD  (to design)
+------------------------------------------------------------
+Findings from the current code:
+  - Prices/rewards are hard-coded in many places (ticket cost 2000 and
+    8500 pack in both Shop and Quiz Menu screens, avatar list, daily
+    reward cycle, leaderboard prize in app + database, referral 1500,
+    database purchase functions).
+  - Quiz gold is calculated on the phone, then saved.
+  - Dashboard is a single HTML page (GitHub Pages) using the admin
+    database key; it already has a read-only Economy tab.
+Suggested so far:
+  - New game_config table (key, value, description, updated_at);
+    players read it, only the admin key writes it; app loads it at
+    launch with built-in fallback defaults
+  - Editable: quiz gold/XP per mode, ticket/pack prices, chest rewards,
+    weekly prizes, referral bonus, country/avatar/upgrade prices, crate
+    odds, stamp chance, quest templates & rewards
+  - Move gold reward calculation to the server (anti-cheat)
+  - Changes apply on next app open / return to foreground
+  - Change history + validation in the dashboard
+
+
+------------------------------------------------------------
+FEATURE 6: COMPASS MODE  (to design)
+------------------------------------------------------------
+Suggested so far:
+  - Random "from" country centred on the map, target named; pairs
+    reasonably far apart, tiny islands excluded
+  - "Correct direction" = the straight line as drawn on the app's flat
+    (Mercator) map, so the answer matches what players see
+  - Scoring: within 10 deg full, within 30 deg partial, else wrong
+  - Drag the arrow around a compass dial (1 deg steps, N/E/S/W), Confirm
+  - After answering: map zooms out to show both countries, draws the
+    correct line next to the player's arrow, shows the error in degrees
+  - 10 rounds, 15s timer, free like Flags
+  - Counts toward quests and stamps (stamp = target country)
+  - Name ideas: Compass / True North / Bearing
