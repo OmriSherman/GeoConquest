@@ -1,6 +1,6 @@
 GEOCONQUEST - NEXT UPDATE PLAN
 ==============================
-Status: ALL 6 FEATURES DESIGNED (no code changes yet)
+Status: features 1-6 designed, 7 in design (no code changes yet)
 Last updated: 2026-11-13
 
 Features in this update:
@@ -10,6 +10,7 @@ Features in this update:
   4. Passport tab (stamps + quests + conquests + collection)
   5. Economy config controlled from the admin dashboard
   6. New mode: Compass Quiz (country direction)
+  7. Quiz difficulty: Easy / Medium / Hard
 
 
 ------------------------------------------------------------
@@ -422,6 +423,54 @@ ACCESS
     (Economy config -> Levels / Shop).
 
 
+------------------------------------------------------------
+FEATURE 7: QUIZ DIFFICULTY (Easy / Medium / Hard)  (in design)
+------------------------------------------------------------
+REQUEST
+  Flags, Capitals and Shapes get 3 difficulties, picked on the quiz's
+  starting page: 1 Easy, 2 Medium, 3 Hard.
+
+WHAT ALREADY EXISTS (app/lib/questionDifficulty.ts)
+  - getCountryDifficulty(): scores each country 1-10 (hand-picked
+    "iconic" and "well-known" lists, then by population).
+  - getSmartDistractors(): harder wrong answers at higher difficulty
+    (1-3 random, 4-6 same region, 7-10 same region + similar size).
+  - BUT only Millionaire / Nightmare use them. Flag, Shape and Capitals
+    quizzes pick countries and wrong answers fully at random.
+  - "Easy Flags" is a separate menu card with its own pool
+    (population >= 5M or area >= 50,000 km2).
+  - In this repo, quizzes start immediately - there is no starting
+    page yet (may exist in the user's newer version).
+
+PROPOSED DESIGN
+  Two levers per difficulty:
+    a) WHICH countries are asked (by the 1-10 score)
+    b) HOW CLOSE the wrong answers are
+  Easy    countries scored 1-4, wrong answers random from the world
+  Medium  countries scored 1-7, wrong answers from the same region
+  Hard    mostly countries scored 6-10, wrong answers same region +
+          similar size; Flags also use a hand-made list of look-alike
+          flags (Chad/Romania, Indonesia/Monaco, Ireland/Ivory Coast..)
+  - Rewards scale by difficulty with multipliers set in the dashboard
+    (Economy config).
+  - quiz_results gets a difficulty column (needed for daily quests like
+    "score 85% on Hard" and for weekly challenges).
+  - "Easy Flags" card merges into Flag Quiz -> Easy.
+
+OPEN QUESTIONS (suggested answer in [brackets])
+  D1. Which quizzes: Flags, Capitals, Shapes only, or Borders too?
+      [Flags, Capitals, Shapes now; Borders/Compass later]
+  D2. Reward multipliers? [Easy x1, Medium x1.5, Hard x2, gold + XP]
+  D3. Merge Easy Flags card into Flag Quiz Easy? [Yes]
+  D4. Is Hard locked at first? [Level requirement, editable in the
+      dashboard]
+  D5. Remember the last difficulty picked per quiz? [Yes]
+  D6. Starting page: does it exist in the newer version, or build one
+      (name, rules, rewards, difficulty picker, Start)?
+  D7. Same question count and timer for all difficulties? [Yes]
+  D8. Per-country difficulty overrides editable in the dashboard, since
+      population is a rough guide? [Later]
+
 ============================================================
 SUGGESTED BUILD ORDER
 ============================================================
@@ -432,8 +481,9 @@ SUGGESTED BUILD ORDER
   3. Passport tab (Main | Stamps | Quests | Collection) + stamp drops
   4. Weekly Challenge + winners announcement
   5. Compass Quiz
+  (Quiz Difficulty: suggested right after Economy config, since daily
+   quests and weekly challenges reference difficulty)
 
 LATER / NOT IN THIS UPDATE
   - Monthly quest (Duolingo style), stamp milestone quests, Hall of
     Fame, 1st-place crown, fanfare/drumroll SFX, push notifications,
-    the broader difficulty feature.
