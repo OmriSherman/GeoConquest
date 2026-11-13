@@ -196,7 +196,8 @@ GOLD EFFICIENCY GUARDRAILS
   - Score capped at 100%; ties -> earliest to reach it.
   - Side benefit: acts as a gold sink for the economy.
 
-OPEN QUESTIONS
+OPEN QUESTIONS  (user accepted suggested defaults for W1-W4;
+                 W5 attempts + W6 prizes to settle with Economy config)
   W1. Which formats ship? [A, B, C, G, J, K, L, M at launch; N after
       Compass mode]
   W2. Mode-independent format (B): no mode, or a featured mode with a
@@ -222,16 +223,44 @@ Earlier suggested defaults to revisit:
 
 
 ------------------------------------------------------------
-FEATURE 3: WEEKLY WINNERS ANNOUNCEMENT  (to design)
+FEATURE 3: WEEKLY WINNERS ANNOUNCEMENT  (in design)
 ------------------------------------------------------------
-Suggested so far:
-  - Popup on the first app open after the week ends (shown once) +
-    a permanent "Last week's champions" card on the Leaderboard
-  - Shows 1st-3rd: name, avatar, score, time, challenge name/description
-  - Also shows the player's own rank ("You placed #47")
-  - Winners get a special celebration popup where they claim the prize
-  - Push notifications: not in this update (not set up in the app yet)
+WHEN
+  - Full-screen popup the first time each player opens the app after
+    the week closes (Monday 00:00 UTC), once per player.
+  - Then stays as a "Last Week's Champions" card at the top of the
+    Weekly leaderboard tab until the next results.
 
+CONTENT
+  - The challenge: format + mode + one-line description.
+  - Podium: 2nd left, 1st centre (raised), 3rd right. Each spot shows
+    avatar, name, score in the format's unit, level, prize won.
+  - Your own result: "You placed #47 of 1,203 - Top 4%", or "You
+    didn't play" + Play button.
+  - Teaser for this week's challenge with a "Play now" button.
+
+ANIMATION / SFX
+  - Drumroll -> podium blocks rise 3rd, 2nd, 1st -> avatars drop on
+    -> confetti for 1st, fanfare, haptic on each reveal. Skip button
+    after 1 second.
+
+WINNERS
+  - Top-3 players see their own version first ("You won 1st place!")
+    with a Claim reward button and a bigger celebration, then the podium.
+
+HOW RESULTS ARE PRODUCED
+  - Server job at week end ranks once, saves the result (challenge,
+    top 3, player count), pays prizes. Popup only reads the saved
+    result (fast, cheat-proof). Replaces the current approach of
+    computing the daily winner when someone opens the leaderboard.
+
+OPEN QUESTIONS (suggested answer in [brackets])
+  A1. Per league or one global podium? [Per league]
+  A2. Hall of Fame history of past weeks? [Yes, simple list]
+  A3. Lasting mark for 1st place (crown next to name for a week)? [Yes]
+  A4. Share placement as an image? [Yes, top 3 and "Top X%"]
+  A5. Fewer than 3 qualified? [Show filled places only; skip if none]
+  A6. Fanfare / drumroll sounds: user's own or free CC0 ones?
 
 ------------------------------------------------------------
 FEATURE 4: PASSPORT  (to design)
