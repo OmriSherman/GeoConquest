@@ -165,22 +165,29 @@ DECISIONS SO FAR
   - Paid/locked modes (Millionaire, Nightmare) either excluded or given
     a free entry that week.
   - User favourites: Speed & Accuracy, Gold Efficiency.
+  - PRINCIPLE: Weekly = global competition, everyone does the SAME
+    task, ranked against each other. Anything about your own history /
+    personal bests / self-improvement belongs in Daily Quests, NOT here.
 
-FORMATS (all percentage / ratio based)
+FORMATS (all percentage / ratio based, same task for everyone)
   A  Speed & Accuracy (*)  % correct x speed bonus in the week's mode
   B  Gold Efficiency (*)   gold spent / gold earned this week
   C  Consistency           % of this week's quizzes scoring >= 80%
                            (min 5 quizzes)
-  D  Level Rush            XP earned this week / XP needed for your
-                           next level
-  E  Quest Hunter          % of the week's 21 daily quests completed;
-                           ties -> earliest to finish
-  F  Personal Best         % improvement on your own best in the mode
   G  Lightning Round       % correct among answers given in < 3 seconds
-  H  Redemption            % of previously-missed countries answered
-                           right this week
-  I  Explorer              % correct on countries never answered before
+  J  Same Quiz Sprint      identical 20 questions for everyone;
+                           ranked by %, then time
+  K  Continent Clash       % correct on one random continent, in the
+                           week's mode
+  L  Hard Countries        % correct on hard-rated countries only
+  M  Perfect Rate          % of this week's quizzes that were 100%
+                           (min 5 quizzes)
+  N  Compass Precision     average error in degrees, lower wins
+                           (after Compass mode ships)
   (*) = user's favourites
+
+REMOVED (self-based, moved out of Weekly by decision):
+  Level Rush, Quest Hunter, Personal Best, Redemption, Explorer
 
 GOLD EFFICIENCY GUARDRAILS
   - Only gold EARNED THIS WEEK counts (no spending old savings).
@@ -190,10 +197,10 @@ GOLD EFFICIENCY GUARDRAILS
   - Side benefit: acts as a gold sink for the economy.
 
 OPEN QUESTIONS
-  W1. Which formats ship? [A, B, C, D, E, G at launch; F, H, I later -
-      they need per-country answer history]
-  W2. Mode-independent formats (B, D, E): no mode, or a featured mode
-      with a small bonus? [No mode]
+  W1. Which formats ship? [A, B, C, G, J, K, L, M at launch; N after
+      Compass mode]
+  W2. Mode-independent format (B): no mode, or a featured mode with a
+      small bonus? [No mode]
   W3. Millionaire / Nightmare in rotation with a free entry? [Yes]
   W4. Leagues by level or one global board? [Leagues if player count
       allows]
