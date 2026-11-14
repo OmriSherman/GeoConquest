@@ -459,9 +459,10 @@ DECISIONS
     (Borders: same two levers - which countries are asked, and how
     close the wrong answers are, e.g. Hard asks about small/obscure
     neighbours.)
-  - Rewards: HARD = today's normal gold + XP (x1). Easy and Medium pay
-    LESS. Suggested Easy x0.5, Medium x0.75 - set in the dashboard
-    (Economy config).
+  - Rewards: MEDIUM = today's normal gold + XP (x1, matches today's
+    random quizzes). Easy x0.75, Hard x1.25. Both multipliers editable
+    in the dashboard, AND the base gold + XP per correct answer for
+    each quiz is editable there too (Economy config -> Quizzes).
   - Hard is open to everyone, any time (no level lock).
   - Starting page already exists in the user's newer version. Add the
     1 / 2 / 3 picker + Start button there.
@@ -472,9 +473,22 @@ DECISIONS
     (country code -> score) that the app loads like game_config, with
     the current built-in scoring as the fallback.
 
-STILL OPEN (suggested answer in [brackets])
-  D3. Merge the "Easy Flags" card into Flag Quiz -> Easy? [Yes]
-  D7. Same question count and timer for all difficulties? [Yes]
+  - No "Easy Flags" card in the newer version, so nothing to merge.
+  - Same number of questions and same timer on all difficulties.
+
+HARD MODE: 6-ANSWER QUESTIONS (user addition)
+  - In Hard, some questions randomly show 6 answers instead of 4.
+  - Marked with orange + purple borders so the player notices.
+  - Layout: 3 x 2 grid of answers; must fit small phones.
+  - Open details (suggested answer in [brackets]):
+    H1. How often? [About 1 in 4 Hard questions, editable in the
+        dashboard]
+    H2. Bonus reward for a correct 6-answer question? [Yes, e.g. x1.5
+        on that question, editable]
+    H3. Orange/purple on the question card's border (with a small
+        "6 OPTIONS" label), or on the answer buttons? [Card border]
+    H4. Borders quiz: only where its questions have multiple choices
+        (not yes/no style questions).
 
 ============================================================
 SUGGESTED BUILD ORDER
