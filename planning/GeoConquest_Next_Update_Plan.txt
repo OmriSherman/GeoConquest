@@ -1,23 +1,25 @@
 GEOCONQUEST - NEXT UPDATE PLAN
 ==============================
-Status: ALL 7 FEATURES DESIGNED (no code changes yet)
-Last updated: 2026-11-13
+Status: FINAL PLAN - all 7 features designed (no code changes yet)
+Base code: the user's newest app version (with daily chest logic and
+quiz starting pages) must be pushed before implementation starts.
+Last updated: 2026-11-14
 
 Features in this update:
-  1. Daily Quests (replaces the Daily Leaderboard)        <-- DESIGNED (this file)
-  2. Weekly Challenge (percentage-based)                    <-- next
+  1. Daily Quests (replaces the Daily Leaderboard + login reward)
+  2. Weekly Challenge (percentage-based, global competition)
   3. Weekly Challenge winners announcement
-  4. Passport tab (stamps + quests + conquests + collection)
+  4. Passport tab (Main | Stamps | Quests | Collection)
   5. Economy config controlled from the admin dashboard
   6. New mode: Compass Quiz (country direction)
   7. Quiz difficulty: Easy / Medium / Hard
 
 
 ------------------------------------------------------------
-FEATURE 1: DAILY QUESTS
+FEATURE 1: DAILY QUESTS  (DESIGNED)
 ------------------------------------------------------------
 
-DECISIONS SO FAR
+DECISIONS
   - REMOVE the Daily Leaderboard entirely (Daily tab, the #1 daily
     prize, and its server logic). Leaderboard keeps: Weekly + All-time.
   - REMOVE the "reward just for logging in". Nothing is granted for
@@ -65,8 +67,8 @@ DECISIONS SO FAR
       3 seconds each
 
   VARIETY
-  13  Play a {mode} quiz                         Easy Flags/ Capitals/Shapes/    Trail/Millionaire/
-                                                 Flags       Borders             Nightmare
+  13  Play a {mode} quiz                         Flags       Capitals/Shapes/    Trail/Millionaire/
+                                                             Borders             Nightmare
   14  Play {N} different quiz modes              2           3                   4
   15  Get {N} correct answers in {mode}          5 Flags     10 Capitals         10 Borders
 
@@ -103,7 +105,9 @@ DECISIONS SO FAR
                                                               feel like pressure to spend)
   30  Watch a rewarded ad                                     Easy (ad revenue; some dislike it)
   31  Beat your best score in {mode}                          Hard
-  32  Get a perfect score in Easy Flags                       Easy (a sure win for new players)
+  32  Get a perfect score in Flags on Easy difficulty         Easy (a sure win for new players)
+  33  Score {X}% or more on {difficulty} (Feature 7)          Medium / Hard
+  34  Answer a 6-answer Hard question correctly (Feature 7)   Medium
 
 
 1C. RULES FOR PICKING EACH DAY'S 3 QUESTS
@@ -122,7 +126,7 @@ DECISIONS SO FAR
     in a table, editable / switchable from the admin dashboard.
 
 
-1D. REWARDS (suggested, to confirm)
+1D. REWARDS
   - Easy chest: a little gold.
   - Medium chest: gold + XP.
   - Hard chest: the Daily Chest (keeps the escalating 7-day cycle,
@@ -134,7 +138,8 @@ DECISIONS SO FAR
     out, confetti + reward sound.
 
 
-1E. OPEN QUESTIONS (my suggested answer in [brackets])
+1E. QUESTIONS - user accepted the suggestions in [brackets];
+    only Q3 is still open
   Q1. Which templates ship in the first release?
       [1, 2, 3, 6, 9, 11, 13, 14, 16, 17, 19, 24, 31, 32 - no new
       features needed and every category is covered]
@@ -143,6 +148,7 @@ DECISIONS SO FAR
       [Yes: target based on the player's average daily XP, or drop
       these from the Hard tier]
   Q3. Should ad-related (#30) and spend-gold (#29) quests exist at all?
+      (STILL OPEN)
   Q4. Can players swap out a quest they don't like? [1 free swap a day]
   Q5. Reset time? [Midnight UTC]
   Q6. Monthly quest (Duolingo's "November Quest: earn 35 Quest Points")?
@@ -153,12 +159,12 @@ DECISIONS SO FAR
 
 
 ------------------------------------------------------------
-FEATURE 2: WEEKLY CHALLENGE  (next to design)
+FEATURE 2: WEEKLY CHALLENGE  (DESIGNED)
 ------------------------------------------------------------
 Requirement: must be PERCENTAGE / result based, not totals, because
 "most XP" or "most gold" gives high-level players a huge edge.
 
-DECISIONS SO FAR
+DECISIONS
   - Each week = one FORMAT + one random QUIZ MODE
     (e.g. "Speed & Accuracy - Capitals").
   - Random rotation. Last week's format can't repeat; last week's mode
@@ -197,31 +203,25 @@ GOLD EFFICIENCY GUARDRAILS
   - Score capped at 100%; ties -> earliest to reach it.
   - Side benefit: acts as a gold sink for the economy.
 
-OPEN QUESTIONS  (user accepted suggested defaults for W1-W4;
-                 W5 attempts + W6 prizes to settle with Economy config)
-  W1. Which formats ship? [A, B, C, G, J, K, L, M at launch; N after
-      Compass mode]
-  W2. Mode-independent format (B): no mode, or a featured mode with a
-      small bonus? [No mode]
-  W3. Millionaire / Nightmare in rotation with a free entry? [Yes]
-  W4. Leagues by level or one global board? DECIDED: one global board,
-      no leagues for now.
-  W5. Attempts limit per format?
-  W6. Prizes for 1st-3rd + participation reward / badge?
+SETTINGS (user accepted the suggestions)
+  - Launch formats: A, B, C, G, J, K, L, M. N after Compass Quiz ships.
+  - Gold Efficiency (B) has no quiz mode.
+  - Millionaire / Nightmare are in the mode rotation, with a free entry
+    that week.
+  - One global board, no leagues for now.
+  - Week: Monday 00:00 UTC to Sunday 23:59 UTC.
+  - Challenge picked by automatic rotation, with a dashboard override.
+  - New "Weekly" tab on the Leaderboard (Leaderboard = Weekly +
+    All-time).
+  - Format J (Same Quiz Sprint) is played at Medium difficulty unless
+    the dashboard says otherwise (Feature 7).
 
-Earlier ideas (superseded by the formats above):
-  - Best % in a fixed quiz, average accuracy, improvement over last
-    week, level leagues
-
-Earlier suggested defaults to revisit:
-  - Week: Monday 00:00 UTC to Sunday 23:59 UTC
-  - Attempts: 1 free, extra attempts cost a ticket, best score counts
-  - Challenge picked by an automatic rotation of templates, with a
-    dashboard override
-  - Prizes for 1st-3rd (+ maybe participation reward, exclusive
-    avatar/frame for 1st), amounts set in the dashboard
-  - New "Weekly" tab on the Leaderboard
-
+STILL OPEN (settle together with Economy config)
+  W5. Attempt limits per format. [Suggested: 1 free attempt + extra
+      attempts for a ticket for fixed-quiz formats (J); unlimited for
+      average-based formats]
+  W6. Prizes for 1st-3rd, participation reward, badge for 1st.
+      All amounts set in the dashboard.
 
 ------------------------------------------------------------
 FEATURE 3: WEEKLY WINNERS ANNOUNCEMENT  (DESIGNED)
@@ -412,9 +412,10 @@ GAMEPLAY (DECIDED)
   - quiz_results.quiz_type needs a new 'compass' value.
 
 DIFFICULTY
-  - Use a simple approach for now (sensible pair selection).
-  - A separate, broader difficulty feature is planned AFTER this update
-    and will apply to Compass Quiz as well.
+  - Simple approach for now (sensible pair selection).
+  - Not part of Feature 7 at launch (Flags, Shapes, Capitals, Borders);
+    Easy / Medium / Hard for Compass Quiz can come later using the same
+    system.
 
 ACCESS
   - Free to play (no ticket cost), but GATED by some unlock condition.
@@ -437,12 +438,10 @@ WHAT ALREADY EXISTS (app/lib/questionDifficulty.ts)
     (1-3 random, 4-6 same region, 7-10 same region + similar size).
   - BUT only Millionaire / Nightmare use them. Flag, Shape and Capitals
     quizzes pick countries and wrong answers fully at random.
-  - "Easy Flags" is a separate menu card with its own pool
-    (population >= 5M or area >= 50,000 km2).
-  - In this repo, quizzes start immediately; the user's newer version
-    already has a starting page.
+  - The user's newer version already has a quiz starting page and no
+    "Easy Flags" card.
 
-PROPOSED DESIGN
+DESIGN
   Two levers per difficulty:
     a) WHICH countries are asked (by the 1-10 score)
     b) HOW CLOSE the wrong answers are
@@ -472,37 +471,48 @@ DECISIONS
     dashboard, in this update. Needs a country_difficulty table
     (country code -> score) that the app loads like game_config, with
     the current built-in scoring as the fallback.
-
-  - No "Easy Flags" card in the newer version, so nothing to merge.
   - Same number of questions and same timer on all difficulties.
 
 HARD MODE: 6-ANSWER QUESTIONS (user addition)
   - In Hard, some questions randomly show 6 answers instead of 4.
   - Marked with orange + purple borders so the player notices.
   - Layout: 3 x 2 grid of answers; must fit small phones.
-  - Open details (suggested answer in [brackets]):
-    H1. How often? [About 1 in 4 Hard questions, editable in the
-        dashboard]
-    H2. Bonus reward for a correct 6-answer question? [Yes, e.g. x1.5
-        on that question, editable]
-    H3. Orange/purple on the question card's border (with a small
-        "6 OPTIONS" label), or on the answer buttons? [Card border]
-    H4. Borders quiz: only where its questions have multiple choices
-        (not yes/no style questions).
+  - Frequency: 40% of Hard questions (editable in the dashboard).
+  - No bonus reward: a 6-answer question pays the same as any other.
+  - Orange/purple on the question card's border, with a small
+    "6 OPTIONS" label (suggested; easy to change).
+  - Only when 6 valid answers exist. All Borders questions are
+    multiple choice, but some can't have 6 options (e.g. a question
+    built from a country's neighbours when it only has 3). In that case
+    the question stays at 4 answers. Same fallback rule for every quiz.
 
 ============================================================
-SUGGESTED BUILD ORDER
+BUILD ORDER
 ============================================================
   0. HOTFIX: purchase exploits (server-side prices + level checks)
   1. Economy config (game_config table, app config loader, dashboard
      tab, server functions read config, server-side quiz rewards)
-  2. Daily Quests (replaces Daily Leaderboard + login reward)
-  3. Passport tab (Main | Stamps | Quests | Collection) + stamp drops
-  4. Weekly Challenge + winners announcement
-  5. Compass Quiz
-  (Quiz Difficulty: suggested right after Economy config, since daily
-   quests and weekly challenges reference difficulty)
+  2. Quiz Difficulty (Easy / Medium / Hard, 6-answer Hard questions,
+     country difficulty table) - before quests and weekly, which use it
+  3. Daily Quests (replaces Daily Leaderboard + login reward)
+  4. Passport tab (Main | Stamps | Quests | Collection) + stamp drops
+  5. Weekly Challenge + winners announcement
+  6. Compass Quiz
 
+============================================================
+STILL OPEN
+============================================================
+  - Daily Quests Q3: ad-related and spend-gold quests, yes or no.
+  - Weekly W5: attempt limits.  W6: prizes.
+  - Compass Quiz: unlock condition (level, gold or quest).
+
+============================================================
 LATER / NOT IN THIS UPDATE
-  - Monthly quest (Duolingo style), stamp milestone quests, Hall of
-    Fame, 1st-place crown, fanfare/drumroll SFX, push notifications,
+============================================================
+  - Monthly quest (Duolingo style)
+  - Stamp milestone quests (10/25/50 stamps, full continent)
+  - Hall of Fame (past weekly podiums)
+  - 1st-place crown on leaderboards
+  - Fanfare / drumroll / stamp sound effects
+  - Push notifications
+  - Difficulty levels for Compass Quiz
