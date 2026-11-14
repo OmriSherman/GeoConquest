@@ -1,6 +1,6 @@
 GEOCONQUEST - NEXT UPDATE PLAN
 ==============================
-Status: features 1-6 designed, 7 in design (no code changes yet)
+Status: ALL 7 FEATURES DESIGNED (no code changes yet)
 Last updated: 2026-11-13
 
 Features in this update:
@@ -424,7 +424,7 @@ ACCESS
 
 
 ------------------------------------------------------------
-FEATURE 7: QUIZ DIFFICULTY (Easy / Medium / Hard)  (in design)
+FEATURE 7: QUIZ DIFFICULTY (Easy / Medium / Hard)  (DESIGNED)
 ------------------------------------------------------------
 REQUEST
   Flags, Capitals and Shapes get 3 difficulties, picked on the quiz's
@@ -451,25 +451,30 @@ PROPOSED DESIGN
   Hard    mostly countries scored 6-10, wrong answers same region +
           similar size; Flags also use a hand-made list of look-alike
           flags (Chad/Romania, Indonesia/Monaco, Ireland/Ivory Coast..)
-  - Rewards scale by difficulty with multipliers set in the dashboard
-    (Economy config).
   - quiz_results gets a difficulty column (needed for daily quests like
     "score 85% on Hard" and for weekly challenges).
-  - "Easy Flags" card merges into Flag Quiz -> Easy.
 
-OPEN QUESTIONS (suggested answer in [brackets])
-  D1. Which quizzes: Flags, Capitals, Shapes only, or Borders too?
-      [Flags, Capitals, Shapes now; Borders/Compass later]
-  D2. Reward multipliers? [Easy x1, Medium x1.5, Hard x2, gold + XP]
-  D3. Merge Easy Flags card into Flag Quiz Easy? [Yes]
-  D4. Is Hard locked at first? [Level requirement, editable in the
-      dashboard]
-  D5. Remember the last difficulty picked per quiz? [Yes]
-  D6. Starting page: does it exist in the newer version, or build one
-      (name, rules, rewards, difficulty picker, Start)?
+DECISIONS
+  - Quizzes with difficulty: Flags, Shapes, Capitals AND Borders.
+    (Borders: same two levers - which countries are asked, and how
+    close the wrong answers are, e.g. Hard asks about small/obscure
+    neighbours.)
+  - Rewards: HARD = today's normal gold + XP (x1). Easy and Medium pay
+    LESS. Suggested Easy x0.5, Medium x0.75 - set in the dashboard
+    (Economy config).
+  - Hard is open to everyone, any time (no level lock).
+  - Starting page already exists in the user's newer version. Add the
+    1 / 2 / 3 picker + Start button there.
+  - The app remembers the last difficulty per quiz and pre-selects it,
+    but the starting page is ALWAYS shown so the player confirms.
+  - Per-country difficulty (the 1-10 score) is editable from the
+    dashboard, in this update. Needs a country_difficulty table
+    (country code -> score) that the app loads like game_config, with
+    the current built-in scoring as the fallback.
+
+STILL OPEN (suggested answer in [brackets])
+  D3. Merge the "Easy Flags" card into Flag Quiz -> Easy? [Yes]
   D7. Same question count and timer for all difficulties? [Yes]
-  D8. Per-country difficulty overrides editable in the dashboard, since
-      population is a rough guide? [Later]
 
 ============================================================
 SUGGESTED BUILD ORDER
