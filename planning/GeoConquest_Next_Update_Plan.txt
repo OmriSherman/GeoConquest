@@ -427,8 +427,8 @@ ACCESS
 FEATURE 7: QUIZ DIFFICULTY (Easy / Medium / Hard)  (DESIGNED)
 ------------------------------------------------------------
 REQUEST
-  Flags, Capitals and Shapes get 3 difficulties, picked on the quiz's
-  starting page: 1 Easy, 2 Medium, 3 Hard.
+  Flags, Shapes, Capitals and Borders get 3 difficulties, picked on
+  the quiz's starting page: 1 Easy, 2 Medium, 3 Hard.
 
 WHAT ALREADY EXISTS (app/lib/questionDifficulty.ts)
   - getCountryDifficulty(): scores each country 1-10 (hand-picked
@@ -439,8 +439,8 @@ WHAT ALREADY EXISTS (app/lib/questionDifficulty.ts)
     quizzes pick countries and wrong answers fully at random.
   - "Easy Flags" is a separate menu card with its own pool
     (population >= 5M or area >= 50,000 km2).
-  - In this repo, quizzes start immediately - there is no starting
-    page yet (may exist in the user's newer version).
+  - In this repo, quizzes start immediately; the user's newer version
+    already has a starting page.
 
 PROPOSED DESIGN
   Two levers per difficulty:
