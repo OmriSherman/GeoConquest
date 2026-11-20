@@ -84,3 +84,66 @@ PROPOSED APPROACH
      draw as one piece instead of being split across the map edge.
   4. One visual review: render every country's display outline into a
      contact sheet image and check it by eye.
+
+========================================================================
+DECISIONS (user)
+========================================================================
+  - USA: keep Alaska; drop Hawaii; drop the Aleutian islands that cross
+    the date line.
+  - Russia: drop the part of Chukotka that crosses the date line; keep
+    Kaliningrad.
+  - Norway: drop Svalbard (and Jan Mayen).
+  - India: keep as is (Andaman & Nicobar stay).
+  - Malaysia: keep both halves.
+  - Fiji + Pacific archipelagos: keep all islands.
+
+========================================================================
+E. MISSING SHAPES (the "?" problem)
+========================================================================
+WHY A "?" APPEARS
+  The shape view looks the country up in the world map file by its
+  number. If it's not there, it shows "?". Causes:
+   1. The country isn't in the map file at all (list below).
+   2. The country has no number in the map file: Kosovo (also
+      Somaliland, N. Cyprus - not app countries).
+   3. The shape view downloads the whole world map from the internet
+      (cdn.jsdelivr.net) every time; a slow or failed download leaves
+      the view stuck. The same file is ALREADY bundled in the app
+      (app/assets/map/countries-50m.json) - use that instead.
+  Note: Australia and "Ashmore and Cartier Is." share the same number
+  in the file; the app happens to pick Australia because it's first.
+  The new shape file should not depend on that.
+
+E1. NO OUTLINE AT ALL (15 app countries)
+  French Guiana, Svalbard and Jan Mayen, Kosovo, Reunion, Guadeloupe,
+  Martinique, Mayotte, Caribbean Netherlands, Christmas Island,
+  Bouvet Island, US Minor Outlying Islands, Tuvalu, Cocos (Keeling)
+  Islands, Tokelau, Gibraltar
+  (French Guiana already has a hand-drawn rough outline in the code.)
+
+E2. OUTLINE EXISTS BUT IS VERY ROUGH (under 40 points; shows as a blob
+    or a dot)
+  Anguilla, Vatican City, Guernsey, Monaco, Montserrat, Saint 
+  Martin, San Marino, Sint Maarten, American Samoa, Bermuda, Nauru, 
+  Niue, Seychelles, Barbados, Grenada, Jersey, Macau, Pitcairn 
+  Islands, Singapore, Aruba, Curaçao, Dominica, Saint Lucia, Cook 
+  Islands, Saint Barthélemy, Guam, Bahrain, Heard Island and 
+  McDonald Islands, Isle of Man, Liechtenstein, Malta, Wallis and 
+  Futuna, British Indian Ocean Territory, Saint Helena,  Ascension 
+  and Tristan da Cunha, Andorra, Mauritius, United States Virgin 
+  Islands, Saint Kitts and Nevis, Palau, Antigua and Barbuda, 
+  Maldives, São Tomé and Príncipe, British Virgin Islands, Saint 
+  Pierre and Miquelon, Norfolk Island, Samoa, Turks and Caicos 
+  Islands, Tonga, Qatar, Comoros, Cayman Islands, Eswatini, 
+  Trinidad and Tobago, Hong Kong
+
+FIX
+  - Build ONE bundled shape file for every app country from a more
+    detailed public-domain source (Natural Earth 1:10m, which includes
+    Tuvalu, Gibraltar, Tokelau, Kosovo and the French overseas regions
+    as separate units), with the mainland rules above applied.
+  - Look countries up by country code (cca2), not by the map number.
+  - Contact sheet of all ~250 shapes for a visual check.
+  - Anything still too small or rough after that is excluded from
+    shape-based questions (Shape Quiz, Zoom, Neighbours shape tiles),
+    and shown as a flag where a picture is needed - never a "?".

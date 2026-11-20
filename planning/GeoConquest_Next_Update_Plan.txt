@@ -14,7 +14,7 @@ Features in this update:
   6. New mode: Compass Quiz (country direction)
   7. Quiz difficulty: Easy / Medium / Hard
   8. Daily Challenge (3 typed questions: Palette, Zoom, Neighbours)
-  9. Mainland outlines (overseas territories fix)
+  9. Mainland outlines + missing shapes (no more "?")
 
 
 ------------------------------------------------------------
@@ -555,7 +555,7 @@ STILL OPEN
   - Streak + spoiler-free share result.
 
 ------------------------------------------------------------
-FEATURE 9: MAINLAND OUTLINES (overseas territories fix)  (in design)
+FEATURE 9: MAINLAND OUTLINES + MISSING SHAPES  (DESIGNED)
 ------------------------------------------------------------
 PROBLEM
   Countries with far-away parts (France + French Guiana/Reunion,
@@ -588,9 +588,27 @@ APPROACH
   - Should ship BEFORE / WITH Daily Challenge and Compass Quiz, which
     depend on it.
 
-DECISIONS NEEDED
-  - USA: lower 48 only, or with Alaska?
-  - Norway: Svalbard out? India: Andaman in or out?
+DECISIONS
+  - USA: keep Alaska, drop Hawaii, drop date-line-crossing Aleutians.
+  - Russia: drop the date-line-crossing part of Chukotka, keep
+    Kaliningrad.
+  - Norway: drop Svalbard. India: keep as is. Malaysia: both halves.
+    Fiji / Pacific archipelagos: keep all islands.
+
+MISSING SHAPES (part of this feature - the "?" problem)
+  - 15 app countries have NO outline in the map file (Tuvalu,
+    Gibraltar, Tokelau, Kosovo, French Guiana, Reunion, Guadeloupe,
+    Martinique, Mayotte, Caribbean Netherlands, Christmas Is., Cocos
+    Is., Bouvet Is., US Minor Outlying Is., Svalbard & Jan Mayen).
+  - ~54 more have very rough outlines (Vatican, Monaco, San Marino,
+    Singapore, Bahrain, Malta, Andorra, Hong Kong...).
+  - The shape view also downloads the world map from the internet each
+    time, although the same file is already inside the app.
+  - Fix: one bundled, more detailed shape file for every app country
+    (Natural Earth 1:10m, public domain), looked up by country code,
+    with the mainland rules applied. Anything still unusable is kept
+    out of shape questions and shown as a flag - never a "?".
+  - Full lists: planning/overseas_territories_audit.txt (sections E1/E2).
 
 ============================================================
 BUILD ORDER
