@@ -13,7 +13,7 @@ Features in this update:
   5. Economy config controlled from the admin dashboard
   6. New mode: Compass Quiz (country direction)
   7. Quiz difficulty: Easy / Medium / Hard
-  8. Daily Puzzle (Palette / Twins / Zoom)
+  8. Daily Puzzle (Palette / Zoom)
 
 
 ------------------------------------------------------------
@@ -497,16 +497,18 @@ IDEA
   the Passport Main page.
 
 PUZZLE TYPES (rotate by day)
+  (Twins - near-identical flags - DROPPED: too few pairs for a big,
+   long-running question pool.)
   1. Palette    - a pie chart of a flag's colours. Colours at 1% or
                   less are grouped into "Other". 5 guesses; after each
                   wrong guess, show that country's pie next to it with
                   shared colours marked.
-  2. Twins      - near-identical flags (Chad/Romania, Indonesia/Monaco,
-                  Ireland/Ivory Coast, Australia/New Zealand,
-                  Senegal/Mali...) or look-alike shapes: name both.
-  3. Zoom       - a country's outline zoomed far in; each wrong guess
+  2. Zoom       - a country's outline zoomed far in; each wrong guess
                   zooms out. Different from the existing Shape Quiz
                   (full outline, multiple choice).
+                  Mockup: planning/daily_zoom_mockup.png
+                  Start zoom should be tight (~20-25x) on a less iconic
+                  stretch of border/coast, so guess 1 is genuinely hard.
 
 DATA
   - One-time script reads every flag image, groups pixels into
@@ -514,7 +516,6 @@ DATA
     percentages per country into a data file shipped with the app.
     One manual review pass; very messy flags (detailed emblems)
     excluded.
-  - Twins list is hand-made.
 
 IDEAS (to confirm)
   - Streak for solving days in a row; reward on solve.
