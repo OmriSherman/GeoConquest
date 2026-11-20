@@ -1,0 +1,86 @@
+GEOCONQUEST - OVERSEAS TERRITORIES / FAR-FLUNG PARTS AUDIT
+=========================================================
+Source: app/assets/map/countries-50m.json (the outlines the app uses)
+Method: script splits each country into its separate land parts, starts
+from the biggest part, and keeps every part within N degrees of a kept
+part (so island chains stay connected). Anything left over is "far".
+Run with N = 8 deg (loose) and N = 3 deg (strict).
+
+WHY IT MATTERS
+  Shape Quiz, Daily Zoom, Neighbours tiles, Compass Quiz (country centre
+  and "from" view), Learn More zoom: all fit the view to the WHOLE
+  outline, so far parts shrink the country to dots or shift its centre.
+
+------------------------------------------------------------------------
+A. AUTOMATIC RULE WORKS (drop far parts, keep mainland + nearby islands)
+------------------------------------------------------------------------
+  Country        Far parts dropped                         Width before -> after
+  France         French Guiana, Guadeloupe/Martinique,     118 deg -> 14 deg
+                 Reunion, Mayotte (14% of its area)
+  Netherlands    Aruba/Curacao/Bonaire, Sint Eustatius,    76 -> 4
+                 Saba
+  Portugal       Azores, Madeira                           25 -> 3
+  Spain          Canary Islands                            22 -> 14
+  Ecuador        Galapagos                                 16 -> 6
+  Chile          Easter Island, Juan Fernandez             43 -> 9
+  Norway         Svalbard, Jan Mayen (strict rule only;    43 -> 26
+                 loose rule keeps Svalbard via Bear Island)
+  Australia      Macquarie Island                          46 -> 41
+  South Africa   Prince Edward Islands                     21 -> 16
+  Mexico         Revillagigedo Islands                     tiny effect
+  Japan          Ogasawara / Bonin Islands                 tiny effect
+  Yemen          Socotra                                   tiny effect
+  New Zealand    Chatham Islands, Tokelau, sub-Antarctic   23 -> 12
+                 islands (Tokelau is inside NZ's outline!)
+
+------------------------------------------------------------------------
+B. NEEDS A MANUAL DECISION (automatic rule gets it wrong or it's a choice)
+------------------------------------------------------------------------
+  United States  Hawaii always far. Alaska: loose rule keeps it, strict
+                 rule drops it (and chops the Alaska panhandle into
+                 pieces). Crosses the date line (Aleutians).
+                 DECIDE: lower 48 only, or lower 48 + Alaska?
+  Russia         Crosses the date line (Chukotka) -> needs a date-line
+                 fix to draw correctly. Strict rule wrongly drops
+                 Kaliningrad, which must stay (exclave, not overseas).
+  Malaysia       Strict rule drops the PENINSULA (40% of the country)
+                 because Borneo is the biggest part. Must keep BOTH.
+  Norway         Svalbard in or out? (suggest OUT)
+  India          Andaman & Nicobar Islands: keep (normally shown) or drop?
+  Spain          Canaries: drop (suggested) - they pull the view far south.
+  Fiji           Crosses the date line -> date-line fix, keep all islands.
+  Kiribati, Micronesia, French Polynesia, Marshall Is., Palau,
+  Solomon Is., New Caledonia
+                 Archipelago countries: the "far" islands ARE the country.
+                 Keep everything; mostly matters for Zoom/Shape pools,
+                 where several of these are excluded anyway (too small).
+
+------------------------------------------------------------------------
+C. EXCLAVES - ALWAYS KEEP (not overseas, part of the real shape)
+------------------------------------------------------------------------
+  Russia (Kaliningrad), Angola (Cabinda), Azerbaijan (Nakhchivan),
+  Oman (Musandam), Malaysia (both halves), Equatorial Guinea (Bioko -
+  holds the capital), USA/Alaska if chosen.
+
+------------------------------------------------------------------------
+D. NOT AN ISSUE IN THIS DATA (already separate countries in the map file)
+------------------------------------------------------------------------
+  Greenland, Faroe Islands (Denmark), Falkland Islands, other UK
+  territories, Puerto Rico, Guam, French Polynesia, New Caledonia,
+  Saint Helena - each is its own outline, so they don't shrink their
+  parent country.
+
+------------------------------------------------------------------------
+PROPOSED APPROACH
+------------------------------------------------------------------------
+  1. One-time script builds a "display outline" per country:
+     automatic rule (~8 deg) + a small manual override table for the
+     section B countries (keep/drop specific parts).
+  2. Save the result as a data file shipped with the app; all shape
+     views (Shape Quiz, Zoom, Neighbours, Compass, Learn More) use it.
+     The full outline is still used where the whole territory matters
+     (world map / conquest map, km2).
+  3. Fix date-line countries (Russia, USA, Fiji, NZ, Kiribati) so they
+     draw as one piece instead of being split across the map edge.
+  4. One visual review: render every country's display outline into a
+     contact sheet image and check it by eye.

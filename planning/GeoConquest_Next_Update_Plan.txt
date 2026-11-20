@@ -14,6 +14,7 @@ Features in this update:
   6. New mode: Compass Quiz (country direction)
   7. Quiz difficulty: Easy / Medium / Hard
   8. Daily Challenge (3 typed questions: Palette, Zoom, Neighbours)
+  9. Mainland outlines (overseas territories fix)
 
 
 ------------------------------------------------------------
@@ -531,6 +532,8 @@ Q3 NEIGHBOURS (DECIDED)
     country they all border (France, Germany, Austria, Italy,
     Liechtenstein -> Switzerland).
   - Mockup: planning/neighbours_mockup.png (A = shapes, B = flags).
+  - DECIDED: alternate by day - shape days and flag days. On shape
+    days, tiny neighbours still fall back to their flag.
   - Uses the app's existing border data; islands / countries with
     fewer than 2 neighbours excluded. Cap the tiles at ~6 for
     countries with many neighbours (China has 14).
@@ -542,7 +545,6 @@ Q3 NEIGHBOURS (DECIDED)
     liked: keep as an extra question type for later rotation.
 
 STILL OPEN
-  - Neighbours tiles: shapes, flags, or mixed / random per day.
   - One guess vs several guesses per question.
   - Rewards per question + the unique reward. Idea: tie it to the
     Passport (e.g. a correct answer guarantees or boosts that
@@ -551,6 +553,44 @@ STILL OPEN
     depend on success: e.g. a quest for PLAYING the Daily Challenge,
     not for winning it.
   - Streak + spoiler-free share result.
+
+------------------------------------------------------------
+FEATURE 9: MAINLAND OUTLINES (overseas territories fix)  (in design)
+------------------------------------------------------------
+PROBLEM
+  Countries with far-away parts (France + French Guiana/Reunion,
+  Netherlands + Caribbean islands, USA + Hawaii/Alaska, Norway +
+  Svalbard...) get shrunk to dots or off-centre in every view that fits
+  one country: Shape Quiz, Daily Zoom, Neighbours tiles, Compass Quiz,
+  Learn More zoom.
+
+AUDIT DONE
+  Full list in planning/overseas_territories_audit.txt (generated from
+  the app's own map data):
+    A. automatic rule works  - France, Netherlands, Portugal, Spain,
+       Ecuador, Chile, Norway, Australia, South Africa, NZ, Mexico,
+       Japan, Yemen
+    B. manual decision       - USA (Alaska?), Russia (date line +
+       keep Kaliningrad), Malaysia (keep both halves), Norway
+       (Svalbard?), India (Andaman?), Fiji + Pacific archipelagos
+    C. exclaves always kept  - Kaliningrad, Cabinda, Nakhchivan,
+       Musandam, Bioko
+    D. already separate in the data - Greenland, Faroes, Falklands,
+       Puerto Rico, etc.
+
+APPROACH
+  - One-time script builds a "display outline" per country (automatic
+    rule + small manual override table), shipped as a data file and
+    used by all single-country views. Full outline kept for the world /
+    conquest map and km2.
+  - Fix date-line countries so they draw as one piece.
+  - Visual review: contact sheet of every country's outline.
+  - Should ship BEFORE / WITH Daily Challenge and Compass Quiz, which
+    depend on it.
+
+DECISIONS NEEDED
+  - USA: lower 48 only, or with Alaska?
+  - Norway: Svalbard out? India: Andaman in or out?
 
 ============================================================
 BUILD ORDER
