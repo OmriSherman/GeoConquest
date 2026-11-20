@@ -13,7 +13,7 @@ Features in this update:
   5. Economy config controlled from the admin dashboard
   6. New mode: Compass Quiz (country direction)
   7. Quiz difficulty: Easy / Medium / Hard
-  8. Daily Challenge (3 typed questions: Palette, Zoom, + 1 TBD)
+  8. Daily Challenge (3 typed questions: Palette, Zoom, Neighbours)
 
 
 ------------------------------------------------------------
@@ -494,7 +494,7 @@ DECISIONS
   - Name: "Daily Challenge" (the old daily leaderboard is gone, so
     the name is free).
   - 3 questions a day, the same for everyone, reset at midnight UTC:
-      Q1 Palette, Q2 Zoom, Q3 to be decided (options below).
+      Q1 Palette, Q2 Zoom, Q3 Neighbours.
   - Answers are TYPED (with autocomplete + forgiving spelling), not
     4 options.
   - Timed: about 20 seconds per question.
@@ -525,19 +525,24 @@ Q2 ZOOM
     Bahrain), so use area + how detailed the outline is in the map
     data, then one manual review of the list.
 
-Q3 OPTIONS (to decide)
-  a) Neighbours - show the flags/names of a country's neighbours
-     (France, Germany, Austria, Italy, Liechtenstein -> Switzerland).
-     Uses the app's existing border data; ~150 countries in the pool.
-     Islands excluded.  [Recommended]
-  b) Mystery Country - a card of facts (continent, population, area,
-     capital's first letter, language); more facts appear as the
-     timer runs down.
-  c) Blurry Flag - a pixelated flag that sharpens over the 20s.
-     (Less variety: Palette is already flag-based.)
+Q3 NEIGHBOURS (DECIDED)
+  - Show the target country's neighbours, each in its OWN separate
+    tile (like the Shape Quiz), not on a map. Player types the
+    country they all border (France, Germany, Austria, Italy,
+    Liechtenstein -> Switzerland).
+  - Mockup: planning/neighbours_mockup.png (A = shapes, B = flags).
+  - Uses the app's existing border data; islands / countries with
+    fewer than 2 neighbours excluded. Cap the tiles at ~6 for
+    countries with many neighbours (China has 14).
+  - Shape tiles show the MAINLAND only: overseas territories (French
+    Guiana, Reunion...) would otherwise shrink France to dots.
+  - Neighbours too small for a clear shape (Liechtenstein, Monaco,
+    Vatican...) show their flag instead.
+  - Mystery Country (facts card that reveals more over time) also
+    liked: keep as an extra question type for later rotation.
 
 STILL OPEN
-  - Q3 type.
+  - Neighbours tiles: shapes, flags, or mixed / random per day.
   - One guess vs several guesses per question.
   - Rewards per question + the unique reward. Idea: tie it to the
     Passport (e.g. a correct answer guarantees or boosts that
