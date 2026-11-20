@@ -13,7 +13,7 @@ Features in this update:
   5. Economy config controlled from the admin dashboard
   6. New mode: Compass Quiz (country direction)
   7. Quiz difficulty: Easy / Medium / Hard
-  8. Daily Puzzle (Palette / Zoom)
+  8. Daily Challenge (3 typed questions: Palette, Zoom, + 1 TBD)
 
 
 ------------------------------------------------------------
@@ -488,40 +488,64 @@ HARD MODE: 6-ANSWER QUESTIONS (user addition)
     the question stays at 4 answers. Same fallback rule for every quiz.
 
 ------------------------------------------------------------
-FEATURE 8: DAILY PUZZLE  (in design)
+FEATURE 8: DAILY CHALLENGE  (in design)
 ------------------------------------------------------------
-IDEA
-  Not a regular quiz mode: ONE puzzle a day, the same for everyone,
-  reset at midnight UTC. Typed answers with autocomplete (fine for a
-  single daily puzzle, unlike a 10-question quiz). Lives as a card on
-  the Passport Main page.
+DECISIONS
+  - Name: "Daily Challenge" (the old daily leaderboard is gone, so
+    the name is free).
+  - 3 questions a day, the same for everyone, reset at midnight UTC:
+      Q1 Palette, Q2 Zoom, Q3 to be decided (options below).
+  - Answers are TYPED (with autocomplete + forgiving spelling), not
+    4 options.
+  - Timed: about 20 seconds per question.
+  - Leaning: one guess per question ("take it or leave it").
+  - Must NOT block normal daily rewards: Daily Quests and the daily
+    chest stay reachable for players who do badly here.
+  - Unique reward per question (details later).
+  - Twins (near-identical flags) DROPPED: too few pairs for a big,
+    long-running pool.
 
-PUZZLE TYPES (rotate by day)
-  (Twins - near-identical flags - DROPPED: too few pairs for a big,
-   long-running question pool.)
-  1. Palette    - a pie chart of a flag's colours. Colours at 1% or
-                  less are grouped into "Other". 5 guesses; after each
-                  wrong guess, show that country's pie next to it with
-                  shared colours marked.
-  2. Zoom       - a country's outline zoomed far in; each wrong guess
-                  zooms out. Different from the existing Shape Quiz
-                  (full outline, multiple choice).
-                  Mockup: planning/daily_zoom_mockup.png
-                  Start zoom should be tight (~20-25x) on a less iconic
-                  stretch of border/coast, so guess 1 is genuinely hard.
+Q1 PALETTE
+  - Pie chart of a flag's colours; colours at 1% or less grouped into
+    "Other".
+  - Data: one-time script reads every flag image, groups pixels into
+    standard colours, saves colours + percentages per country into a
+    data file shipped with the app. One manual review pass.
 
-DATA
-  - One-time script reads every flag image, groups pixels into
-    standard colours, puts colours <= 1% into "Other", saves colours +
-    percentages per country into a data file shipped with the app.
-    One manual review pass; very messy flags (detailed emblems)
-    excluded.
+Q2 ZOOM
+  - A country's outline, zoomed far in on part of its border/coast.
+    Mockup: planning/daily_zoom_mockup.png (drawn for multiple guesses;
+    with one guess, the map instead zooms out slowly during the 20s,
+    so answering earlier is harder but could pay more).
+  - Start zoom tight (~20-25x) on a less iconic stretch.
+  - Country pool: large to normal countries only. Israel, Qatar,
+    Bahrain OK; San Marino, Vatican, Singapore, Hong Kong, small
+    islands OUT - the map data has too little detail for them.
+    Area alone doesn't work as the cutoff (Hong Kong is bigger than
+    Bahrain), so use area + how detailed the outline is in the map
+    data, then one manual review of the list.
 
-IDEAS (to confirm)
-  - Streak for solving days in a row; reward on solve.
-  - Share result without spoilers (guesses used, streak).
-  - Counts toward daily quests; stamp chance applies on solve.
-  - Puzzles can be scheduled / overridden from the dashboard.
+Q3 OPTIONS (to decide)
+  a) Neighbours - show the flags/names of a country's neighbours
+     (France, Germany, Austria, Italy, Liechtenstein -> Switzerland).
+     Uses the app's existing border data; ~150 countries in the pool.
+     Islands excluded.  [Recommended]
+  b) Mystery Country - a card of facts (continent, population, area,
+     capital's first letter, language); more facts appear as the
+     timer runs down.
+  c) Blurry Flag - a pixelated flag that sharpens over the 20s.
+     (Less variety: Palette is already flag-based.)
+
+STILL OPEN
+  - Q3 type.
+  - One guess vs several guesses per question.
+  - Rewards per question + the unique reward. Idea: tie it to the
+    Passport (e.g. a correct answer guarantees or boosts that
+    country's stamp, or a special "Daily Challenge" stamp).
+  - How it links to Daily Quests without making the daily chest
+    depend on success: e.g. a quest for PLAYING the Daily Challenge,
+    not for winning it.
+  - Streak + spoiler-free share result.
 
 ============================================================
 BUILD ORDER
