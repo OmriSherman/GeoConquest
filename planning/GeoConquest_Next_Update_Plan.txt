@@ -13,6 +13,7 @@ Features in this update:
   5. Economy config controlled from the admin dashboard
   6. New mode: Compass Quiz (country direction)
   7. Quiz difficulty: Easy / Medium / Hard
+  8. Daily Puzzle (Palette / Twins / Zoom)
 
 
 ------------------------------------------------------------
@@ -485,6 +486,41 @@ HARD MODE: 6-ANSWER QUESTIONS (user addition)
     multiple choice, but some can't have 6 options (e.g. a question
     built from a country's neighbours when it only has 3). In that case
     the question stays at 4 answers. Same fallback rule for every quiz.
+
+------------------------------------------------------------
+FEATURE 8: DAILY PUZZLE  (in design)
+------------------------------------------------------------
+IDEA
+  Not a regular quiz mode: ONE puzzle a day, the same for everyone,
+  reset at midnight UTC. Typed answers with autocomplete (fine for a
+  single daily puzzle, unlike a 10-question quiz). Lives as a card on
+  the Passport Main page.
+
+PUZZLE TYPES (rotate by day)
+  1. Palette    - a pie chart of a flag's colours. Colours at 1% or
+                  less are grouped into "Other". 5 guesses; after each
+                  wrong guess, show that country's pie next to it with
+                  shared colours marked.
+  2. Twins      - near-identical flags (Chad/Romania, Indonesia/Monaco,
+                  Ireland/Ivory Coast, Australia/New Zealand,
+                  Senegal/Mali...) or look-alike shapes: name both.
+  3. Zoom       - a country's outline zoomed far in; each wrong guess
+                  zooms out. Different from the existing Shape Quiz
+                  (full outline, multiple choice).
+
+DATA
+  - One-time script reads every flag image, groups pixels into
+    standard colours, puts colours <= 1% into "Other", saves colours +
+    percentages per country into a data file shipped with the app.
+    One manual review pass; very messy flags (detailed emblems)
+    excluded.
+  - Twins list is hand-made.
+
+IDEAS (to confirm)
+  - Streak for solving days in a row; reward on solve.
+  - Share result without spoilers (guesses used, streak).
+  - Counts toward daily quests; stamp chance applies on solve.
+  - Puzzles can be scheduled / overridden from the dashboard.
 
 ============================================================
 BUILD ORDER
