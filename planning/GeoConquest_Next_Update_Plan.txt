@@ -1,6 +1,6 @@
 GEOCONQUEST - NEXT UPDATE PLAN
 ==============================
-Status: FINAL PLAN - all 7 features designed (no code changes yet)
+Status: FINAL PLAN - 9 features designed (no code changes yet)
 Base code: the user's newest app version (with daily chest logic and
 quiz starting pages) must be pushed before implementation starts.
 Last updated: 2026-11-14
@@ -614,14 +614,17 @@ MISSING SHAPES (part of this feature - the "?" problem)
 BUILD ORDER
 ============================================================
   0. HOTFIX: purchase exploits (server-side prices + level checks)
-  1. Economy config (game_config table, app config loader, dashboard
+  1. Mainland outlines + missing shapes (Feature 9) - fixes a live bug
+     (the "?" shapes) and Daily Challenge / Compass Quiz depend on it
+  2. Economy config (game_config table, app config loader, dashboard
      tab, server functions read config, server-side quiz rewards)
-  2. Quiz Difficulty (Easy / Medium / Hard, 6-answer Hard questions,
+  3. Quiz Difficulty (Easy / Medium / Hard, 6-answer Hard questions,
      country difficulty table) - before quests and weekly, which use it
-  3. Daily Quests (replaces Daily Leaderboard + login reward)
-  4. Passport tab (Main | Stamps | Quests | Collection) + stamp drops
-  5. Weekly Challenge + winners announcement
-  6. Compass Quiz
+  4. Daily Quests (replaces Daily Leaderboard + login reward)
+  5. Passport tab (Main | Stamps | Quests | Collection) + stamp drops
+  6. Weekly Challenge + winners announcement
+  7. Daily Challenge (Palette, Zoom, Neighbours)
+  8. Compass Quiz
 
 ============================================================
 STILL OPEN
@@ -629,6 +632,8 @@ STILL OPEN
   - Daily Quests Q3: ad-related and spend-gold quests, yes or no.
   - Weekly W5: attempt limits.  W6: prizes.
   - Compass Quiz: unlock condition (level, gold or quest).
+  - Daily Challenge: one guess vs several, rewards per question + the
+    unique reward, link to Daily Quests, streak / share.
 
 ============================================================
 LATER / NOT IN THIS UPDATE
