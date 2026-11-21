@@ -15,7 +15,7 @@ Features in this update:
   7. Quiz difficulty: Easy / Medium / Hard
   8. Daily Challenge (3 typed questions: Palette, Zoom, Neighbours)
   9. Mainland outlines + missing shapes (no more "?")
- 10. Events (double rewards days)
+ 10. Events (double rewards days + shop sales)
  11. Notifications (retention)
 
 
@@ -613,7 +613,7 @@ MISSING SHAPES (part of this feature - the "?" problem)
   - Full lists: planning/overseas_territories_audit.txt (sections E1/E2).
 
 ------------------------------------------------------------
-FEATURE 10: EVENTS (Double Rewards days)  (in design)
+FEATURE 10: EVENTS (Double Rewards days + Shop Sales)  (in design)
 ------------------------------------------------------------
 IDEA
   1-2 random days a week, one quiz type pays DOUBLE rewards. Clearly
@@ -634,6 +634,21 @@ PROPOSED DESIGN
   - Built so other event types can be added later (e.g. "Stamp Day":
     3x stamp chance, "XP weekend").
 
+SHOP SALES (second event type, user addition)
+  - A sale = what's discounted + discount % + start/end time.
+  - What can go on sale: all avatars, one avatar collection, a single
+    avatar, countries (e.g. one continent), tickets / ticket packs,
+    upgrades, crates.
+  - The SERVER applies the sale price at purchase (Economy config:
+    prices are already server-side), so it can't be faked.
+  - Label: "SALE -30%" ribbon on the item, old price struck through,
+    banner at the top of the Shop with a countdown; red dot on the
+    Shop tab while a sale is on.
+  - Real-money gold packs: store prices can't be changed by us, so a
+    "sale" there = bonus gold (e.g. +50% gold per pack) instead.
+  - Spending at sale prices counts as normal spending for the Weekly
+    "Gold Efficiency" format.
+
 OPEN QUESTIONS (suggested answer in [brackets])
   E1. Does the event stack with difficulty (Hard 1.25 x 2 = 2.5x)?
       [Yes, multiply]
@@ -644,6 +659,14 @@ OPEN QUESTIONS (suggested answer in [brackets])
   E4. Effect on Weekly "Gold Efficiency" format - event gold counts
       like normal gold? [Yes]
   E5. Does Daily Challenge ever get a double day? [No, quizzes only]
+  S1. Sales picked automatically (random, like double rewards) or only
+      set by hand in the dashboard? [Automatic weekly, with dashboard
+      override]
+  S2. How often and how long? [1 sale a week, 24-48 hours]
+  S3. Discount range? [20-50%, set per sale]
+  S4. Same day as a double-rewards event, or always separate days?
+      [Separate days, so something is happening more often]
+  S5. Bonus gold on real-money packs during sales? [Yes, occasionally]
 
 ------------------------------------------------------------
 FEATURE 11: NOTIFICATIONS (retention)  (in design)
