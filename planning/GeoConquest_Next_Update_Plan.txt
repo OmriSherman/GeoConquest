@@ -1,6 +1,6 @@
 GEOCONQUEST - NEXT UPDATE PLAN
 ==============================
-Status: FINAL PLAN - 9 features designed (no code changes yet)
+Status: features 1-9 designed, 10-11 in design (no code changes yet)
 Base code: the user's newest app version (with daily chest logic and
 quiz starting pages) must be pushed before implementation starts.
 Last updated: 2026-11-14
@@ -15,6 +15,8 @@ Features in this update:
   7. Quiz difficulty: Easy / Medium / Hard
   8. Daily Challenge (3 typed questions: Palette, Zoom, Neighbours)
   9. Mainland outlines + missing shapes (no more "?")
+ 10. Events (double rewards days)
+ 11. Notifications (retention)
 
 
 ------------------------------------------------------------
@@ -610,6 +612,99 @@ MISSING SHAPES (part of this feature - the "?" problem)
     out of shape questions and shown as a flag - never a "?".
   - Full lists: planning/overseas_territories_audit.txt (sections E1/E2).
 
+------------------------------------------------------------
+FEATURE 10: EVENTS (Double Rewards days)  (in design)
+------------------------------------------------------------
+IDEA
+  1-2 random days a week, one quiz type pays DOUBLE rewards. Clearly
+  labelled while it's on.
+
+PROPOSED DESIGN
+  - Event = quiz type + start/end time + multiplier (default 2x gold +
+    XP). Stored in an events table on the server.
+  - Picked automatically each week (random days, random eligible quiz
+    type, not the same quiz type twice in a row); the dashboard can
+    add, move or cancel events.
+  - Same for everyone, by UTC day (00:00-23:59 UTC).
+  - The SERVER applies the multiplier when it calculates quiz rewards
+    (Economy config feature), so it can't be faked.
+  - Label: "2x EVENT" badge + glow on the quiz's card, a banner at the
+    top of the Quizzes tab with a countdown ("Capitals pays double -
+    ends in 5h 12m"), and "2x" shown on the results screen.
+  - Built so other event types can be added later (e.g. "Stamp Day":
+    3x stamp chance, "XP weekend").
+
+OPEN QUESTIONS (suggested answer in [brackets])
+  E1. Does the event stack with difficulty (Hard 1.25 x 2 = 2.5x)?
+      [Yes, multiply]
+  E2. Which quiz types can get an event? Paid ones (Millionaire,
+      Nightmare) too? [All quiz types; paid ones less often]
+  E3. Announce in advance ("Tomorrow: double Flags!") or surprise on
+      the day? [Surprise, plus a notification when it starts]
+  E4. Effect on Weekly "Gold Efficiency" format - event gold counts
+      like normal gold? [Yes]
+  E5. Does Daily Challenge ever get a double day? [No, quizzes only]
+
+------------------------------------------------------------
+FEATURE 11: NOTIFICATIONS (retention)  (in design)
+------------------------------------------------------------
+CURRENT STATE
+  - The app has no notification support yet (no expo-notifications).
+
+TWO KINDS
+  - LOCAL (scheduled on the phone, no server): reminders based on the
+    player's own state, e.g. streak about to break.
+  - PUSH (sent from the server): things that happen to everyone or
+    because of others, e.g. weekly results, events.
+  Needs: expo-notifications, a push_tokens table (user, token,
+  platform, time zone, settings), a server job (Supabase scheduled
+  function) that sends through Expo's push service.
+
+NOTIFICATION TYPES (candidates)
+  Streaks & daily
+    - Daily Quests reset: "3 new quests are waiting" (morning, local)
+    - Streak at risk: "Your 12-day streak ends in 3 hours" (evening,
+      only if not played today)
+    - Unclaimed chest: "Your daily chest is still closed"
+    - Daily Challenge ready: "Today's Palette / Zoom / Neighbours"
+  Competition
+    - Weekly Challenge started: "This week: Speed & Accuracy - Capitals"
+    - Last day of the week: "1 day left - you're #23"
+    - Rank change: "You dropped out of the top 3"
+    - Weekly results: "Results are in - you placed #47" / "You won!"
+  Events
+    - "Double rewards on Flags today!"
+  Progress & collection
+    - New stamp milestones, "5 countries left to complete Africa"
+    - Level-up close: "40 XP to level 25"
+    - Enough gold to buy a country on your wishlist
+  Social / account
+    - Referral friend joined -> bonus ready
+    - Conqueror subscription ending
+  Win-back (inactive players)
+    - After 3 days, 7 days, 14 days away; then stop
+
+RULES (suggested)
+  - Max 1-2 notifications per day per player; priority order decides.
+  - Quiet hours (no sends 22:00-08:00 player's local time).
+  - Send at the player's usual play time where known.
+  - Per-category on/off switches in Settings.
+  - Ask for permission at a good moment (after the first finished quiz
+    or first claimed quest), not at app launch; explain the benefit.
+  - Every notification opens the right screen (deep link).
+  - Texts and timing editable from the dashboard; track open rate per
+    type.
+
+OPEN QUESTIONS
+  N1. Which types ship first? [Streak at risk, Daily Quests reset,
+      Weekly started / results, Events, Win-back]
+  N2. Daily cap? [2]
+  N3. Tone: playful (Duolingo-style) or neutral? [Playful]
+  N4. Rank-change alerts can feel spammy - include? [Only top 3 /
+      top 10 changes]
+  N5. Should the dashboard be able to send a one-off notification to
+      everyone (announcements, updates)? [Yes]
+
 ============================================================
 BUILD ORDER
 ============================================================
@@ -625,6 +720,9 @@ BUILD ORDER
   6. Weekly Challenge + winners announcement
   7. Daily Challenge (Palette, Zoom, Neighbours)
   8. Compass Quiz
+  9. Events (after Economy config + server-side rewards)
+ 10. Notifications (after Daily Quests, Weekly and Events, which it
+     announces; local streak reminders could ship earlier)
 
 ============================================================
 STILL OPEN
