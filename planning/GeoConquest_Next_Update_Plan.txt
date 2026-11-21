@@ -3,7 +3,7 @@ GEOCONQUEST - NEXT UPDATE PLAN
 Status: features 1-9 designed, 10-11 in design (no code changes yet)
 Base code: the user's newest app version (with daily chest logic and
 quiz starting pages) must be pushed before implementation starts.
-Last updated: 2026-11-14
+Last updated: 2026-11-21
 
 Features in this update:
   1. Daily Quests (replaces the Daily Leaderboard + login reward)
@@ -659,6 +659,7 @@ OPEN QUESTIONS (suggested answer in [brackets])
   E4. Effect on Weekly "Gold Efficiency" format - event gold counts
       like normal gold? [Yes]
   E5. Does Daily Challenge ever get a double day? [No, quizzes only]
+  (User accepted the suggested answers for S1-S5.)
   S1. Sales picked automatically (random, like double rewards) or only
       set by hand in the dashboard? [Automatic weekly, with dashboard
       override]
