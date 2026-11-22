@@ -17,6 +17,7 @@ Features in this update:
   9. Mainland outlines + missing shapes (no more "?")
  10. Events (double rewards days + shop sales)
  11. Notifications (retention)
+ 12. Endgame / infinite loop (in discussion)
 
 
 ------------------------------------------------------------
@@ -728,6 +729,46 @@ OPEN QUESTIONS
       top 10 changes]
   N5. Should the dashboard be able to send a one-off notification to
       everyone (announcements, updates)? [Yes]
+
+------------------------------------------------------------
+FEATURE 12: ENDGAME / INFINITE LOOP  (in discussion)
+------------------------------------------------------------
+PROBLEM
+  After level 100 little happens; quests every 50 levels up to 300,
+  then nothing. A very active player (hours a day) hit level 300 and
+  stopped playing.
+
+OPTIONS ON THE TABLE
+  1. Prestige ("Ascension") - optional reset at level 300 back to 1,
+     keep everything owned; earn a prestige rank (shown next to the
+     name), an exclusive avatar/frame per rank, small permanent bonus.
+  2. Country Mastery - every country levels up Bronze -> Silver ->
+     Gold -> Diamond from correct answers across all modes. ~250
+     countries x 4 tiers = a very long tail. Builds on the Passport
+     (stamp first, then mastery).
+  3. Seasons - monthly season track (e.g. 50 tiers) with season-only
+     avatars/frames; resets every month, so it never ends. Free track
+     + Conqueror track (also revenue).
+  4. Endless mode - play until 3 mistakes; global best-run leaderboard.
+     Skill has no ceiling.
+  5. Empire upgrades - spend gold to develop owned countries (map
+     look, titles, small bonuses). A gold sink that fits "Conquest".
+  6. Leagues with promotion/relegation (Duolingo style) - later, once
+     there are enough active players.
+  7. Async duels vs friends - strongest for retention but the biggest
+     build; later.
+
+RECOMMENDATION
+  Seasons (the real infinite loop) + Country Mastery (long-term
+  collection) + Prestige (gives level-300 players a fresh goal now).
+  Endless mode as a cheap extra.
+
+OPEN QUESTIONS
+  X1. Is there a hard level cap at 300 today, or do levels continue
+      with nothing attached?
+  X2. Which modes does the level-300 player play most?
+  X3. Would a reset (prestige) feel bad to your players, or exciting?
+  X4. Open to a paid season track for Conqueror subscribers?
 
 ============================================================
 BUILD ORDER
