@@ -20,7 +20,7 @@ type Props = {
 };
 
 export default function LoginScreen({ navigation }: Props) {
-  const { signIn, signInWithGoogle } = useAuth();
+  const { signIn, signInWithGoogle, sendPasswordReset } = useAuth();
   const bgSource = require('../../assets/login screen bg.gif');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -44,6 +44,19 @@ export default function LoginScreen({ navigation }: Props) {
       Alert.alert('Sign In Failed', err.message ?? 'Something went wrong');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleForgotPassword() {
+    if (!email.trim()) {
+      Alert.alert('Reset Password', 'Enter your email above, then tap "Forgot password?" again.');
+      return;
+    }
+    try {
+      await sendPasswordReset(email.trim());
+      Alert.alert('Check your email', 'If an account exists for that email, a reset link is on its way. Open it on this device.');
+    } catch (err: any) {
+      Alert.alert('Reset Failed', err.message ?? 'Something went wrong');
     }
   }
 
@@ -123,6 +136,10 @@ export default function LoginScreen({ navigation }: Props) {
                 disabled={loading}
               >
                 <Text style={styles.buttonText}>{loading ? 'Signing in…' : 'Sign In'}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity onPress={handleForgotPassword}>
+                <Text style={styles.link}>Forgot password?</Text>
               </TouchableOpacity>
             </View>
 

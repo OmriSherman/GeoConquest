@@ -17,6 +17,7 @@ import {
 
 import LoginScreen from '../screens/LoginScreen';
 import SignUpScreen from '../screens/SignUpScreen';
+import ResetPasswordScreen from '../screens/ResetPasswordScreen';
 import OnboardingScreen from '../screens/OnboardingScreen';
 import HomeScreen from '../screens/HomeScreen';
 import QuizMenuScreen from '../screens/QuizMenuScreen';
@@ -191,7 +192,7 @@ function MainNavigator() {
 
 
 export default function AppNavigator() {
-  const { session, loading, needsUsername } = useAuth();
+  const { session, loading, needsUsername, recoveryMode } = useAuth();
   const { questToast, questHighlightId, clearQuestToast } = useGame();
 
   useEffect(() => {
@@ -220,6 +221,8 @@ export default function AppNavigator() {
         <RootStack.Navigator screenOptions={{ headerShown: false }}>
           {!session ? (
             <RootStack.Screen name="Auth" component={AuthNavigator} />
+          ) : recoveryMode ? (
+            <RootStack.Screen name="ResetPassword" component={ResetPasswordScreen} />
           ) : needsUsername ? (
             <RootStack.Screen name="ChooseUsername" component={OnboardingScreen} />
           ) : (

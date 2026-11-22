@@ -108,6 +108,7 @@ export type RootStackParamList = {
   ChooseUsername: undefined;
   Main: undefined;
   Premium: undefined;
+  ResetPassword: undefined;
 };
 
 export type AuthStackParamList = {

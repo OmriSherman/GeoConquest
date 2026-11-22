@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { Alert, Platform, Share } from 'react-native';
+import { Alert, Linking, Platform, Share } from 'react-native';
 import { Session, User } from '@supabase/supabase-js';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
@@ -177,6 +177,9 @@ interface AuthContextValue {
   signIn: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
+  recoveryMode: boolean;
+  sendPasswordReset: (email: string) => Promise<void>;
+  completePasswordRecovery: (newPassword: string) => Promise<void>;
   setUsername: (username: string, avatarEmoji?: string, avatarFlag?: string, country?: string | null, referralCode?: string | null) => Promise<void>;
   purchaseAvatarItem: (itemType: 'avatar' | 'flag', itemId: string, cost: number) => Promise<void>;
   claimAchievement: (achievementId: string, rewardGold: number, rewardItems?: { type: 'avatar' | 'flag' | 'item'; itemId: string }[], rewardTickets?: number) => Promise<void>;
@@ -216,6 +219,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [needsUsername, setNeedsUsername] = useState(false);
+  const [recoveryMode, setRecoveryMode] = useState(false);
   const [disabledUpgrades, setDisabledUpgrades] = useState<Set<string>>(new Set());
   const [dailyRewardAvailable, setDailyRewardAvailable] = useState(false);
   const [unlockedItems, setUnlockedItems] = useState<Set<string>>(new Set());
@@ -248,6 +252,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // 2. Listen for auth changes (login, logout, token refresh)
     const { data: listener } = supabase.auth.onAuthStateChange(
       (event, newSession) => {
+        if (event === 'PASSWORD_RECOVERY') setRecoveryMode(true);
         setSession(newSession);
         if (!newSession) {
           setProfile(null);
@@ -258,6 +263,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     );
 
     return () => listener.subscription.unsubscribe();
+  }, []);
+
+  // ── Password recovery deep link ────────────────────────────────────────────
+  // The reset email links to geoconquest://reset-password#access_token=...&type=recovery
+  // (or ?code=... with PKCE). We must turn that into a real session BEFORE
+  // calling updateUser, otherwise Supabase throws "Auth session missing!".
+  useEffect(() => {
+    async function handleRecoveryUrl(url: string | null) {
+      if (!url || !(url.includes('reset-password') || url.includes('type=recovery'))) return;
+      try {
+        const hash = url.split('#')[1] ?? '';
+        const hashParams = new URLSearchParams(hash);
+        const accessToken = hashParams.get('access_token');
+        const refreshToken = hashParams.get('refresh_token');
+        const codeMatch = url.match(/[?&]code=([^&#]+)/);
+        if (accessToken && refreshToken) {
+          const { error } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+          if (error) throw error;
+          setRecoveryMode(true);
+        } else if (codeMatch?.[1]) {
+          const { error } = await supabase.auth.exchangeCodeForSession(decodeURIComponent(codeMatch[1]));
+          if (error) throw error;
+          setRecoveryMode(true);
+        } else if (hashParams.get('error_description')) {
+          console.warn('[Auth] Recovery link error:', hashParams.get('error_description'));
+        }
+      } catch (e) {
+        console.warn('[Auth] Recovery link failed:', e);
+      }
+    }
+    Linking.getInitialURL().then(handleRecoveryUrl);
+    const sub = Linking.addEventListener('url', ({ url }) => handleRecoveryUrl(url));
+    return () => sub.remove();
   }, []);
 
   // 3. Independent effect: Whenever `session` changes to a valid user, fetch their profile
@@ -456,6 +494,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function signIn(email: string, password: string) {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
+  }
+
+  async function sendPasswordReset(email: string) {
+    const redirectTo = Platform.OS === 'web' ? window.location.origin : 'geoconquest://reset-password';
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+    if (error) throw error;
+  }
+
+  async function completePasswordRecovery(newPassword: string) {
+    const { data: { session: current } } = await supabase.auth.getSession();
+    if (!current) throw new Error('Your reset link has expired. Please request a new one.');
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) throw error;
+    setRecoveryMode(false);
   }
 
   async function signInWithGoogle() {
@@ -1122,6 +1174,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signIn,
         signInWithGoogle,
         signOut,
+        recoveryMode,
+        sendPasswordReset,
+        completePasswordRecovery,
         setUsername: setUsernameAction,
         purchaseAvatarItem,
         claimAchievement,
