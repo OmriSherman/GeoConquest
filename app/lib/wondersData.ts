@@ -51,6 +51,24 @@ export const WONDERS: Wonder[] = [
       require('../../assets/wonders/taj-mahal/layer_9.webp'),
     ],
   },
+  {
+    id: 'great-wall',
+    name: "Great Wall of China",
+    cca2: 'CN',
+    palette: ["#0B1420", "#16303A", "#24463A", "#2D5458", "#5E8A7A", "#6A5446", "#A9C6BC", "#B88E62", "#E8EEDC", "#F6C77A"],
+    layers: [
+      require('../../assets/wonders/great-wall/layer_0.webp'),
+      require('../../assets/wonders/great-wall/layer_1.webp'),
+      require('../../assets/wonders/great-wall/layer_2.webp'),
+      require('../../assets/wonders/great-wall/layer_3.webp'),
+      require('../../assets/wonders/great-wall/layer_4.webp'),
+      require('../../assets/wonders/great-wall/layer_5.webp'),
+      require('../../assets/wonders/great-wall/layer_6.webp'),
+      require('../../assets/wonders/great-wall/layer_7.webp'),
+      require('../../assets/wonders/great-wall/layer_8.webp'),
+      require('../../assets/wonders/great-wall/layer_9.webp'),
+    ],
+  },
 ];
 
 export function getWonder(id: string): Wonder | undefined {
