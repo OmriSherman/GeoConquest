@@ -17,7 +17,7 @@ Features in this update:
   9. Mainland outlines + missing shapes (no more "?")
  10. Events (double rewards days + shop sales)
  11. Notifications (retention)
- 12. Endgame / infinite loop (in discussion)
+ 12. Endgame: Wonders (paint world wonders with earned pigments)
 
 
 ------------------------------------------------------------
@@ -731,7 +731,7 @@ OPEN QUESTIONS
       everyone (announcements, updates)? [Yes]
 
 ------------------------------------------------------------
-FEATURE 12: ENDGAME / INFINITE LOOP  (in discussion)
+FEATURE 12: ENDGAME - WONDERS  (in discussion)
 ------------------------------------------------------------
 PROBLEM
   After level 100 little happens; quests every 50 levels up to 300,
@@ -758,17 +758,52 @@ OPTIONS ON THE TABLE
   7. Async duels vs friends - strongest for retention but the biggest
      build; later.
 
-RECOMMENDATION
-  Seasons (the real infinite loop) + Country Mastery (long-term
-  collection) + Prestige (gives level-300 players a fresh goal now).
-  Endless mode as a cheap extra.
+USER'S DIRECTION: "WONDERS" (pigments + paintings)
+  - After level 300 + owning every country, the world map is replaced
+    by a new stage: a painting of a world wonder, in ~10 colours
+    ("pigments"), starting grey.
+  - Each pigment is earned, then applied: that colour fills in on the
+    painting. All pigments -> wonder complete -> next wonder.
+  - Path A, Mega Quest: a list of requirements turned in together,
+    e.g. "Borders 90%+ x30" + "500,000 gold" + "30 tickets".
+  - Path B, Pigment Trial: a unique, very hard quiz; each try costs
+    several tickets; completing it grants a pigment.
+
+ASSESSMENT
+  Strong: fits the game (colours/flags/palettes), very visual progress
+  (paint-by-numbers reveal), a real gold + ticket sink for rich
+  endgame players, and new wonders can be added forever.
+  Watch-outs:
+  - Gate too narrow: level 300 + ALL countries means almost nobody
+    reaches it. Suggest the first wonder unlocks earlier (e.g. level
+    100) and later wonders need higher levels / more countries.
+  - Only infinite if content keeps coming: make it cheap - mega quests
+    reuse the daily quest templates with big numbers; paintings are
+    turned into 10-colour regions by a script. Art must be
+    public-domain or our own (no copyrighted photos).
+  - "Same quiz 30 times" can feel like a chore: mix requirements
+    across modes and let several mega quests progress at once.
+  - Gold / tickets in a mega quest should be CONSUMED on turn-in
+    (that's what makes it a sink).
+  - Pigment Trial: losing many tickets for nothing is harsh. Failed
+    tries should still leave something (pigment fragments / a counter
+    toward a guaranteed pigment).
+  - Replaces Prestige as the post-300 goal; Seasons / Country Mastery
+    can still come later.
 
 OPEN QUESTIONS
-  X1. Is there a hard level cap at 300 today, or do levels continue
-      with nothing attached?
-  X2. Which modes does the level-300 player play most?
-  X3. Would a reset (prestige) feel bad to your players, or exciting?
-  X4. Open to a paid season track for Conqueror subscribers?
+  X1. Unlock gate: keep level 300 + all countries, or open the first
+      wonder earlier? [Earlier, e.g. level 100]
+  X2. Can each pigment be earned by EITHER path (mega quest or
+      trial), or is the trial a separate bonus source?
+      [Either path - player chooses grind or gamble]
+  X3. What is the Pigment Trial quiz? (e.g. mixed modes, Hard, 6-answer
+      questions, 1 mistake allowed, 20 questions)
+  X4. Reward for finishing a wonder: title, avatar frame, wonder badge
+      on profile / leaderboard, shareable painting?
+  X5. How many wonders at launch? [3-5, then add over time]
+  X6. Is there a hard level cap at 300 today?
+  X7. Mega quest requirements: consumed on turn-in? [Yes]
 
 ============================================================
 BUILD ORDER
