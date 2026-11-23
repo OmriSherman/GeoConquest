@@ -825,8 +825,8 @@ ENDLESS LEVEL MILESTONES (DECIDED)
   - Rewards spread out so new avatars aren't needed every time:
       * most milestones: a big gold reward (+ tickets), growing a bit
         each time
-      * now and then (suggested every 4th milestone, i.e. levels 500,
-        700, 900...): an exclusive avatar or avatar background
+      * every 3rd milestone (levels 450, 600, 750, 900...): an
+        exclusive avatar or avatar background
   - Milestone rewards live in a dashboard table: you can assign an
     avatar / background to any future milestone whenever you have one
     ready; milestones with nothing assigned pay gold by default.
