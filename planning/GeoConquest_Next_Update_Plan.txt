@@ -1,6 +1,6 @@
 GEOCONQUEST - NEXT UPDATE PLAN
 ==============================
-Status: features 1-9 designed, 10-11 in design (no code changes yet)
+Status: 13 features (most designed; 8, 10, 11, 13 still have open questions) (no code changes yet)
 Base code: the user's newest app version (with daily chest logic and
 quiz starting pages) must be pushed before implementation starts.
 Last updated: 2026-11-21
@@ -18,6 +18,7 @@ Features in this update:
  10. Events (double rewards days + shop sales)
  11. Notifications (retention)
  12. Endgame: Wonders (paint world wonders with earned pigments)
+ 13. Avatar backgrounds (new cosmetic slot)
 
 
 ------------------------------------------------------------
@@ -813,9 +814,8 @@ MORE DECISIONS
   - Finishing a wonder gives: a title, an avatar frame, a wonder badge
     on profile / leaderboard, a shareable image of the painting, AND
     the wonder becomes an AVATAR BACKGROUND.
-  - Avatar system upgrade: profile = avatar + flag + BACKGROUND (new
-    cosmetic slot). Finished wonders are the first backgrounds; the
-    slot can later hold other backgrounds (events, seasons, shop).
+  - Avatar system upgrade: profile = avatar + flag + BACKGROUND.
+    Finished wonders are the first backgrounds. Full design: Feature 13.
   - No hard level cap today; after level 300 nothing new happens
     (level quests exist only at 150 / 200 / 250 / 300).
 
@@ -831,6 +831,41 @@ ENDLESS LEVEL MILESTONES (DECIDED)
     avatar / background to any future milestone whenever you have one
     ready; milestones with nothing assigned pay gold by default.
 
+------------------------------------------------------------
+FEATURE 13: AVATAR BACKGROUNDS  (in design)
+------------------------------------------------------------
+IDEA
+  A new cosmetic slot. A player's look becomes:
+  AVATAR + FLAG + BACKGROUND.
+
+WHERE BACKGROUNDS COME FROM
+  - Finished Wonders (Feature 12): each completed wonder becomes a
+    background.
+  - Endless level milestones: every 3rd milestone after level 300
+    (450, 600, 750...) gives an exclusive avatar OR background.
+  - Later: events, seasons, Shop sales.
+
+WHERE THEY SHOW
+  - Passport header (the "ID page"), leaderboard rows, the weekly
+    winners podium, share images (passport page, weekly result,
+    finished wonder).
+
+HOW IT WORKS
+  - Owned and equipped in the Passport -> Collection tab, next to
+    avatars.
+  - Stored like other unlocked items (type "background") plus an
+    equipped-background field on the profile. The server checks the
+    player owns a background before it can be equipped.
+  - Background list (name, image, source) managed from the dashboard,
+    so new ones can be added without an app update where possible.
+
+OPEN QUESTIONS (suggested answer in [brackets])
+  B1. A few free starter backgrounds for everyone (plain colours /
+      simple map patterns), so the slot isn't empty? [Yes]
+  B2. Sell backgrounds in the Shop too, or only earn them?
+      [Earn-only at first; Shop later]
+  B3. Conqueror subscribers get an exclusive background? [Yes, one]
+
 ============================================================
 BUILD ORDER
 ============================================================
@@ -842,13 +877,17 @@ BUILD ORDER
   3. Quiz Difficulty (Easy / Medium / Hard, 6-answer Hard questions,
      country difficulty table) - before quests and weekly, which use it
   4. Daily Quests (replaces Daily Leaderboard + login reward)
-  5. Passport tab (Main | Stamps | Quests | Collection) + stamp drops
+  5. Passport tab (Main | Stamps | Quests | Collection | Wonders
+     teaser) + stamp drops
   6. Weekly Challenge + winners announcement
   7. Daily Challenge (Palette, Zoom, Neighbours)
   8. Compass Quiz
   9. Events (after Economy config + server-side rewards)
  10. Notifications (after Daily Quests, Weekly and Events, which it
      announces; local streak reminders could ship earlier)
+ 11. Avatar backgrounds (Feature 13) - the background slot + starter
+     backgrounds; needed before Wonders hands out wonder backgrounds
+ 12. Wonders + endless level milestones (Feature 12)
 
 ============================================================
 STILL OPEN
