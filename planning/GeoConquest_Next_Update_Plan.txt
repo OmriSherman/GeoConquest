@@ -824,7 +824,8 @@ OPTIONS ON THE TABLE
 USER'S DIRECTION: "WONDERS" (pigments + paintings)
   - After level 300 + owning every country, the world map is replaced
     by a new stage: a painting of a world wonder, in ~10 colours
-    ("pigments"), starting grey.
+    ("pigments"), starting empty (UPDATED: locked colours are hidden,
+    not grey - see WONDER ART & REVEAL SYSTEM below).
   - Each pigment is earned, then applied: that colour fills in on the
     painting. All pigments -> wonder complete -> next wonder.
   - Path A, Mega Quest: a list of requirements turned in together,
@@ -890,6 +891,96 @@ ENDLESS LEVEL MILESTONES (DECIDED)
   - Milestone rewards live in a dashboard table: you can assign an
     avatar / background to any future milestone whenever you have one
     ready; milestones with nothing assigned pay gold by default.
+
+WONDER ART & REVEAL SYSTEM  (ASSETS + DATA BUILT, SCREEN NOT BUILT YET)
+  Changes to the design above (DECIDED):
+  - Locked colours are HIDDEN (transparent), not grey. A wonder starts
+    as an empty card and the finished picture is a surprise.
+  - Each pigment unlocks a RANDOM colour of that wonder (not chosen by
+    the player, not one fixed order for everybody).
+
+  Art rules (DECIDED)
+  - One image per wonder: 1600x1200 with EXACTLY 10 colours (no
+    blending, no anti-aliasing). Pixel-art style, drawn by a script, so
+    it is our own art (no copyright problem).
+  - Keep the subject in the centre (about 75% wide, 80% tall): the card
+    crops the sides on narrow phones.
+  - Not every colour has to be a meaningful step; some reveal little.
+
+  Where it shows (DECIDED)
+  - The wonder takes the same space as the world map card on Home:
+    260 high, width = screen width - 66 (about 294-364 on phones),
+    shown "cover" (fills the card, crops a little).
+
+  How it works (BUILT)
+  - Files per wonder, in assets/wonders/<id>/:
+      final.png                 hand-made master, the source of truth
+      layer_0.webp ... layer_9  one transparent 800x600 lossless WebP
+                                per colour. Layers never overlap, so
+                                they stack in any order.
+  - scripts/wonders/build_layers.py turns final.png into the 10 layers
+    and generates app/lib/wondersData.ts (needed because the app
+    bundler only accepts literal require() calls). It refuses an image
+    that is not exactly 1600x1200 with 10 colours.
+  - scripts/wonders/wonders.json lists the wonders (id, name, country).
+  - app/lib/wonderReveal.ts: pickNextLayer(unlocked) returns a random
+    colour the player does not have yet (null when all 10 are done).
+  - Size: about 190 KB per wonder (master + layers), so 10 wonders are
+    under 2 MB. Memory: about 19 MB, only while all 10 layers of one
+    wonder are on screen.
+  - To add a wonder: put final.png in assets/wonders/<id>/, add a line
+    to wonders.json, run:  python3 -I scripts/wonders/build_layers.py
+  - Built so far: Great Pyramid of Giza (Egypt).
+
+  Wonder candidates (10; the plan launches with 5)
+     1 Great Pyramid of Giza  Egypt         Ancient     (art DONE)
+     2 Great Wall of China    China         New 7
+     3 Taj Mahal              India         New 7
+     4 Machu Picchu           Peru          New 7
+     5 Petra                  Jordan        New 7
+     6 Colosseum              Italy         New 7
+     7 Christ the Redeemer    Brazil        New 7
+     8 Chichen Itza           Mexico        New 7
+     9 Angkor Wat             Cambodia      Landmark
+    10 Victoria Falls         Zambia/Zimbabwe  Natural (border: owner
+                              = whoever holds Zambia, or a special case)
+     No Oceania wonder yet (Uluru or the Sydney Opera House could
+     replace one).
+
+  QUESTIONS TO DECIDE BEFORE BUILDING THE SCREEN
+   W1. Applying a pigment: does the random colour appear immediately on
+       mega quest turn-in, or does the player tap "apply" (the plan says
+       "earned, then applied")? A tap gives a moment and a place for the
+       reveal animation. [Suggestion: tap to apply, short animation.]
+   W2. Where the random pick happens: on the server, like the gold fix,
+       so nobody can re-roll or fake it; the app only shows the result.
+       [Suggestion: yes. Table user_wonders (user_id, wonder_id,
+       unlocked colours as a bitmask 0-1023, completed_at) plus a server
+       function grant_pigment(wonder_id) that picks a random locked
+       colour in one step.]
+   W3. Faint colours: in the Giza art the darkest navy and dark brown
+       are almost invisible on the dark card, so unlocking them looks
+       like nothing happened. Accepted for now. Options later: a
+       slightly lighter backdrop for the wonder card (about #16162E), or
+       the random pick avoids two faint colours in a row. Check each new
+       wonder for this.
+   W4. Which 5 of the 10 candidates launch, and in what order (easiest
+       or best-looking first)? Add an Oceania wonder?
+   W5. Exactly 10 mega quests per wonder (1 pigment each)? How the cost
+       grows from the first wonder to the later ones.
+   W6. Finished wonder as an avatar background (Feature 13): the
+       background crop (shape / ratio) is needed to check that each
+       wonder still looks right cropped. The share image (the shared
+       share card, F3) can reuse final.png.
+   W7. Locked teaser in the Passport Wonders tab: the plan says "greyed
+       / silhouetted", but locked colours are now hidden. Show an empty
+       card with the wonder name, a darkened final image, or an outline?
+   W8. After a wonder is finished: a gallery of finished wonders in the
+       Wonders tab, and what the card shows between finishing one and
+       starting the next.
+   W9. Reveal animation for a newly unlocked colour (fade in only that
+       layer, maybe a short flash) and a "6/10 colours" label on the
+       card.
 
 ------------------------------------------------------------
 FEATURE 13: AVATAR BACKGROUNDS  (DESIGNED)
@@ -965,6 +1056,8 @@ STILL OPEN
   - Compass Quiz: unlock condition (level, gold or quest).
   - Daily Challenge: one guess vs several, rewards per question + the
     unique reward, link to Daily Quests, streak / share.
+  - Wonders: questions W1-W9 (see Feature 12, WONDER ART & REVEAL
+    SYSTEM).
 
 ============================================================
 LATER / NOT IN THIS UPDATE
