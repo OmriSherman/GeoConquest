@@ -126,26 +126,39 @@ cv.fill(cv.lines([(364, 245), (398, 259), (436, 239)], 2) & ~robe, SLATE)   # he
 cv.fill(cv.ellipse(394, 162, 4, 4), CORAL)                                # the heart
 robe = robe | tunic
 
-# arms: short sleeves at the upper arm, slim forearms, open hands
+# arms: one continuous limb from the shoulder to the fingertips, tapering like a real arm
 def arm(side):
-    sh, el, wr, tip = CXS + side * 40, CXS + side * 76, CXS + side * 124, CXS + side * 142
-    upper = cv.poly([(sh, 118), (el, 122), (el, 138), (sh, 146)])
-    fore = cv.poly([(el, 123), (wr, 127), (wr, 135), (el, 137)])
-    sleeve = cv.poly([(sh, 145), (el, 137), (el - side * 6, 148), (CXS + side * 48, 176)])
-    hand = cv.poly([(wr, 126), (tip, 129), (tip, 137), (wr, 137)])
+    t = np.linspace(0, 1, 60)
+    xs_ = CXS + side * (34 + 112 * t)
+    yc = 129 + 3.0 * np.sin(np.pi * np.clip(t / 0.85, 0, 1)) - 4.0 * t       # slight sag, hands lift a little
+    th = np.interp(t, [0, 0.12, 0.32, 0.45, 0.62, 0.80, 0.86, 0.95, 1.0],
+                      [24, 20, 17, 14, 13, 10, 12, 11, 7])                   # shoulder, upper arm, elbow, wrist, hand
+    top = [(x, y - w / 2) for x, y, w in zip(xs_, yc, th)]
+    bot = [(x, y + w / 2) for x, y, w in zip(xs_, yc, th)]
+    limb = cv.poly(top + bot[::-1])
+    order = np.argsort(xs_)
+    yc_at = np.interp(XX, xs_[order], yc[order])
+    th_at = np.interp(XX, xs_[order], th[order])
+    across = np.clip((YY - yc_at) / (th_at / 2), -1, 1)                     # -1 top .. 1 underside
     shade = 0.34 + 0.22 * side
-    soap(upper | fore, shade + 0.16 * (1 - (YY - 118) / 22))
-    soap(sleeve, shade - 0.06 + 0.12 * (1 - (YY - 145) / 32))
+    soap(limb, shade + 0.22 * (1 - across) * 0.6 - 0.1 * np.clip(across, 0, 1))
+    # elbow crease and the fingers of the open hand
+    ex, ey = CXS + side * (34 + 112 * 0.46), 129 + 3.0 * np.sin(np.pi * 0.54) - 4.0 * 0.46
+    cv.fill(cv.lines([(ex, ey + 2), (ex + side * 3, ey + 6)], 1) & limb, SLATE)
+    for k in (-2, 1):
+        hx0 = CXS + side * (34 + 112 * 0.88)
+        cv.fill(cv.lines([(hx0, 125 + k + 4), (CXS + side * 144, 125 + k + 2.5)], 1) & limb, SLATE)
+    # short sleeve hanging from the upper arm
+    sleeve = cv.poly([(CXS + side * 40, 139), (CXS + side * 78, 140), (CXS + side * 72, 151), (CXS + side * 48, 176)])
+    soap(sleeve, shade - 0.04 + 0.12 * (1 - (YY - 139) / 37))
     cv.fill(sleeve & ~np.roll(sleeve, -1, 0), SLATE)
-    soap(hand, shade + 0.08)
-    cv.fill(cv.lines([(wr + side * 3, 131), (tip - side * 2, 132)], 1) & hand, SLATE)
-    cv.fill(cv.lines([(sh, 118), (wr, 127)], 1), GOLD if side > 0 else STONE)
-    return upper | fore | sleeve | hand
+    cv.fill(limb & ~np.roll(limb, 1, 0) & (XX * side > CXS * side + 36 * side * 0), GOLD if side > 0 else STONE)
+    return limb | sleeve
 
 arms = arm(-1) | arm(1)
 # shoulders, neck, head
-shoulders = cv.ellipse(CXS, 126, 44, 9)
-soap(shoulders, 0.40 + 0.3 * lit(CXS, 44))
+shoulders = cv.poly([(386, 113), (414, 113), (426, 115), (438, 119), (446, 124), (448, 136), (352, 136), (354, 124), (362, 119), (374, 115)])
+soap(shoulders, 0.40 + 0.3 * lit(CXS, 44) - 0.12 * np.clip((YY - 113) / 23, 0, 1))
 neck = cv.rect(393, 104, 408, 122)
 soap(neck, 0.30 + 0.3 * lit(CXS, 8))
 hair = (cv.ellipse(CXS, 88, 15, 18) | cv.poly([(386, 92), (414, 92), (417, 118), (383, 118)])) & (YY < 119)
