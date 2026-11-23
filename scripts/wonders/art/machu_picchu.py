@@ -230,6 +230,132 @@ def tree(X, Z, hgt, r, base=0.0):
     m = cv.ellipse(cx, cy, r * sc, r * sc * 0.5) | cv.ellipse(cx - r * sc * 0.45, cy + r * sc * 0.25, r * sc * 0.55, r * sc * 0.35)
     grass(m, 0.5 - 0.4 * (YY - cy) / (r * sc) - 0.15 * (XX - cx) / (r * sc))
 
+
+def thatch(mask, v0, along_x):
+    """Steep straw roof: strands run down the slope."""
+    if along_x:
+        strands = ((XX.astype(int) * 3 + YY.astype(int)) % 4) == 0
+    else:
+        strands = ((XX.astype(int) + YY.astype(int) * 3) % 4) == 0
+    v = v0 - 0.12 + (STN - 0.5) * 0.3 - np.where(strands, 0.25, 0)
+    cv.ramp(mask, v, [NIGHT, JUNGLE, STONE, GRANITE])
+
+def niche(X, Z, Y, w, hgt, along_x=True):
+    """Trapezoid Inca niche/window on a wall facing -Z (along_x) or +-X."""
+    if along_x:
+        pts = [(X - w * 0.35, Z, Y + hgt), (X + w * 0.35, Z, Y + hgt), (X + w * 0.5, Z, Y), (X - w * 0.5, Z, Y)]
+    else:
+        pts = [(X, Z - w * 0.35, Y + hgt), (X, Z + w * 0.35, Y + hgt), (X, Z + w * 0.5, Y), (X, Z - w * 0.5, Y)]
+    cv.fill(quad(*pts), NIGHT)
+
+def house_z(X0, X1, Za, Zb, h, base=0.0, roof=False, t=0.5):
+    """Long axis along Z: pointed gables at the front (Za) and back (Zb)."""
+    top, mid, gh = base + h, (X0 + X1) / 2, (X1 - X0) * 0.62
+    cast_shadow(X0, X1, Za, Zb, h + gh * 0.5, base)
+    if not roof:
+        grass(quad((X0, Za, base), (X1, Za, base), (X1, Zb, base), (X0, Zb, base)), 0.32)
+        stone(quad((X0, Zb - t, base), (X1, Zb - t, base), (X1, Zb - t, top), (X0, Zb - t, top)), shade(0, -1, 0.5))
+        stone(quad((X0, Zb - t, top), (X1, Zb - t, top), (mid, Zb - t, top + gh)), shade(0, -1, 0.46))
+        niche(mid, Zb - t, top + gh * 0.2, 0.7, 0.9)
+        for xw, nx in ((X0 + t, 1), (X1 - t, -1)):
+            if faces_cam(xw, (Za + Zb) / 2, nx, 0):
+                stone(quad((xw, Za, base), (xw, Zb, base), (xw, Zb, top), (xw, Za, top)), shade(nx, 0, 0.5))
+    for xw, nx in ((X0, -1), (X1, 1)):
+        if faces_cam(xw, (Za + Zb) / 2, nx, 0):
+            m = quad((xw, Za, base), (xw, Zb, base), (xw, Zb, top), (xw, Za, top))
+            stone(m, shade(nx, 0, 0.5))
+            for zz in np.arange(Za + 1.5, Zb - 1, 2.2):
+                niche(xw, zz, base + h * 0.45, 0.6, 0.9, along_x=False)
+    if roof:
+        o = 0.35
+        planes = [((X0 - o, Za - o, top), (X0 - o, Zb + o, top), (mid, Zb + o, top + gh), (mid, Za - o, top + gh), -1),
+                  ((X1 + o, Za - o, top), (X1 + o, Zb + o, top), (mid, Zb + o, top + gh), (mid, Za - o, top + gh), 1)]
+        planes.sort(key=lambda pl: faces_cam(mid + pl[4] * 2, (Za + Zb) / 2, pl[4], 0))
+        for a, b, c, d, nx in planes:
+            thatch(quad(a, b, c, d), shade(nx, 0, 0.5) + 0.1, along_x=False)
+        cv.fill(cv.lines([P(mid, Za - o, top + gh), P(mid, Zb + o, top + gh)], 1), STONE)
+    # front wall + front gable
+    stone(quad((X0, Za, base), (X1, Za, base), (X1, Za, top), (X0, Za, top)), shade(0, -1, 0.5))
+    stone(quad((X0, Za, top), (X1, Za, top), (mid, Za, top + gh)), shade(0, -1, 0.56))
+    niche(mid, Za, top + gh * 0.22, 0.7, 0.9)
+    cv.fill(quad((mid - 0.55, Za, base), (mid + 0.55, Za, base), (mid + 0.4, Za, base + h * 0.7), (mid - 0.4, Za, base + h * 0.7)), NIGHT)
+    if not roof:
+        tops = (quad((X0, Za, top), (X0 + t, Za, top), (X0 + t, Zb, top), (X0, Zb, top))
+                | quad((X1 - t, Za, top), (X1, Za, top), (X1, Zb, top), (X1 - t, Zb, top)))
+        cv.ramp(tops, 0.8 + (STN - 0.5) * 0.3, [STONE, GRANITE])
+    cv.fill(cv.lines([P(X0, Za, top), P(mid, Za, top + gh)], 1), GRANITE)
+
+def house_x(X0, X1, Za, Zb, h, base=0.0, roof=False, t=0.5):
+    """Long axis along X: gables on the left (X0) and right (X1) ends."""
+    top, midz, gh = base + h, (Za + Zb) / 2, (Zb - Za) * 0.62
+    cast_shadow(X0, X1, Za, Zb, h + gh * 0.5, base)
+    if not roof:
+        grass(quad((X0, Za, base), (X1, Za, base), (X1, Zb, base), (X0, Zb, base)), 0.32)
+        stone(quad((X0, Zb - t, base), (X1, Zb - t, base), (X1, Zb - t, top), (X0, Zb - t, top)), shade(0, -1, 0.5))
+        for zz in np.arange(X0 + 1.6, X1 - 1, 2.3):
+            niche(zz, Zb - t, base + h * 0.4, 0.6, 1.0)
+    for xw, nx in ((X0, -1), (X1, 1)):
+        side_in = (xw + t * (-nx), nx * -1)
+        if not roof and faces_cam(xw - nx * t, midz, -nx, 0):
+            stone(quad((xw - nx * t, Za, base), (xw - nx * t, Zb, base), (xw - nx * t, Zb, top), (xw - nx * t, Za, top),
+                       ), shade(-nx, 0, 0.5))
+            stone(quad((xw - nx * t, Za, top), (xw - nx * t, Zb, top), (xw - nx * t, midz, top + gh)), shade(-nx, 0, 0.46))
+    if roof:
+        o = 0.35
+        back = quad((X0 - o, Zb + o, top), (X1 + o, Zb + o, top), (X1 + o, midz, top + gh), (X0 - o, midz, top + gh))
+        thatch(back, 0.42, along_x=True)
+        front = quad((X0 - o, Za - o, top), (X1 + o, Za - o, top), (X1 + o, midz, top + gh), (X0 - o, midz, top + gh))
+        thatch(front, 0.6, along_x=True)
+        cv.fill(cv.lines([P(X0 - o, midz, top + gh), P(X1 + o, midz, top + gh)], 1), STONE)
+    for xw, nx in ((X0, -1), (X1, 1)):
+        if faces_cam(xw, midz, nx, 0):
+            stone(quad((xw, Za, base), (xw, Zb, base), (xw, Zb, top), (xw, Za, top)), shade(nx, 0, 0.5))
+            stone(quad((xw, Za, top), (xw, Zb, top), (xw, midz, top + gh)), shade(nx, 0, 0.54))
+            niche(xw, midz, top + gh * 0.22, 0.7, 0.9, along_x=False)
+            cv.fill(cv.lines([P(xw, Za, top), P(xw, midz, top + gh)], 1), GRANITE)
+    stone(quad((X0, Za, base), (X1, Za, base), (X1, Za, top), (X0, Za, top)), shade(0, -1, 0.5))
+    for zz in np.arange(X0 + 1.6, X1 - 1, 2.3):
+        niche(zz, Za, base + h * 0.4, 0.6, 1.0)
+    if not roof:
+        tops = (quad((X0, Za, top), (X1, Za, top), (X1, Za + t, top), (X0, Za + t, top))
+                | quad((X0, Zb - t, top), (X1, Zb - t, top), (X1, Zb, top), (X0, Zb, top)))
+        cv.ramp(tops, 0.8 + (STN - 0.5) * 0.3, [STONE, GRANITE])
+
+def wall(X0, X1, Za, Zb, h, base=0.0):
+    """Free-standing enclosure wall segment (axis-aligned box)."""
+    top = base + h
+    for xw, nx in ((X0, -1), (X1, 1)):
+        if faces_cam(xw, (Za + Zb) / 2, nx, 0):
+            stone(quad((xw, Za, base), (xw, Zb, base), (xw, Zb, top), (xw, Za, top)), shade(nx, 0, 0.5))
+    stone(quad((X0, Za, base), (X1, Za, base), (X1, Za, top), (X0, Za, top)), shade(0, -1, 0.5))
+    cv.ramp(quad((X0, Za, top), (X1, Za, top), (X1, Zb, top), (X0, Zb, top)), 0.8 + (STN - 0.5) * 0.3, [STONE, GRANITE])
+
+def compound(X0, X1, Za, Zb, base, seed):
+    """Walled kancha: outer wall, courtyard, 2-3 gabled houses inside."""
+    r = np.random.default_rng(seed)
+    t, hw = 0.9, r.uniform(2.3, 2.8)
+    cast_shadow(X0, X1, Za, Zb, hw, base)
+    cv.ramp(quad((X0, Za, base), (X1, Za, base), (X1, Zb, base), (X0, Zb, base)), 0.5 + (STN - 0.5) * 0.3,
+            [JUNGLE, STONE, GRANITE] if r.random() < 0.5 else GRASS_RAMP)
+    wall(X0, X1, Zb - t, Zb, hw, base)                                  # back wall
+    hd = r.uniform(4.2, 5.0)
+    roofed = r.random() < 0.35
+    # house along the back
+    house_x(X0 + t, X1 - t - (r.uniform(0, 3) if r.random() < 0.5 else 0), Zb - t - hd, Zb - t,
+            hw + r.uniform(0.6, 1.2), base, roof=roofed)
+    # house along the left side
+    if r.random() < 0.8:
+        house_z(X0 + t, X0 + t + hd, Za + t + 1.5, Zb - t - hd - 0.6, hw + r.uniform(0.6, 1.2), base, roof=r.random() < 0.3)
+    # house along the right side
+    if r.random() < 0.5 and X1 - X0 > 16:
+        house_z(X1 - t - hd, X1 - t, Za + t + 1.5, Zb - t - hd - 0.6, hw + r.uniform(0.6, 1.0), base, roof=r.random() < 0.3)
+    wall(X0, X0 + t, Za, Zb, hw, base)                                  # side walls
+    wall(X1 - t, X1, Za, Zb, hw, base)
+    gate = X0 + (X1 - X0) * r.uniform(0.35, 0.65)                       # front wall with a gate
+    wall(X0, gate - 1.0, Za, Za + t, hw * 0.85, base)
+    wall(gate + 1.0, X1, Za, Za + t, hw * 0.85, base)
+    cv.fill(cv.lines([P(gate - 1.0, Za, base + hw * 0.85), P(gate + 1.0, Za, base + hw * 0.85)], 2), STONE)
+
 # the ridge top the citadel stands on
 ground = quad((-120, -40), (84, -40), (90, 40), (78, 92), (10, 104), (-76, 100), (-118, 50))
 grass(ground, 0.48)
@@ -265,17 +391,34 @@ for i in range(8):
     Z = 92 - i * 5
     items.append((depth_key(-72, -20, Z, Z + 5) + 1, "plat",
                   dict(X0=-76 + i * 2.5, X1=-26 + i * 1.5, Za=Z, Zb=Z + 5, base=(8 - i) * 1.3 + 1, rise=1.3)))
-# west quarter: rows of rooms alternating with grass terraces
-west = [(48, True), (37, False), (26, True), (15, True), (4, False), (-7, True), (-18, True), (-29, True)]
-for k, (Z, has) in enumerate(west):
-    block(-110 + k * 0.5, -42, Z, 9.5, 1.6 - k * 0.15, gable_p=0.35, seed=40 + k, hmin=2.4, hmax=3.6, rooms=has)
-# the famous gabled houses between the west quarter and the plaza
-for k, Z in enumerate(range(40, -33, -11)):
-    block(-37, -6, Z, 9.5, 0.6, gable_p=0.9, narrow=True, hmin=2.8, hmax=3.3, seed=60 + k, alley=0.12)
-# east quarter, stepped terraces with groups of rooms
-east = [(78, True), (67, True), (56, False), (45, True), (34, True), (23, False), (12, True), (1, True), (-10, False), (-21, True)]
-for k, (Z, has) in enumerate(east):
-    block(22, 74 - abs(k - 5) * 2, Z, 9.5, 1.2 + (len(east) - k) * 0.15, gable_p=0.4, seed=80 + k, rooms=has, alley=0.3)
+# west quarter: walled compounds on stepped terraces, split by alleys
+def quarter(Xa, Xb, rows, seed, base0, dbase):
+    r = np.random.default_rng(seed)
+    for k, (Z, depth) in enumerate(rows):
+        base = base0 + k * dbase
+        items.append((depth_key(Xa, Xb, Z, Z + depth) + 0.5, "plat",
+                      dict(X0=Xa - 1.5, X1=Xb + 1.5, Za=Z - 1.5, Zb=Z + depth + 1, base=base - 1.0, rise=1.0)))
+        X = Xa
+        while X < Xb - 10:
+            w = r.uniform(14, 22)
+            x1 = min(X + w, Xb)
+            if x1 - X >= 10:
+                items.append((depth_key(X, x1, Z, Z + depth), "compound", dict(X0=X, X1=x1, Za=Z, Zb=Z + depth, base=base, seed=int(r.integers(1e6)))))
+            X = x1 + r.uniform(1.8, 3.0)
+
+quarter(-112, -44, [(44, 15), (25, 15), (6, 15), (-13, 15), (-32, 15)], 41, 1.8, -0.3)
+# rows of gabled houses between the west quarter and the plaza (some thatched)
+rr = np.random.default_rng(61)
+for k, Z in enumerate(range(44, -36, -12)):
+    items.append((depth_key(-40, -5, Z, Z + 10) + 0.5, "plat", dict(X0=-41, X1=-4, Za=Z - 1, Zb=Z + 10.5, base=-0.4, rise=1.0)))
+    X = -40.0
+    while X < -9:
+        w = rr.uniform(4.0, 5.0)
+        items.append((depth_key(X, X + w, Z, Z + 9) + 0.01 * X, "house_z",
+                      dict(X0=X, X1=X + w, Za=Z, Zb=Z + rr.uniform(8, 9.5), h=rr.uniform(2.6, 3.2), base=0.6, roof=rr.random() < 0.25)))
+        X += w + rr.uniform(1.3, 2.6)
+# east quarter: compounds on terraces stepping down toward the gorge
+quarter(22, 76, [(76, 14), (58, 15), (40, 15), (22, 15), (4, 15), (-14, 14)], 81, 2.6, -0.3)
 
 # the plaza: long lawn on stepped levels, with its lone trees
 for k, (za, zb, b) in enumerate([(55, 82, 0.4), (25, 55, -0.3), (-5, 25, -1.0), (-32, -5, -1.7)]):
@@ -287,6 +430,10 @@ items.sort(key=lambda it: -it[0])
 for key, kind, kw in items:
     if kind == "room":
         room(**kw)
+    elif kind == "compound":
+        compound(**kw)
+    elif kind == "house_z":
+        house_z(**kw)
     elif kind == "plat":
         platform(**kw)
     elif kind == "lawn":
