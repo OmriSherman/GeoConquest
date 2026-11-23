@@ -123,6 +123,24 @@ export const WONDERS: Wonder[] = [
       require('../../assets/wonders/colosseum/layer_9.webp'),
     ],
   },
+  {
+    id: 'christ-redeemer',
+    name: "Christ the Redeemer",
+    cca2: 'BR',
+    palette: ["#0C1426", "#1C3557", "#1E3A2E", "#3C6E86", "#545E66", "#9AA3A0", "#D9737A", "#F4A273", "#FFD98A", "#FFF6E6"],
+    layers: [
+      require('../../assets/wonders/christ-redeemer/layer_0.webp'),
+      require('../../assets/wonders/christ-redeemer/layer_1.webp'),
+      require('../../assets/wonders/christ-redeemer/layer_2.webp'),
+      require('../../assets/wonders/christ-redeemer/layer_3.webp'),
+      require('../../assets/wonders/christ-redeemer/layer_4.webp'),
+      require('../../assets/wonders/christ-redeemer/layer_5.webp'),
+      require('../../assets/wonders/christ-redeemer/layer_6.webp'),
+      require('../../assets/wonders/christ-redeemer/layer_7.webp'),
+      require('../../assets/wonders/christ-redeemer/layer_8.webp'),
+      require('../../assets/wonders/christ-redeemer/layer_9.webp'),
+    ],
+  },
 ];
 
 export function getWonder(id: string): Wonder | undefined {

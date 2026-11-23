@@ -4,5 +4,6 @@
   {"id": "great-wall", "name": "Great Wall of China", "cca2": "CN"},
   {"id": "machu-picchu", "name": "Machu Picchu", "cca2": "PE"},
   {"id": "petra", "name": "Petra", "cca2": "JO"},
-  {"id": "colosseum", "name": "Colosseum", "cca2": "IT"}
+  {"id": "colosseum", "name": "Colosseum", "cca2": "IT"},
+  {"id": "christ-redeemer", "name": "Christ the Redeemer", "cca2": "BR"}
 ]

@@ -132,7 +132,6 @@ uy = 122 + 26 * (1 - tt ** 2)
 cv.fill(cv.lines(list(zip(ux, uy)), 3) & robe, STONE)
 cv.fill(cv.lines(list(zip(ux, uy + 2.5)), 1) & robe, SLATE)
 cv.fill(cv.lines([(364, 245), (398, 259), (436, 239)], 2) & ~robe, SLATE)   # hem shadow on the tunic
-cv.fill(cv.ellipse(394, 162, 4, 4), CORAL)                                # the heart
 robe = robe | tunic
 
 # arms: a wide fabric sleeve hangs under each arm, then the limb is drawn on top
