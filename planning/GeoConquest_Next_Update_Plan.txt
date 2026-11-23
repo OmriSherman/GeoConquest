@@ -9,7 +9,7 @@ Features in this update:
   1. Daily Quests (replaces the Daily Leaderboard + login reward)
   2. Weekly Challenge (percentage-based, global competition)
   3. Weekly Challenge winners announcement
-  4. Passport tab (Main | Stamps | Quests | Collection)
+  4. Passport tab (Main | Stamps | Quests | Collection | Wonders)
   5. Economy config controlled from the admin dashboard
   6. New mode: Compass Quiz (country direction)
   7. Quiz difficulty: Easy / Medium / Hard
@@ -291,7 +291,7 @@ MAIN PASSPORT PAGE (DECIDED) - opens by default
   - Content: the conquest map (owned countries / empire progress),
     your Daily Quests, and current progress. That's it.
   - Top Explorers mini-leaderboard is dropped.
-  - Subtabs: Main | Stamps | Quests | Collection
+  - Subtabs: Main | Stamps | Quests | Collection | Wonders
       Main       - conquest map + Daily Quests + current progress
       Stamps     - passport book, one page per continent, grid of stamp
                    slots (collected = stamp art, missing = faint
@@ -299,6 +299,8 @@ MAIN PASSPORT PAGE (DECIDED) - opens by default
       Quests     - current Achievements/Quests screen
       Collection - owned avatars + upgrades; avatars are EQUIPPED here
                    (bought in the Shop)
+      Wonders    - endgame paintings (Feature 12); teaser + unlock
+                   progress until level 100 + all countries owned
 
 STAMP DROP RULES (DECIDED)
   - Chance: 0.3% per CORRECT ANSWER (dashboard-adjustable).
@@ -791,9 +793,19 @@ ASSESSMENT
   - Replaces Prestige as the post-300 goal; Seasons / Country Mastery
     can still come later.
 
+DECISIONS
+  - Unlock: BOTH level 100 AND owning every country in the shop
+    (250 countries, about 1.5 million gold in total at today's
+    prices - a real long-term goal, and the conquest map is "done").
+  - New Passport subtab: Main | Stamps | Quests | Collection | Wonders.
+  - Wonders tab is visible to EVERYONE from day one as a teaser:
+      * Locked: the wonders shown greyed / silhouetted, with the unlock
+        requirements and live progress ("Level 64 / 100",
+        "Countries 112 / 250") and a short explainer of what Wonders are.
+      * Unlocked: wonders in progress (painting + pigments collected)
+        and completed wonders.
+
 OPEN QUESTIONS
-  X1. Unlock gate: keep level 300 + all countries, or open the first
-      wonder earlier? [Earlier, e.g. level 100]
   X2. Can each pigment be earned by EITHER path (mega quest or
       trial), or is the trial a separate bonus source?
       [Either path - player chooses grind or gamble]
