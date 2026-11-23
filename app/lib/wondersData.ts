@@ -87,6 +87,24 @@ export const WONDERS: Wonder[] = [
       require('../../assets/wonders/machu-picchu/layer_9.webp'),
     ],
   },
+  {
+    id: 'petra',
+    name: "Petra",
+    cca2: 'JO',
+    palette: ["#140A0C", "#3A1612", "#5A3A4A", "#6E2A1E", "#7FB4D8", "#A8462C", "#C89A6A", "#D2704A", "#F2A878", "#FFE3B8"],
+    layers: [
+      require('../../assets/wonders/petra/layer_0.webp'),
+      require('../../assets/wonders/petra/layer_1.webp'),
+      require('../../assets/wonders/petra/layer_2.webp'),
+      require('../../assets/wonders/petra/layer_3.webp'),
+      require('../../assets/wonders/petra/layer_4.webp'),
+      require('../../assets/wonders/petra/layer_5.webp'),
+      require('../../assets/wonders/petra/layer_6.webp'),
+      require('../../assets/wonders/petra/layer_7.webp'),
+      require('../../assets/wonders/petra/layer_8.webp'),
+      require('../../assets/wonders/petra/layer_9.webp'),
+    ],
+  },
 ];
 
 export function getWonder(id: string): Wonder | undefined {
