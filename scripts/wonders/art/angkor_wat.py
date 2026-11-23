@@ -129,7 +129,25 @@ def gallery(x0, x1, y_roof, y_base, roof_h, seed, glow=True):
 gallery(262, 538, 262, 300, 10, 1)
 tower(328, 146, 238, 22, 9)
 tower(472, 146, 238, 22, 9)
-tower(400, 92, 228, 30, 11)
+def sanctuary_platform(cx):
+    """Stepped terrace that carries the central tower down onto the top gallery."""
+    global temple
+    for (hw, y0, y1, v) in ((70, 248, 266, 0.24), (54, 236, 250, 0.28), (42, 226, 238, 0.3)):
+        m = cv.rect(cx - hw, y0, cx + hw, y1)
+        tone(m, v)
+        cv.fill(cv.rect(cx - hw, y0, cx + hw, y0 + 1), PLUM)           # ledge
+        cv.fill(cv.rect(cx - hw, y1 - 2, cx + hw, y1), NIGHT)          # shadow under the ledge
+        for dx in (-hw * 0.62, hw * 0.62):                             # side doorways
+            cv.fill(cv.rect(cx + dx - 2, y0 + 4, cx + dx + 3, y1 - 2), NIGHT)
+        temple |= m
+    stair = cv.poly([(cx - 9, 266), (cx + 9, 266), (cx + 5, 226), (cx - 5, 226)])
+    tone(stair, 0.36)
+    for yy in range(228, 266, 3):
+        cv.fill(stair & (np.abs(YY - yy) < 0.5), NIGHT)
+    temple |= stair
+
+sanctuary_platform(400)
+tower(400, 92, 222, 30, 11)
 gallery(192, 608, 296, 330, 9, 2)
 tower(252, 196, 278, 16, 7)
 tower(548, 196, 278, 16, 7)
