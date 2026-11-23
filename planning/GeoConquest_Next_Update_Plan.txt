@@ -733,7 +733,7 @@ OPEN QUESTIONS
       everyone (announcements, updates)? [Yes]
 
 ------------------------------------------------------------
-FEATURE 12: ENDGAME - WONDERS  (in discussion)
+FEATURE 12: ENDGAME - WONDERS  (DESIGNED)
 ------------------------------------------------------------
 PROBLEM
   After level 100 little happens; quests every 50 levels up to 300,
@@ -768,8 +768,7 @@ USER'S DIRECTION: "WONDERS" (pigments + paintings)
     painting. All pigments -> wonder complete -> next wonder.
   - Path A, Mega Quest: a list of requirements turned in together,
     e.g. "Borders 90%+ x30" + "500,000 gold" + "30 tickets".
-  - Path B, Pigment Trial: a unique, very hard quiz; each try costs
-    several tickets; completing it grants a pigment.
+  - (Path B, Pigment Trial - dropped, see below.)
 
 ASSESSMENT
   Strong: fits the game (colours/flags/palettes), very visual progress
@@ -805,17 +804,25 @@ DECISIONS
       * Unlocked: wonders in progress (painting + pigments collected)
         and completed wonders.
 
-OPEN QUESTIONS
-  X2. Can each pigment be earned by EITHER path (mega quest or
-      trial), or is the trial a separate bonus source?
-      [Either path - player chooses grind or gamble]
-  X3. What is the Pigment Trial quiz? (e.g. mixed modes, Hard, 6-answer
-      questions, 1 mistake allowed, 20 questions)
-  X4. Reward for finishing a wonder: title, avatar frame, wonder badge
-      on profile / leaderboard, shareable painting?
-  X5. How many wonders at launch? [3-5, then add over time]
-  X6. Is there a hard level cap at 300 today?
-  X7. Mega quest requirements: consumed on turn-in? [Yes]
+MORE DECISIONS
+  - Pigment Trial DROPPED: it would burn the same gold / tickets the
+    mega quests need. Pigments come from MEGA QUESTS only.
+  - Mega quests cost gold, used up on turn-in (gold sink).
+  - Several mega quests can progress at the same time.
+  - 5 wonders at launch, more added over time.
+  - Finishing a wonder gives: a title, an avatar frame, a wonder badge
+    on profile / leaderboard, a shareable image of the painting, AND
+    the wonder becomes an AVATAR BACKGROUND.
+  - Avatar system upgrade: profile = avatar + flag + BACKGROUND (new
+    cosmetic slot). Finished wonders are the first backgrounds; the
+    slot can later hold other backgrounds (events, seasons, shop).
+  - No hard level cap today; after level 300 nothing new happens
+    (level quests exist only at 150 / 200 / 250 / 300).
+
+SUGGESTION (to confirm)
+  - Keep level milestones going forever, generated automatically
+    (every 50 levels: 350, 400, ...), with rewards from the dashboard,
+    so leveling always means something.
 
 ============================================================
 BUILD ORDER
