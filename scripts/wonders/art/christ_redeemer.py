@@ -84,26 +84,12 @@ def cloud_sea(y_top, y_bot, seed, thr):
 cloud_sea(468, 600, 61, 0.5)
 cloud_sea(520, 640, 62, 0.45)
 
-# ---- Corcovado: the jungle peak under the statue ---------------------------------------------------
-top_line = np.interp(XX[0], [0, 120, 220, 290, 340, 370, 430, 462, 520, 600, 700, 800],
-                     [600, 575, 530, 482, 448, 434, 434, 448, 488, 540, 585, 600])
-TL = top_line[None, :] + (cv.noise(4, 30, 71, 2)[0][None, :] - 0.5) * 6
-hill = YY >= TL
-u = (XX - 400) / 260
+# ---- the summit: jungle just beyond the terrace edges ----------------------------------------------
 crowns = cv.noise(3.5, 3, 72, 2)
-v = 0.30 + 0.22 * u - 0.25 * np.clip((YY - TL) / 160, 0, 1) + (crowns - 0.5) * 0.4
-cv.ramp(hill, v, [NIGHT, FOREST, TEAL, CORAL])
-rock = hill & (cv.noise(4, 18, 73, 2) > 0.6) & (u > -0.05) & (YY < TL + 80)
-cv.ramp(rock, 0.22 + 0.35 * np.clip(u, 0, 1) + (cv.noise(3, 3, 75, 2) - 0.5) * 0.35, [NIGHT, SLATE, STONE, CORAL])
-cv.fill(hill & ~np.roll(hill, 1, 0) & (XX > 400), CORAL)                   # sunlit crest
-cloud_sea(548, 640, 74, 0.55)                                               # low clouds drift over the slopes
-
-# viewing terrace with its railing
-terr = cv.rect(318, 430, 483, 440)
-cv.ramp(terr, 0.55 + 0.3 * (XX - 318) / 165, [SLATE, STONE, CORAL])
-for x in range(320, 482, 5):
-    cv.fill(cv.rect(x, 423, x + 1, 430), SLATE)
-cv.fill(cv.rect(318, 422, 483, 424), STONE)
+for (x0, x1, ytop) in ((0, 260, 470), (540, 800, 478)):
+    m = (XX >= x0) & (XX < x1) & (YY >= ytop + (cv.noise(8, 20, x0 + 5, 2) - 0.5) * 24)
+    u = (XX - 400) / 400
+    cv.ramp(m, 0.30 + 0.25 * u + (crowns - 0.5) * 0.45, [NIGHT, FOREST, TEAL, CORAL])
 
 # ---- the statue ---------------------------------------------------------------------------------------
 def soap(mask, v):
@@ -115,39 +101,46 @@ CXS = 400
 def lit(x, half):
     return np.clip((XX - x) / half, -1, 1)
 
-# pedestal
-ped = cv.poly([(366, 430), (434, 430), (430, 370), (370, 370)])
-soap(ped, 0.36 + 0.3 * (XX - 366) / 68)
-cv.fill(cv.rect(362, 367, 438, 371), STONE)
-cv.fill(cv.rect(370, 394, 430, 395), SLATE)
+# pedestal: dark granite block with a cornice
+ped = cv.rect(352, 376, 449, 440)
+cv.ramp(ped, 0.20 + 0.30 * np.clip((XX - 352) / 97, 0, 1) ** 2 + (cv.noise(3, 3, 83, 2) - 0.5) * 0.12, [NIGHT, SLATE, STONE])
+cv.ramp(cv.rect(346, 366, 455, 377), 0.38 + 0.3 * (XX - 346) / 109, [NIGHT, SLATE, STONE, CORAL])
+cv.fill(cv.rect(346, 366, 455, 367), STONE)
+cv.fill(cv.rect(352, 377, 449, 379), NIGHT)
+for yy in (398, 420):
+    cv.fill(cv.rect(352, yy, 449, yy + 1), NIGHT)
 
-# robe: broad, falling straight to the feet
-robe = cv.poly([(356, 124), (444, 124), (446, 160), (439, 368), (361, 368), (354, 160)])
-v = 0.34 + 0.34 * lit(CXS, 46) + 0.06 * np.cos((XX - CXS) * 0.5)
-folds = (((XX.astype(int) - CXS) % 10) == 0) & (YY > 215)
-v = np.where(folds, v - 0.16, v)
-v = np.where((np.abs(XX - CXS) < 1.2) & (YY > 215), v - 0.2, v)          # centre seam of the tunic
+# pleated tunic below the cloak
+tunic = cv.poly([(371, 236), (429, 236), (427, 366), (373, 366)])
+pleat = ((XX.astype(int) - CXS) % 5) == 0
+soap(tunic, 0.32 + 0.34 * lit(CXS, 34) - np.where(pleat, 0.18, 0) + 0.06 * np.sin((XX - CXS) * 1.2))
+cv.fill(cv.rect(373, 361, 427, 366), SLATE)
+
+# cloak draped over the shoulders, ending at mid-thigh with an uneven hem
+robe = cv.poly([(356, 124), (444, 124), (446, 150), (440, 180), (436, 238), (418, 250), (398, 258), (364, 244), (360, 180), (354, 150)])
+v = 0.34 + 0.34 * lit(CXS, 46) + 0.05 * np.cos((XX - CXS) * 0.45)
 soap(robe, v)
-cv.fill(robe & (np.abs(YY - 212) < 1.5), SLATE)                          # cord at the waist
-cv.fill(cv.ellipse(394, 168, 4, 4), CORAL)                                # the heart
-cv.fill(cv.rect(360, 362, 440, 368), SLATE)                               # hem shadow
-cv.fill(cv.poly([(386, 368), (396, 368), (395, 372), (385, 372)]) | cv.poly([(404, 368), (414, 368), (415, 372), (405, 372)]), STONE)
+for (x0, y0, x1, y1) in ((400, 150, 392, 258), (414, 160, 424, 250), (382, 168, 372, 240)):   # long drape folds
+    cv.fill(cv.lines([(x0, y0), (x1, y1)], 1) & robe, SLATE)
+cv.fill(cv.lines([(364, 245), (398, 259), (436, 239)], 2) & ~robe, SLATE)   # hem shadow on the tunic
+cv.fill(cv.ellipse(394, 162, 4, 4), CORAL)                                # the heart
+robe = robe | tunic
 
-# arms with long hanging sleeves, hands open
+# arms: short sleeves at the upper arm, slim forearms, open hands
 def arm(side):
-    sh, wr, tip = CXS + side * 40, CXS + side * 124, CXS + side * 144
-    upper = cv.poly([(sh, 118), (wr, 126), (wr, 142), (sh, 148)])
-    sleeve = cv.poly([(sh, 146), (wr - side * 4, 142), (wr - side * 14, 156), (CXS + side * 46, 204)])
-    hand = cv.poly([(wr, 126), (tip, 131), (tip, 141), (wr, 144)])
+    sh, el, wr, tip = CXS + side * 40, CXS + side * 76, CXS + side * 124, CXS + side * 142
+    upper = cv.poly([(sh, 118), (el, 122), (el, 138), (sh, 146)])
+    fore = cv.poly([(el, 123), (wr, 127), (wr, 135), (el, 137)])
+    sleeve = cv.poly([(sh, 145), (el, 137), (el - side * 6, 148), (CXS + side * 48, 176)])
+    hand = cv.poly([(wr, 126), (tip, 129), (tip, 137), (wr, 137)])
     shade = 0.34 + 0.22 * side
-    soap(upper, shade + 0.18 * (1 - (YY - 118) / 28))
-    soap(sleeve, shade - 0.06 + 0.12 * (1 - (YY - 146) / 58))
-    cv.fill(sleeve & ~np.roll(sleeve, -1, 0), SLATE)                    # hem line
-    cv.fill(cv.lines([(sh, 147), (wr, 142)], 1), SLATE)                  # fold under the forearm
+    soap(upper | fore, shade + 0.16 * (1 - (YY - 118) / 22))
+    soap(sleeve, shade - 0.06 + 0.12 * (1 - (YY - 145) / 32))
+    cv.fill(sleeve & ~np.roll(sleeve, -1, 0), SLATE)
     soap(hand, shade + 0.08)
-    cv.fill(cv.lines([(wr + side * 3, 130), (tip - side * 2, 134)], 1) & hand, SLATE)  # fingers
-    cv.fill(cv.lines([(sh, 118), (wr, 126)], 1), GOLD if side > 0 else STONE)
-    return upper | sleeve | hand
+    cv.fill(cv.lines([(wr + side * 3, 131), (tip - side * 2, 132)], 1) & hand, SLATE)
+    cv.fill(cv.lines([(sh, 118), (wr, 127)], 1), GOLD if side > 0 else STONE)
+    return upper | fore | sleeve | hand
 
 arms = arm(-1) | arm(1)
 # shoulders, neck, head
@@ -175,6 +168,71 @@ cv.fill(top & (XX > CXS), CORAL)
 # warm glow behind the statue's head
 dh = np.hypot(XX - CXS, YY - 92)
 cv.remap((dh < 52) & ~statue, ONE * np.clip(1 - dh / 52, 0, 1) * 0.55, LIGHTER)
+
+# ---- the walkway up to the pedestal, between two balustrades ------------------------------------------
+VPX, VPY = 400.0, 400.0
+def along(p0, t):
+    """Point a fraction t of the way from p0 toward the vanishing point."""
+    return (p0[0] + (VPX - p0[0]) * t, p0[1] + (VPY - p0[1]) * t)
+
+L0, R0 = (150.0, 600.0), (650.0, 600.0)
+TF = 0.80                                            # walkway ends at the pedestal
+floor = cv.poly([L0, R0, along(R0, TF), along(L0, TF)])
+dist = np.clip((YY - 440) / 160, 0, 1)
+v = 0.30 + 0.20 * dist + (cv.noise(6, 3, 91, 2) - 0.5) * 0.1
+# paving joints converging on the vanishing point
+ang = np.arctan2(YY - VPY, XX - VPX)
+radial = (np.abs(((ang * 40) % 1.0) - 0.5) < 0.06)
+rows = np.abs(((1 / np.maximum(YY - VPY, 1)) * 1600) % 1.0 - 0.5) < 0.06
+v = np.where(radial | rows, v - 0.14, v)
+cv.ramp(floor, v, [NIGHT, SLATE, STONE, CORAL])
+# warm sunset sheen on the stones, and the statue's long shadow falling toward us
+sheen = floor & (np.abs(XX - (440 + (YY - 440) * 0.9)) < 30 + (YY - 440) * 0.4)
+cv.remap(sheen, ONE * 0.35, LIGHTER)
+shadow = cv.poly([(388, 440), (412, 440), (330, 600), (250, 600)])
+cv.darken(floor & shadow, ONE)
+
+def balustrade(base0, side):
+    """Balustrade along one edge of the walkway; side=-1 left, +1 right."""
+    hb = 74.0
+    base_far = along(base0, TF)
+    s0, s1 = 1.0, 1.0 - TF
+    def top_at(t):
+        bx, by = along(base0, t)
+        return bx, by - hb * (1 - t)
+    face = cv.poly([base0, base_far, top_at(TF), top_at(0)])
+    inner_lit = 0.62 if side < 0 else 0.30          # left railing faces the sun
+    cv.ramp(face, inner_lit + (cv.noise(3, 3, 95 + side, 2) - 0.5) * 0.15, [NIGHT, SLATE, STONE, CORAL])
+    # open band with balusters between the plinth and the top rail
+    t = 0.0
+    while t < TF:
+        sc = 1 - t
+        bx, by = along(base0, t)
+        x_, y0 = bx, by - hb * sc * 0.22
+        y1 = by - hb * sc * 0.80
+        w = 6 * sc
+        gap_w = 9 * sc
+        gap = cv.rect(x_ + side * 0.0, y1, x_ + gap_w, y0) if side < 0 else cv.rect(x_ - gap_w, y1, x_, y0)
+        cv.fill(gap & face, NIGHT if side > 0 else SLATE)
+        # vase-shaped baluster
+        cxb = x_ + (gap_w / 2 if side < 0 else -gap_w / 2)
+        bal = cv.ellipse(cxb, (y0 + y1) / 2 + (y0 - y1) * 0.12, w * 0.42, (y0 - y1) * 0.36) | cv.rect(cxb - w * 0.2, y1, cxb + w * 0.2, y0)
+        cv.ramp(bal & face, inner_lit + 0.12 + 0.2 * (XX - cxb) / max(w, 1), [NIGHT, SLATE, STONE, CORAL])
+        t += 0.045 * (1 - t * 0.9)
+    # top rail and plinth edges
+    cv.fill(cv.lines([top_at(0), top_at(TF)], 4) | cv.lines([(top_at(0)[0], top_at(0)[1] + 4), (top_at(TF)[0], top_at(TF)[1] + 1)], 2), STONE)
+    cv.fill(cv.lines([top_at(0), top_at(TF)], 1), GOLD if side < 0 else CORAL)
+    cv.fill(cv.lines([along(base0, 0), along(base0, TF)], 2), NIGHT)
+
+balustrade(L0, -1)
+balustrade(R0, 1)
+
+# a few visitors near the pedestal for scale
+def person(x, y, h):
+    m = cv.ellipse(x, y - h + 2, 1.6, 1.8) | cv.poly([(x - 2, y), (x + 2, y), (x + 1.6, y - h + 3.5), (x - 1.6, y - h + 3.5)])
+    cv.fill(m, NIGHT)
+for (x, y, h) in ((372, 452, 11), (380, 455, 12), (424, 458, 12)):
+    person(x, y, h)
 
 # birds
 for bx, by, s in [(520, 210, 4), (538, 203, 3), (552, 214, 3)]:
