@@ -930,7 +930,10 @@ WONDER ART & REVEAL SYSTEM  (ASSETS + DATA BUILT, SCREEN NOT BUILT YET)
     wonder are on screen.
   - To add a wonder: put final.png in assets/wonders/<id>/, add a line
     to wonders.json, run:  python3 -I scripts/wonders/build_layers.py
-  - Built so far: Great Pyramid of Giza (Egypt).
+  - Built: ALL 10 wonders (art + layers + wondersData.ts), about 2.1 MB in
+    total. Great Pyramid of Giza, Taj Mahal, Great Wall of China, Machu
+    Picchu, Petra, Colosseum, Christ the Redeemer, Angkor Wat, Ha Long Bay,
+    Victoria Falls. Art scripts are in scripts/wonders/art/ (one per wonder).
 
   The 10 wonders (AGREED; the plan launches with 5) - drawn in this
   order, each with its own mood so the set doesn't repeat:

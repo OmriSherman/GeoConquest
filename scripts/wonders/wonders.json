@@ -7,5 +7,6 @@
   {"id": "colosseum", "name": "Colosseum", "cca2": "IT"},
   {"id": "christ-redeemer", "name": "Christ the Redeemer", "cca2": "BR"},
   {"id": "angkor-wat", "name": "Angkor Wat", "cca2": "KH"},
-  {"id": "ha-long-bay", "name": "Ha Long Bay", "cca2": "VN"}
+  {"id": "ha-long-bay", "name": "Ha Long Bay", "cca2": "VN"},
+  {"id": "victoria-falls", "name": "Victoria Falls", "cca2": "ZM"}
 ]

@@ -535,7 +535,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;margin-top:36px}
   <li>Files per wonder in <code>assets/wonders/&lt;id&gt;/</code>: <code>final.png</code> (master) + <code>layer_0…9.webp</code> (one transparent 800×600 lossless WebP per colour; layers never overlap, so any order works).</li>
   <li><code>scripts/wonders/build_layers.py</code> makes the layers and <code>app/lib/wondersData.ts</code> from <code>final.png</code> + <code>wonders.json</code>; it refuses anything that isn't exactly 10 colours. <code>wonderReveal.ts</code> picks a random locked colour.</li>
   <li>~190 KB per wonder, so 10 wonders are under 2 MB. ~19 MB memory only while one wonder's 10 layers are on screen.</li>
-  <li>Built so far: Great Pyramid of Giza (Egypt).</li>
+  <li>Built: <b>all 10 wonders</b> (art, layers and data file), ~2.1 MB in total: Giza, Taj Mahal, Great Wall, Machu Picchu, Petra, Colosseum, Christ the Redeemer, Angkor Wat, Ha Long Bay, Victoria Falls. Art scripts live in <code>scripts/wonders/art/</code>.</li>
 </ul>
 <h4 class="ok">The 10 wonders (agreed; launch with 5)</h4>
 <ul class="l ok">

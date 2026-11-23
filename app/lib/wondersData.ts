@@ -177,6 +177,24 @@ export const WONDERS: Wonder[] = [
       require('../../assets/wonders/ha-long-bay/layer_9.webp'),
     ],
   },
+  {
+    id: 'victoria-falls',
+    name: "Victoria Falls",
+    cca2: 'ZM',
+    palette: ["#0E2420", "#1E5238", "#2E7C8C", "#3E2C26", "#4C9CDC", "#62A03C", "#CFEAF6", "#E8745A", "#F6C24A", "#F8FDFF"],
+    layers: [
+      require('../../assets/wonders/victoria-falls/layer_0.webp'),
+      require('../../assets/wonders/victoria-falls/layer_1.webp'),
+      require('../../assets/wonders/victoria-falls/layer_2.webp'),
+      require('../../assets/wonders/victoria-falls/layer_3.webp'),
+      require('../../assets/wonders/victoria-falls/layer_4.webp'),
+      require('../../assets/wonders/victoria-falls/layer_5.webp'),
+      require('../../assets/wonders/victoria-falls/layer_6.webp'),
+      require('../../assets/wonders/victoria-falls/layer_7.webp'),
+      require('../../assets/wonders/victoria-falls/layer_8.webp'),
+      require('../../assets/wonders/victoria-falls/layer_9.webp'),
+    ],
+  },
 ];
 
 export function getWonder(id: string): Wonder | undefined {
