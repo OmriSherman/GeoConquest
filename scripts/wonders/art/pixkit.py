@@ -42,6 +42,14 @@ class Canvas:
         m = mask & (s > self.THR)
         self.c[m] = self.lut[self.c[m]]
 
+    def remap(self, mask, strength, mapping):
+        """Swap colors through an arbitrary {from: to} map (e.g. a 'lighter'
+        map for mist), dithered by strength 0..1. Unmapped colors stay."""
+        lut = np.array([mapping.get(i, i) for i in range(10)], np.uint8)
+        s = np.broadcast_to(np.asarray(strength, np.float32), (H, W))
+        m = mask & (s > self.THR)
+        self.c[m] = lut[self.c[m]]
+
     # -- shapes --------------------------------------------------------------
     def poly(self, pts):
         m = Image.new("L", (W, H), 0)
