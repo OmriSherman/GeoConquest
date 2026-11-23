@@ -120,40 +120,71 @@ cv.fill(cv.rect(373, 361, 427, 366), SLATE)
 robe = cv.poly([(356, 124), (444, 124), (446, 150), (440, 180), (436, 238), (418, 250), (398, 258), (364, 244), (360, 180), (354, 150)])
 v = 0.34 + 0.34 * lit(CXS, 46) + 0.05 * np.cos((XX - CXS) * 0.45)
 soap(robe, v)
-for (x0, y0, x1, y1) in ((400, 150, 392, 258), (414, 160, 424, 250), (382, 168, 372, 240)):   # long drape folds
+# soft vertical folds in the cloak (crests and troughs, not hard lines)
+fold = np.sin((XX - CXS) * 0.42 + np.sin(YY * 0.05) * 0.8)
+soap(robe & (YY > 150), 0.34 + 0.34 * lit(CXS, 46) + 0.10 * fold)
+for (x0, y0, x1, y1) in ((398, 152, 392, 256), (414, 160, 422, 248)):     # two deep drape folds
     cv.fill(cv.lines([(x0, y0), (x1, y1)], 1) & robe, SLATE)
+# the mantle's rolled edge dipping in a U across the chest, shoulder to shoulder
+tt = np.linspace(-1, 1, 40)
+ux = CXS + 40 * tt
+uy = 122 + 26 * (1 - tt ** 2)
+cv.fill(cv.lines(list(zip(ux, uy)), 3) & robe, STONE)
+cv.fill(cv.lines(list(zip(ux, uy + 2.5)), 1) & robe, SLATE)
 cv.fill(cv.lines([(364, 245), (398, 259), (436, 239)], 2) & ~robe, SLATE)   # hem shadow on the tunic
 cv.fill(cv.ellipse(394, 162, 4, 4), CORAL)                                # the heart
 robe = robe | tunic
 
-# arms: one continuous limb from the shoulder to the fingertips, tapering like a real arm
+# arms: a wide fabric sleeve hangs under each arm, then the limb is drawn on top
 def arm(side):
     t = np.linspace(0, 1, 60)
     xs_ = CXS + side * (34 + 112 * t)
     yc = 129 + 3.0 * np.sin(np.pi * np.clip(t / 0.85, 0, 1)) - 4.0 * t       # slight sag, hands lift a little
     th = np.interp(t, [0, 0.12, 0.32, 0.45, 0.62, 0.80, 0.86, 0.95, 1.0],
-                      [24, 20, 17, 14, 13, 10, 12, 11, 7])                   # shoulder, upper arm, elbow, wrist, hand
+                      [24, 20, 17, 14, 13, 10, 12, 11, 7])
+    shade = 0.34 + 0.22 * side
+
+    # sleeve: hangs from the underside of the arm (armpit -> near the wrist) and sags to the waist
+    tu = np.linspace(0.03, 0.72, 30)
+    under = [(CXS + side * (34 + 112 * q), np.interp(q, t, yc) + np.interp(q, t, th) / 2 - 1) for q in tu]
+    wx, wy = under[-1]
+    bx, by = CXS + side * 43, 204.0                                          # meets the body at the waist
+    cx_, cy_ = CXS + side * 76, 166.0                                        # hem curves slightly inward
+    q = np.linspace(0, 1, 30)
+    hem = [((1 - k) ** 2 * wx + 2 * (1 - k) * k * cx_ + k * k * bx, (1 - k) ** 2 * (wy + 2) + 2 * (1 - k) * k * cy_ + k * k * by) for k in q]
+    drape = cv.poly(under + hem)
+    # folds run diagonally down from the arm toward the body; crest lit, trough dark
+    phase = (side * (XX - CXS)) / 16.0 + (YY - 135) * 0.075 + (cv.noise(12, 12, 90 + side, 2) - 0.5) * 0.5
+    fold = np.sin(2 * np.pi * phase)
+    depth = np.clip((YY - 140) / 70, 0, 1)
+    soap(drape, shade - 0.04 + 0.12 * fold - 0.10 * depth + 0.06 * (1 - depth))
+    trough = drape & (fold < -0.93)
+    cv.fill(trough, SLATE)
+    # hem: lit lip with a dark shadow beneath it
+    hem_line = cv.lines(hem, 2) & ~drape
+    cv.fill(hem_line, SLATE)
+    cv.fill(cv.lines([(x, y - 1) for x, y in hem], 1) & drape, STONE if side < 0 else CORAL)
+
+    # the limb itself, tapering like a real arm, with rounded shading
     top = [(x, y - w / 2) for x, y, w in zip(xs_, yc, th)]
     bot = [(x, y + w / 2) for x, y, w in zip(xs_, yc, th)]
     limb = cv.poly(top + bot[::-1])
     order = np.argsort(xs_)
     yc_at = np.interp(XX, xs_[order], yc[order])
     th_at = np.interp(XX, xs_[order], th[order])
-    across = np.clip((YY - yc_at) / (th_at / 2), -1, 1)                     # -1 top .. 1 underside
-    shade = 0.34 + 0.22 * side
+    across = np.clip((YY - yc_at) / (th_at / 2), -1, 1)
+    # fabric covers the arm down to the wrist: give the sleeve part soft folds too
+    covered = limb & (side * (XX - CXS) < 34 + 112 * 0.76)
     soap(limb, shade + 0.22 * (1 - across) * 0.6 - 0.1 * np.clip(across, 0, 1))
-    # elbow crease and the fingers of the open hand
-    ex, ey = CXS + side * (34 + 112 * 0.46), 129 + 3.0 * np.sin(np.pi * 0.54) - 4.0 * 0.46
-    cv.fill(cv.lines([(ex, ey + 2), (ex + side * 3, ey + 6)], 1) & limb, SLATE)
+    # sleeve cuff at the wrist, then the bare forearm end and the open hand
+    cfx = CXS + side * (34 + 112 * 0.76)
+    cyc = np.interp(0.76, t, yc)
+    cv.fill(cv.lines([(cfx, cyc - 7), (cfx + side * 1, cyc + 7)], 2) & limb, SLATE)
     for k in (-2, 1):
         hx0 = CXS + side * (34 + 112 * 0.88)
         cv.fill(cv.lines([(hx0, 125 + k + 4), (CXS + side * 144, 125 + k + 2.5)], 1) & limb, SLATE)
-    # short sleeve hanging from the upper arm
-    sleeve = cv.poly([(CXS + side * 40, 139), (CXS + side * 78, 140), (CXS + side * 72, 151), (CXS + side * 48, 176)])
-    soap(sleeve, shade - 0.04 + 0.12 * (1 - (YY - 139) / 37))
-    cv.fill(sleeve & ~np.roll(sleeve, -1, 0), SLATE)
-    cv.fill(limb & ~np.roll(limb, 1, 0) & (XX * side > CXS * side + 36 * side * 0), GOLD if side > 0 else STONE)
-    return limb | sleeve
+    cv.fill(limb & ~np.roll(limb, 1, 0), GOLD if side > 0 else STONE)
+    return limb | drape
 
 arms = arm(-1) | arm(1)
 # shoulders, neck, head
