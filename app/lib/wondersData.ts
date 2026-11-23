@@ -33,6 +33,24 @@ export const WONDERS: Wonder[] = [
       require('../../assets/wonders/great-pyramid/layer_9.webp'),
     ],
   },
+  {
+    id: 'taj-mahal',
+    name: "Taj Mahal",
+    cca2: 'IN',
+    palette: ["#0E0B24", "#102C2A", "#2B2150", "#2F5A48", "#5E3A6E", "#8A3E3A", "#C2607E", "#F2A07A", "#F7D2C4", "#FFF8F0"],
+    layers: [
+      require('../../assets/wonders/taj-mahal/layer_0.webp'),
+      require('../../assets/wonders/taj-mahal/layer_1.webp'),
+      require('../../assets/wonders/taj-mahal/layer_2.webp'),
+      require('../../assets/wonders/taj-mahal/layer_3.webp'),
+      require('../../assets/wonders/taj-mahal/layer_4.webp'),
+      require('../../assets/wonders/taj-mahal/layer_5.webp'),
+      require('../../assets/wonders/taj-mahal/layer_6.webp'),
+      require('../../assets/wonders/taj-mahal/layer_7.webp'),
+      require('../../assets/wonders/taj-mahal/layer_8.webp'),
+      require('../../assets/wonders/taj-mahal/layer_9.webp'),
+    ],
+  },
 ];
 
 export function getWonder(id: string): Wonder | undefined {

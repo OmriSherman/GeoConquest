@@ -1,3 +1,4 @@
 [
-  { "id": "great-pyramid", "name": "Great Pyramid of Giza", "cca2": "EG" }
+  { "id": "great-pyramid", "name": "Great Pyramid of Giza", "cca2": "EG" },
+  { "id": "taj-mahal", "name": "Taj Mahal", "cca2": "IN" }
 ]

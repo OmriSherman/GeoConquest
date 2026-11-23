@@ -10,6 +10,10 @@ lets the app unlock colors in a random order.
 
 Also regenerates app/lib/wondersData.ts (Metro needs literal require() calls).
 
+The masters themselves are drawn by scripts in scripts/wonders/art/ (one per
+wonder, sharing pixkit.py), e.g.:
+    python3 scripts/wonders/art/taj_mahal.py assets/wonders/taj-mahal/final.png
+
 Usage:  python3 -I scripts/wonders/build_layers.py
 Needs:  Pillow, numpy
 """
