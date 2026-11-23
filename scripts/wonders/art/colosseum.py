@@ -55,87 +55,97 @@ city = YY >= 412 - (cv.noise(14, 50, 3, 1) > 0.5) * 14 - (cv.noise(40, 50, 4, 1)
 cv.ramp(city, 0.25 + (cv.noise(3, 3, 5, 1) > 0.85) * 0.5, [NIGHT, DEEP, ORANGE])
 
 # ---- the Colosseum ----------------------------------------------------------------------------
-CX, YB = 400.0, 432.0
+# Street-level perspective: nearer parts of the ring are larger, so the base curves down toward us
+# and the top bulges up in the middle.
+CX, YH, HC, S, AMP = 400.0, 410.0, 35.0, 1.0, 0.22
 TIERS = [0, 62, 120, 176, 240]                    # tier boundaries (world height units)
 N_ARCH = 80
+TH_L = 1.85                                       # floodlights from the front, slightly left (radians)
 
-def ring(RX, RY, yb, hmax_fn, arches=True, dark=0.0, seed=0):
-    """Draw the front half of an elliptical arcaded wall."""
+def ring(RX, scale, hmax_fn, arches=True, dark=0.0):
     c = (XX - CX) / RX
     inside = np.abs(c) < 1
     th = np.arccos(np.clip(c, -1, 1))             # 0 right .. pi left
     sn = np.sqrt(np.clip(1 - c * c, 0, 1))
-    k = 1 + 0.12 * sn                             # nearer = a little larger
-    base = yb + RY * sn
-    h = (base - YY) / k                           # height above ground at this pixel
+    sc = S * scale * (1 + AMP * sn)
+    h = HC - (YY - YH) / sc                       # height above ground at this pixel
     hmax = hmax_fn(th)
     m = inside & (h >= 0) & (h <= hmax)
     arc = 2 * math.pi * RX / N_ARCH               # world width of one bay
     frac = (th * N_ARCH / (2 * math.pi)) % 1.0
     off = (frac - 0.5) * arc                      # offset from bay centre
-    v = 0.42 + 0.36 * sn ** 0.7 - 0.16 * (h / 240) + (GRAIN - 0.5) * 0.14 - dark
-    col = np.minimum(frac, 1 - frac) < 0.07
-    v = np.where(col, v + 0.12 - 0.25 * (frac > 0.5) * (np.minimum(frac, 1 - frac) > 0.035), v)
+    lam = np.cos(th - TH_L)                       # facing the floodlights?
+    v = 0.30 + 0.34 * np.clip(lam, 0, 1) + 0.10 * sn - 0.14 * (h / 240) + (GRAIN - 0.5) * 0.12 - dark
+    v -= 0.18 * np.clip(-lam, 0, 1)               # turning away into shadow
+    v -= 0.30 * np.abs(c) ** 4                    # curved ends fall off
+    v -= 0.08 * np.clip((h - 176) / 64, 0, 1)      # attic rises out of the floodlights
+    # engaged half-columns between the bays: rounded shading
+    cd = np.where(frac < 0.5, frac, frac - 1.0) / 0.075
+    col = np.abs(cd) < 1
+    v = np.where(col, v + 0.16 * (1 - cd * cd) + 0.10 * cd, v)
     opening = np.zeros_like(m)
     glow_v = np.zeros((H, W), np.float32)
+    cosv = np.abs(c)
     if arches:
         for t in range(3):
             h0 = TIERS[t] + (0 if t == 0 else 8)
             T = TIERS[t + 1] - TIERS[t]
             spring = TIERS[t] + 0.70 * T
             r = 0.30 * arc
-            body = (h >= h0) & (h <= spring) & (np.abs(off) <= r)
-            top = (h > spring) & (np.abs(off) <= np.sqrt(np.clip(r * r - (h - spring) ** 2, 0, None)))
-            o = (body | top) & m
+            half = np.where(h <= spring, r, np.sqrt(np.clip(r * r - (h - spring) ** 2, 0, None)))
+            o = (h >= h0) & (np.abs(off) <= half) & ((h <= spring) | (h - spring <= r)) & m
             opening |= o
-            g = 0.42 + 0.42 * (1 - np.abs(off) / r) * np.clip(1 - (h - h0) / (spring - h0 + r), 0, 1) - dark - 0.08 * t
+            depth = np.clip(1 - (h - h0) / (spring - h0 + r), 0, 1)
+            g = 0.26 + 0.50 * (1 - np.abs(off) / r) * depth - dark - 0.08 * t - 0.2 * np.abs(c) ** 4
+            # wall thickness visible inside the arch, more toward the curved ends
+            rev = 1.0 + 5.0 * cosv
+            reveal = o & np.where(c < 0, off > half - rev, off < -half + rev)
+            g = np.where(reveal, 0.46 + 0.2 * np.clip(lam, 0, 1) - dark, g)
+            # arch soffit seen from below
+            soffit = o & (h > spring) & (h - spring > np.sqrt(np.clip(r * r - off * off, 0, None)) - 2.2)
+            g = np.where(soffit, 0.16 - dark, g)
             glow_v = np.where(o, g, glow_v)
-            # balustrade line under each upper tier's openings
             if t > 0:
                 v = np.where((h >= TIERS[t] + 2) & (h < TIERS[t] + 8) & ((XX.astype(int) % 3) == 0), v - 0.15, v)
-        # attic: small square windows in every other bay
         win = (h > 196) & (h < 210) & (np.abs(off) < 0.12 * arc) & (((th * N_ARCH / (2 * math.pi)) // 1) % 2 == 0)
         opening |= win & m
-        glow_v = np.where(win & m, 0.3 - dark, glow_v)
-    # cornices between tiers
-    for b in TIERS[1:]:
-        v = np.where((h > b - 4) & (h <= b), v + 0.22, v)
-        v = np.where((h > b - 7) & (h <= b - 4), v - 0.2, v)
+        glow_v = np.where(win & m, 0.22 - dark, glow_v)
+    # cornices: lit face, deep shadow on the underside (we look up at them)
+    for bnd in TIERS[1:]:
+        v = np.where((h > bnd - 4) & (h <= bnd), v + 0.24, v)
+        v = np.where((h > bnd - 9) & (h <= bnd - 4), v - 0.26, v)
     cv.ramp(m & ~opening, v, STONE)
     cv.ramp(m & opening, glow_v, STONE)
-    return m, th, h, hmax
+    return m
 
 # ruin profile: the outer ring is complete on the left, broken on the right
 TH_R = math.acos(0.40)
+JAG1 = cv.noise(3, 400, 31, 2)[0][None, :]
+JAG2 = cv.noise(4, 400, 32, 2)[0][None, :]
 def outer_h(th):
-    full = np.full_like(th, 240.0)
     t = np.clip(th / TH_R, 0, 1)
-    jag = (cv.noise(3, 400, 31, 2)[0][None, :] - 0.5) * 18
-    broken = 70 + 60 * t ** 2 + jag
-    return np.where(th >= TH_R, full, broken)
+    return np.where(th >= TH_R, 240.0, 70 + 60 * t ** 2 + (JAG1 - 0.5) * 18)
 
 def inner_h(th):
-    jag = (cv.noise(4, 400, 32, 2)[0][None, :] - 0.5) * 16
-    return np.where(th < TH_R + 0.1, 205 - 40 * (1 - np.clip(th / TH_R, 0, 1)) + jag, 0)
+    return np.where(th < TH_R + 0.1, 205 - 40 * (1 - np.clip(th / TH_R, 0, 1)) + (JAG2 - 0.5) * 16, 0)
 
-# inner ring (seen where the outer ring has fallen), a little darker and set back
-ring(312, 36, YB - 10, inner_h, dark=0.12, seed=2)
-mo, th, hh, _ = ring(340, 40, YB, outer_h, seed=1)
+ring(312, 0.93, inner_h, dark=0.10)
+ring(340, 1.0, outer_h)
 
 # the sloping brick buttress where the outer ring ends
 c = (XX - CX) / 340
 sn = np.sqrt(np.clip(1 - c * c, 0, 1))
 thx = np.arccos(np.clip(c, -1, 1))
-hx = (YB + 40 * sn - YY) / (1 + 0.12 * sn)
+hx = HC - (YY - YH) / (S * (1 + AMP * sn))
 wedge = (thx < TH_R) & (thx > TH_R - 0.16) & (hx >= 0) & (hx <= 240 - (TH_R - thx) / 0.16 * 150)
 bricks = ((YY.astype(int) % 3) == 0) | (((XX.astype(int) + (YY.astype(int) // 3) * 2) % 5) == 0)
-cv.ramp(wedge, 0.62 - 0.2 * bricks + (GRAIN - 0.5) * 0.2, STONE)
+cv.ramp(wedge, 0.45 - 0.2 * bricks + 0.15 * (thx - (TH_R - 0.16)) / 0.16 + (GRAIN - 0.5) * 0.2, STONE)
 edge = wedge & ~np.roll(wedge, -1, 0)
-cv.fill(edge, CREAM)
+cv.fill(edge, GOLD)
 
 # ---- piazza ---------------------------------------------------------------------------------
 c2 = (XX - CX) / 340
-foot = YB + 40 * np.sqrt(np.clip(1 - c2 * c2, 0, 1))
+foot = YH + HC * S * (1 + AMP * np.sqrt(np.clip(1 - c2 * c2, 0, 1)))
 ground = (YY > np.where(np.abs(c2) < 1, foot, 414))
 pool = np.exp(-(((XX - 400) / 320) ** 2) - ((YY - 480) / 60) ** 2)
 v = 0.15 + 0.45 * pool + (cv.noise(6, 2, 50, 2) - 0.5) * 0.12

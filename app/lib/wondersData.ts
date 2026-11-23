@@ -105,6 +105,24 @@ export const WONDERS: Wonder[] = [
       require('../../assets/wonders/petra/layer_9.webp'),
     ],
   },
+  {
+    id: 'colosseum',
+    name: "Colosseum",
+    cca2: 'IT',
+    palette: ["#0B0E24", "#142018", "#1E2E6A", "#2A1E2A", "#4A3F86", "#6E4A3A", "#8C5E8A", "#E88A4A", "#F6C46A", "#FFF0C8"],
+    layers: [
+      require('../../assets/wonders/colosseum/layer_0.webp'),
+      require('../../assets/wonders/colosseum/layer_1.webp'),
+      require('../../assets/wonders/colosseum/layer_2.webp'),
+      require('../../assets/wonders/colosseum/layer_3.webp'),
+      require('../../assets/wonders/colosseum/layer_4.webp'),
+      require('../../assets/wonders/colosseum/layer_5.webp'),
+      require('../../assets/wonders/colosseum/layer_6.webp'),
+      require('../../assets/wonders/colosseum/layer_7.webp'),
+      require('../../assets/wonders/colosseum/layer_8.webp'),
+      require('../../assets/wonders/colosseum/layer_9.webp'),
+    ],
+  },
 ];
 
 export function getWonder(id: string): Wonder | undefined {
