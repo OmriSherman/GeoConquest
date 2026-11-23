@@ -97,6 +97,19 @@ ol.road b{display:block;font-size:15px}
 ol.road span{font-size:13px;color:var(--muted)}
 .toolbar{display:flex;gap:8px;margin-top:14px}
 .btn{font:inherit;font-size:13px;font-weight:700;color:var(--text);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:7px 12px;cursor:pointer}
+
+.ttag{display:inline-block;font-size:10px;font-weight:850;letter-spacing:.6px;padding:2px 6px;border-radius:6px;margin-right:4px;vertical-align:1px;text-transform:uppercase}
+.t-bug{background:var(--red-bg);color:var(--red)} .t-sec{background:var(--red);color:#fff}
+.t-qol{background:rgba(123,155,255,.14);color:var(--blue)} .t-imp{background:var(--green-bg);color:var(--green)}
+.t-eco{background:var(--gold-bg);color:var(--gold)} .t-p1{background:var(--red);color:#fff} .t-disc{background:var(--amber-bg);color:var(--amber)}
+.fx{padding:9px 0;border-bottom:1px solid var(--line);font-size:14px}
+.fx:last-child{border-bottom:none}
+.fx .tags{margin-bottom:3px}
+.filters{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 6px}
+.filters button{font:inherit;font-size:12.5px;font-weight:700;color:var(--text);background:var(--card);border:1px solid var(--line);border-radius:999px;padding:5px 11px;cursor:pointer}
+.filters button.on{background:var(--gold);color:var(--gold-ink);border-color:var(--gold)}
+.cnt{color:var(--muted);font-weight:700;font-size:12px;margin-left:4px}
+.hidden{display:none!important}
 footer{color:var(--muted);font-size:12px;text-align:center;margin-top:36px}
 </style>
 </head>
@@ -106,12 +119,12 @@ footer{color:var(--muted);font-size:12px;text-align:center;margin-top:36px}
 <header class="hero">
   <div class="kicker">GeoConquest · Next update</div>
   <h1>Feature Plan</h1>
-  <p class="sub">Everything we've designed together, before any code changes. Tap a feature to open it.</p>
+  <p class="sub">Every new feature plus your bug, quality-of-life and improvement notes, organized. Tap any card to open it.</p>
   <div class="stats">
-    <div class="stat"><b>11</b><span>Features</span></div>
-    <div class="stat"><b>8</b><span>Designed</span></div>
-    <div class="stat"><b>3</b><span>In design</span></div>
-    <div class="stat"><b>1</b><span>Hotfix first</span></div>
+    <div class="stat"><b>13</b><span>Features</span></div>
+    <div class="stat"><b>54</b><span>Fixes & polish</span></div>
+    <div class="stat"><b>10</b><span>Fix first</span></div>
+    <div class="stat"><b>7</b><span>To decide</span></div>
   </div>
   <div class="toolbar">
     <button class="btn" id="openAll">Expand all</button>
@@ -123,7 +136,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;margin-top:36px}
   <a class="alt" href="#order">Build order</a>
   <a href="#f1">1 Quests</a><a href="#f2">2 Weekly</a><a href="#f3">3 Winners</a><a href="#f4">4 Passport</a>
   <a href="#f5">5 Economy</a><a href="#f6">6 Compass</a><a href="#f7">7 Difficulty</a><a href="#f8">8 Daily Challenge</a>
-  <a href="#f9">9 Shapes</a><a href="#f10">10 Events</a><a href="#f11">11 Notifications</a>
+  <a href="#f9">9 Shapes</a><a href="#f10">10 Events</a><a href="#f11">11 Notifications</a><a href="#f12">12 Wonders</a><a href="#f13">13 Backgrounds</a><a class="alt" href="#fixes">Fixes & polish</a>
   <a class="alt" href="#open">Still open</a><a class="alt" href="#later">Later</a>
 </div></nav>
 
@@ -131,18 +144,21 @@ footer{color:var(--muted);font-size:12px;text-align:center;margin-top:36px}
 <div class="card" style="padding:16px">
   <div class="alert" style="margin-top:0"><strong>Before anything:</strong> the newest app version (daily chest logic, quiz starting pages) must be pushed to GitHub, so we build on the right code.</div>
   <ol class="road">
-    <li class="zero"><b>Hotfix: purchase exploits</b><span>Server sets prices, rejects negative costs, checks levels</span></li>
+    <li class="zero"><b>Hotfix + the 10 "fix first" bugs</b><span>Purchase exploits, password reset, Conqueror discount abuse, chest avatars, Millionaire back button, mythic chest, placements…</span></li>
     <li><b>Mainland outlines + missing shapes</b><span>Fixes the live "?" bug; Daily Challenge & Compass need it</span></li>
     <li><b>Economy config in the dashboard</b><span>Everything else reads prices and rewards from it</span></li>
     <li><b>Quiz difficulty</b><span>Before quests and weekly, which use it</span></li>
     <li><b>Daily Quests</b><span>Replaces daily leaderboard + login reward</span></li>
-    <li><b>Passport + stamps</b><span>Main · Stamps · Quests · Collection</span></li>
+    <li><b>Passport + stamps</b><span>Main · Stamps · Quests · Collection · Wonders teaser</span></li>
     <li><b>Weekly Challenge + winners announcement</b></li>
     <li><b>Daily Challenge</b><span>Palette · Zoom · Neighbours</span></li>
     <li><b>Compass Quiz</b></li>
     <li><b>Events</b><span>Double rewards days + shop sales</span></li>
     <li><b>Notifications</b><span>Local streak reminders can ship earlier</span></li>
+    <li><b>Avatar backgrounds</b><span>New cosmetic slot + Conqueror background</span></li>
+    <li><b>Wonders + endless level milestones</b><span>The endgame</span></li>
   </ol>
+  <p class="sub">Other fixes ride along with the feature that touches the same screen (summary fixes with Difficulty, shop fixes with Economy, Millionaire question types after Compass and Daily Challenge).</p>
 </div>
 
 <h2 class="sec">Features</h2>
@@ -280,13 +296,13 @@ footer{color:var(--muted);font-size:12px;text-align:center;margin-top:36px}
 </div></details>
 
 <!-- 4 -->
-<details class="card" id="f4"><summary><div class="num">4</div><div class="st"><h3>Passport</h3><p>Replaces Home + Quests. Collect country stamps at a rare 0.3% chance per correct answer.</p><span class="pill done">Designed</span></div><div class="chev">▾</div></summary>
+<details class="card" id="f4"><summary><div class="num">4</div><div class="st"><h3>Passport</h3><p>Replaces Home + Quests. Collect country stamps at a rare 0.3% chance per correct answer. Wonders tab teases the endgame.</p><span class="pill done">Designed</span></div><div class="chev">▾</div></summary>
 <div class="body">
 <h4 class="ok">Layout</h4>
 <ul class="l ok">
   <li>Tabs: <b>Passport · Quizzes · Shop · Leaderboard</b>.</li>
   <li>Header: avatar, flag, name, level ring, gold. Tap avatar → profile menu / Sign Out.</li>
-  <li>Subtabs: <b>Main</b> (conquest map + Daily Quests + progress, opens by default) · <b>Stamps</b> · <b>Quests</b> · <b>Collection</b> (owned avatars + upgrades; equip avatars here).</li>
+  <li>Subtabs: <b>Main</b> (conquest map + Daily Quests + progress, opens by default) · <b>Stamps</b> · <b>Quests</b> · <b>Collection</b> (owned avatars, upgrades and backgrounds; equip here) · <b>Wonders</b> (teaser with unlock progress until unlocked).</li>
   <li>Top Explorers mini-leaderboard dropped.</li>
 </ul>
 <h4 class="ok">Stamps</h4>
@@ -410,6 +426,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;margin-top:36px}
   <li>USA: keep Alaska, drop Hawaii and the date-line Aleutians. Russia: drop the date-line part, keep Kaliningrad.</li>
   <li>Norway: drop Svalbard. India, Malaysia (both halves), Fiji and Pacific archipelagos: keep as is.</li>
   <li>Exclaves always kept: Kaliningrad, Cabinda, Nakhchivan, Musandam, Bioko.</li>
+  <li>Antarctica: shown from above the South Pole, like on its flag, not the stretched flat-map version.</li>
 </ul>
 <h4 class="warn">Why "?" appears</h4>
 <ul class="l warn">
@@ -484,6 +501,64 @@ footer{color:var(--muted);font-size:12px;text-align:center;margin-top:36px}
 <div class="q">One-off messages to everyone from the dashboard?<span class="s">Suggested: <b>yes</b></span></div>
 </div></details>
 
+
+<!-- 12 -->
+<details class="card" id="f12"><summary><div class="num">12</div><div class="st"><h3>Endgame: Wonders</h3><p>After level 100 and every country owned: paint world wonders by earning their pigments.</p><span class="pill done">Designed</span></div><div class="chev">▾</div></summary>
+<div class="body">
+<h4 class="warn">The problem</h4>
+<ul class="l warn"><li>After level 300 there's nothing new; a player who played hours every day hit 300 and stopped.</li></ul>
+<h4 class="ok">Decisions</h4>
+<ul class="l ok">
+  <li>Unlock: <b>level 100 + every country in the shop owned</b> (~1.5M gold today; ~7.5M if country prices go ×5).</li>
+  <li>The conquest map is replaced by a painting of a world wonder in ~10 colours, starting grey.</li>
+  <li>Each colour (pigment) comes from a <b>mega quest</b>: a list of requirements turned in together, e.g. "Borders 90%+ ×30" + "500,000 gold". Gold is spent on turn-in.</li>
+  <li>Several mega quests can progress at once. Requirements mix modes so it doesn't feel like one long grind.</li>
+  <li>Pigment Trial dropped (it would eat the gold the quests need).</li>
+  <li>5 wonders at launch, more added over time. Paintings split into colour regions by a script; public-domain or own art only.</li>
+  <li>Finishing a wonder: title, avatar frame, badge on profile and leaderboard, shareable painting, and the wonder becomes an <b>avatar background</b>.</li>
+  <li>Passport "Wonders" tab is visible to everyone as a teaser, with live progress ("Level 64 / 100", "Countries 112 / 250").</li>
+</ul>
+<h4 class="ok">Endless level milestones</h4>
+<ul class="l ok">
+  <li>After 300: a milestone every 50 levels, forever (350, 400, 450…).</li>
+  <li>Most pay big gold + tickets; <b>every 3rd</b> (450, 600, 750…) gives an exclusive avatar or background.</li>
+  <li>Assign new avatars/backgrounds to future milestones from the dashboard; empty ones pay gold.</li>
+</ul>
+<h4 class="later">Other endgame ideas (not chosen now)</h4>
+<ul class="l"><li>Seasons · Country Mastery · Endless mode · Leagues · Duels with friends.</li></ul>
+</div></details>
+
+<!-- 13 -->
+<details class="card" id="f13"><summary><div class="num">13</div><div class="st"><h3>Avatar Backgrounds</h3><p>A new cosmetic slot: avatar + flag + background.</p><span class="pill done">Designed</span></div><div class="chev">▾</div></summary>
+<div class="body">
+<h4 class="ok">Decisions</h4>
+<ul class="l ok">
+  <li>Sources: finished Wonders, every 3rd level milestone after 300, and an exclusive <b>Conqueror background</b>.</li>
+  <li>The Conqueror background may replace today's star marking for subscribers (confirm against the newer build).</li>
+  <li>No free starter backgrounds; not sold in the Shop for now.</li>
+  <li>Shown in the Passport header, leaderboard rows, weekly podium and share images. Equipped in Passport → Collection.</li>
+  <li>The server checks ownership before a background can be equipped; new backgrounds added from the dashboard.</li>
+</ul>
+</div></details>
+
+<h2 class="sec" id="fixes">Fixes & polish (from your notes)</h2>
+<div class="filters" id="flt"><button class="on" data-f="all">All</button><button data-f="p1">Fix first</button><button data-f="bug">Bugs</button><button data-f="qol">QoL</button><button data-f="imp">Improvements</button><button data-f="eco">Economy</button><button data-f="disc">To decide</button></div>
+<p class="sub" style="margin-bottom:4px">Gauntlet, potions, mythic chest, expedition, Draw the Border, pause menu and password reset live in your newer build, so they get confirmed once it's pushed.</p>
+<details class="card area"><summary><div class="num" style="font-size:18px">🔐</div><div class="st"><h3>Account &amp; Conqueror<span class="cnt" data-c>3</span></h3><p>3 items · 2 fix first</p></div><div class="chev">▾</div></summary><div class="body"><div class="fx" data-t="bug" data-p="1" data-d="0"><div class="tags"><span class="ttag t-p1">Fix first</span><span class="ttag t-bug">Bug</span></div>Password reset fails: after saving the new password you get &quot;Auth session missing&quot;. Likely cause: the reset link&#x27;s session isn&#x27;t set up before the password is saved. (Reset flow is in the newer build.)</div><div class="fx" data-t="sec" data-p="1" data-d="0"><div class="tags"><span class="ttag t-p1">Fix first</span><span class="ttag t-sec">Security</span></div>Conqueror 50% off first month must be once per user. Block repeat use (e.g. cancel and re-subscribe, new account on the same store account).</div><div class="fx" data-t="bug" data-p="2" data-d="0"><div class="tags"><span class="ttag t-bug">Bug</span><span class="ttag" style="color:var(--muted)">P2</span></div>Conqueror double XP and gold isn&#x27;t shown in the challenges / weekly screens.</div></div></details>
+<details class="card area"><summary><div class="num" style="font-size:18px">👤</div><div class="st"><h3>Profile &amp; User Menu<span class="cnt" data-c>5</span></h3><p>5 items · 1 fix first</p></div><div class="chev">▾</div></summary><div class="body"><div class="fx" data-t="bug" data-p="1" data-d="0"><div class="tags"><span class="ttag t-p1">Fix first</span><span class="ttag t-bug">Bug</span></div>Avatars won from the daily chest don&#x27;t appear in the Owned tab or in the owned unique avatars.</div><div class="fx" data-t="bug" data-p="2" data-d="0"><div class="tags"><span class="ttag t-bug">Bug</span><span class="ttag" style="color:var(--muted)">P2</span></div>&quot;Game Master&quot; quest icon looks broken on the user page.</div><div class="fx" data-t="bug" data-p="2" data-d="0"><div class="tags"><span class="ttag t-bug">Bug</span><span class="ttag" style="color:var(--muted)">P2</span></div>Sound effects lower other apps&#x27; audio (e.g. music in headphones). Cause found: the app never sets its audio mode, so the default ducks other audio. Fix: set it to mix with other apps.</div><div class="fx" data-t="qol" data-p="2" data-d="0"><div class="tags"><span class="ttag t-qol">QoL</span><span class="ttag" style="color:var(--muted)">P2</span></div>Add a sound effects on/off (and volume) option in the user menu.</div><div class="fx" data-t="qol" data-p="3" data-d="0"><div class="tags"><span class="ttag t-qol">QoL</span><span class="ttag" style="color:var(--muted)">P3</span></div>User menu rows are too tall; make them shorter, smaller icons if needed.</div></div></details>
+<details class="card area"><summary><div class="num" style="font-size:18px">🎯</div><div class="st"><h3>All Quizzes<span class="cnt" data-c>5</span></h3><p>5 items</p></div><div class="chev">▾</div></summary><div class="body"><div class="fx" data-t="imp" data-p="2" data-d="0"><div class="tags"><span class="ttag t-imp">Improve</span><span class="ttag" style="color:var(--muted)">P2</span></div>Add the &quot;Learn&quot; button to every regular quiz except Borders.</div><div class="fx" data-t="qol" data-p="2" data-d="0"><div class="tags"><span class="ttag t-qol">QoL</span><span class="ttag" style="color:var(--muted)">P2</span></div>Learn: slower zoom-in, or let players move and zoom the mini map themselves.</div><div class="fx" data-t="imp" data-p="2" data-d="0"><div class="tags"><span class="ttag t-imp">Improve</span><span class="ttag" style="color:var(--muted)">P2</span></div>Better quiz descriptions; move &quot;XP / gold per correct&quot; to each quiz&#x27;s starting page.</div><div class="fx" data-t="qol" data-p="2" data-d="0"><div class="tags"><span class="ttag t-qol">QoL</span><span class="ttag" style="color:var(--muted)">P2</span></div>Hide the bottom tab bar while a quiz is running.</div><div class="fx" data-t="qol" data-p="3" data-d="0"><div class="tags"><span class="ttag t-qol">QoL</span><span class="ttag" style="color:var(--muted)">P3</span></div>Pause menu: center it on screen.</div></div></details>
+<details class="card area"><summary><div class="num" style="font-size:18px">🏁</div><div class="st"><h3>Quiz Summary (results screen)<span class="cnt" data-c>5</span></h3><p>5 items</p></div><div class="chev">▾</div></summary><div class="body"><div class="fx" data-t="qol" data-p="2" data-d="0"><div class="tags"><span class="ttag t-qol">QoL</span><span class="ttag" style="color:var(--muted)">P2</span></div>XP and gold count-up is too slow; match the Millionaire summary speed.</div><div class="fx" data-t="imp" data-p="2" data-d="0"><div class="tags"><span class="ttag t-imp">Improve</span><span class="ttag" style="color:var(--muted)">P2</span></div>Special effect when Conqueror double XP / gold is applied.</div><div class="fx" data-t="imp" data-p="2" data-d="0"><div class="tags"><span class="ttag t-imp">Improve</span><span class="ttag" style="color:var(--muted)">P2</span></div>Add a &quot;Watch ad: double rewards next round&quot; button.</div><div class="fx" data-t="imp" data-p="3" data-d="1"><div class="tags"><span class="ttag t-imp">Improve</span><span class="ttag t-disc">Decide</span><span class="ttag" style="color:var(--muted)">P3</span></div>Better way to show XP and gold gained (layout / visuals).</div><div class="fx" data-t="bug" data-p="2" data-d="0"><div class="tags"><span class="ttag t-bug">Bug</span><span class="ttag" style="color:var(--muted)">P2</span></div>Share results: use the correct app icon, and make it bigger.</div></div></details>
+<details class="card area"><summary><div class="num" style="font-size:18px">💰</div><div class="st"><h3>Millionaire Quiz<span class="cnt" data-c>5</span></h3><p>5 items · 1 fix first</p></div><div class="chev">▾</div></summary><div class="body"><div class="fx" data-t="bug" data-p="1" data-d="0"><div class="tags"><span class="ttag t-p1">Fix first</span><span class="ttag t-bug">Bug</span></div>&quot;Back to quizzes&quot; button on the summary does nothing.</div><div class="fx" data-t="qol" data-p="2" data-d="0"><div class="tags"><span class="ttag t-qol">QoL</span><span class="ttag" style="color:var(--muted)">P2</span></div>&quot;Play again&quot; message should only pop up when the player has 3 tickets or fewer.</div><div class="fx" data-t="imp" data-p="2" data-d="0"><div class="tags"><span class="ttag t-imp">Improve</span><span class="ttag" style="color:var(--muted)">P2</span></div>&quot;On fire&quot; popup: remove the icon, redesign it, and explain that taking the money means no XP.</div><div class="fx" data-t="imp" data-p="2" data-d="0"><div class="tags"><span class="ttag t-imp">Improve</span><span class="ttag" style="color:var(--muted)">P2</span></div>Show the question ladder (prize levels) in a column on the right side of the screen.</div><div class="fx" data-t="imp" data-p="3" data-d="0"><div class="tags"><span class="ttag t-imp">Improve</span><span class="ttag" style="color:var(--muted)">P3</span></div>Add all question types: Compass, Daily Challenge types, harder (tier 2) questions on higher levels. After those features ship.</div></div></details>
+<details class="card area"><summary><div class="num" style="font-size:18px">🌑</div><div class="st"><h3>Nightmare Quiz<span class="cnt" data-c>1</span></h3><p>1 item</p></div><div class="chev">▾</div></summary><div class="body"><div class="fx" data-t="imp" data-p="3" data-d="0"><div class="tags"><span class="ttag t-imp">Improve</span><span class="ttag" style="color:var(--muted)">P3</span></div>Replace the &quot;out of darkness&quot; fade-in with a pixelated flag that sharpens to clear.</div></div></details>
+<details class="card area"><summary><div class="num" style="font-size:18px">⚔️</div><div class="st"><h3>The Gauntlet<span class="cnt" data-c>7</span></h3><p>7 items</p></div><div class="chev">▾</div></summary><div class="body"><div class="fx" data-t="qol" data-p="2" data-d="0"><div class="tags"><span class="ttag t-qol">QoL</span><span class="ttag" style="color:var(--muted)">P2</span></div>Bigger answer text.</div><div class="fx" data-t="eco" data-p="2" data-d="0"><div class="tags"><span class="ttag t-eco">Economy</span><span class="ttag" style="color:var(--muted)">P2</span></div>Remove multipliers; give rewards for each level advanced instead.</div><div class="fx" data-t="imp" data-p="2" data-d="0"><div class="tags"><span class="ttag t-imp">Improve</span><span class="ttag" style="color:var(--muted)">P2</span></div>Better checkpoint popups.</div><div class="fx" data-t="qol" data-p="2" data-d="0"><div class="tags"><span class="ttag t-qol">QoL</span><span class="ttag" style="color:var(--muted)">P2</span></div>&quot;Shield acquired&quot; shouldn&#x27;t be a popup; use something lighter (a toast / banner).</div><div class="fx" data-t="imp" data-p="3" data-d="0"><div class="tags"><span class="ttag t-imp">Improve</span><span class="ttag" style="color:var(--muted)">P3</span></div>Better visual effects for each stage.</div><div class="fx" data-t="imp" data-p="2" data-d="0"><div class="tags"><span class="ttag t-imp">Improve</span><span class="ttag" style="color:var(--muted)">P2</span></div>Boss round: 6 answers (same layout as Hard mode) and a smaller time penalty.</div><div class="fx" data-t="qol" data-p="3" data-d="0"><div class="tags"><span class="ttag t-qol">QoL</span><span class="ttag" style="color:var(--muted)">P3</span></div>Reword &quot;X correct left&quot; to something that sounds better.</div></div></details>
+<details class="card area"><summary><div class="num" style="font-size:18px">✏️</div><div class="st"><h3>Draw the Border Quiz<span class="cnt" data-c>1</span></h3><p>1 item · 1 fix first</p></div><div class="chev">▾</div></summary><div class="body"><div class="fx" data-t="bug" data-p="1" data-d="0"><div class="tags"><span class="ttag t-p1">Fix first</span><span class="ttag t-bug">Bug</span></div>The Next button doesn&#x27;t fit on the screen.</div></div></details>
+<details class="card area"><summary><div class="num" style="font-size:18px">🗺️</div><div class="st"><h3>Shapes &amp; Map Data (Feature 9)<span class="cnt" data-c>3</span></h3><p>3 items · 2 fix first</p></div><div class="chev">▾</div></summary><div class="body"><div class="fx" data-t="bug" data-p="1" data-d="0"><div class="tags"><span class="ttag t-p1">Fix first</span><span class="ttag t-bug">Bug</span></div>Missing country shapes (the &quot;?&quot;), also missing in Learn.</div><div class="fx" data-t="bug" data-p="1" data-d="0"><div class="tags"><span class="ttag t-p1">Fix first</span><span class="ttag t-bug">Bug</span></div>USA, New Zealand and Russia shapes are wrong (date line / far islands).</div><div class="fx" data-t="imp" data-p="3" data-d="0"><div class="tags"><span class="ttag t-imp">Improve</span><span class="ttag" style="color:var(--muted)">P3</span></div>Antarctica: show it like on its flag (seen from above the South Pole) instead of the stretched flat-map version. Doable with a polar view.</div></div></details>
+<details class="card area"><summary><div class="num" style="font-size:18px">🛒</div><div class="st"><h3>Shop, Chests &amp; Items<span class="cnt" data-c>10</span></h3><p>10 items · 2 fix first</p></div><div class="chev">▾</div></summary><div class="body"><div class="fx" data-t="bug" data-p="1" data-d="0"><div class="tags"><span class="ttag t-p1">Fix first</span><span class="ttag t-bug">Bug</span></div>Mythic chest: after opening one you can&#x27;t open another without leaving the page.</div><div class="fx" data-t="bug" data-p="1" data-d="0"><div class="tags"><span class="ttag t-p1">Fix first</span><span class="ttag t-bug">Bug</span></div>Mythic chest real drop rates must match the stated chances.</div><div class="fx" data-t="imp" data-p="2" data-d="0"><div class="tags"><span class="ttag t-imp">Improve</span><span class="ttag" style="color:var(--muted)">P2</span></div>Mythic chest: open several at once (bulk open / bulk buy).</div><div class="fx" data-t="qol" data-p="2" data-d="0"><div class="tags"><span class="ttag t-qol">QoL</span><span class="ttag" style="color:var(--muted)">P2</span></div>Mythic avatar icon: a silhouette instead of the question mark.</div><div class="fx" data-t="eco" data-p="2" data-d="1"><div class="tags"><span class="ttag t-eco">Economy</span><span class="ttag t-disc">Decide</span><span class="ttag" style="color:var(--muted)">P2</span></div>Bulk buying with 3 tiers (e.g. x1 / x5 / x10 with a discount).</div><div class="fx" data-t="eco" data-p="2" data-d="1"><div class="tags"><span class="ttag t-eco">Economy</span><span class="ttag t-disc">Decide</span><span class="ttag" style="color:var(--muted)">P2</span></div>Mythic chest and gold purchasing need rebalancing; is buying gold even needed?</div><div class="fx" data-t="qol" data-p="3" data-d="1"><div class="tags"><span class="ttag t-qol">QoL</span><span class="ttag t-disc">Decide</span><span class="ttag" style="color:var(--muted)">P3</span></div>Expedition upgrade: clearer display (maybe radio buttons).</div><div class="fx" data-t="bug" data-p="2" data-d="0"><div class="tags"><span class="ttag t-bug">Bug</span><span class="ttag" style="color:var(--muted)">P2</span></div>XP potions of the same tier should stack.</div><div class="fx" data-t="eco" data-p="2" data-d="0"><div class="tags"><span class="ttag t-eco">Economy</span><span class="ttag" style="color:var(--muted)">P2</span></div>Potions should apply last, after all other buffs.</div><div class="fx" data-t="qol" data-p="3" data-d="0"><div class="tags"><span class="ttag t-qol">QoL</span><span class="ttag" style="color:var(--muted)">P3</span></div>Call them &quot;Mythic gold potion&quot; / &quot;Mythic XP potion&quot; in the potions tab.</div></div></details>
+<details class="card area"><summary><div class="num" style="font-size:18px">🪙</div><div class="st"><h3>Prices (Economy config)<span class="cnt" data-c>2</span></h3><p>2 items</p></div><div class="chev">▾</div></summary><div class="body"><div class="fx" data-t="eco" data-p="2" data-d="1"><div class="tags"><span class="ttag t-eco">Economy</span><span class="ttag t-disc">Decide</span><span class="ttag" style="color:var(--muted)">P2</span></div>Countries: price x5, minimum 200 gold. Total to buy all 250 goes from about 1.5M to about 7.5M gold; this is also the Wonders unlock, so check it together.</div><div class="fx" data-t="eco" data-p="2" data-d="1"><div class="tags"><span class="ttag t-eco">Economy</span><span class="ttag t-disc">Decide</span><span class="ttag" style="color:var(--muted)">P2</span></div>Flags as collectibles for 5,000 gold each, shown in the Passport Collection like avatars.</div></div></details>
+<details class="card area"><summary><div class="num" style="font-size:18px">🎁</div><div class="st"><h3>Daily Chest<span class="cnt" data-c>3</span></h3><p>3 items</p></div><div class="chev">▾</div></summary><div class="body"><div class="fx" data-t="eco" data-p="2" data-d="1"><div class="tags"><span class="ttag t-eco">Economy</span><span class="ttag t-disc">Decide</span><span class="ttag" style="color:var(--muted)">P2</span></div>Daily chest only after X daily quests are done. The plan says the hard quest&#x27;s chest is the daily chest; decide which.</div><div class="fx" data-t="eco" data-p="2" data-d="0"><div class="tags"><span class="ttag t-eco">Economy</span><span class="ttag" style="color:var(--muted)">P2</span></div>If the ticket price goes up, rebalance how many tickets the daily chest gives.</div><div class="fx" data-t="qol" data-p="3" data-d="0"><div class="tags"><span class="ttag t-qol">QoL</span><span class="ttag" style="color:var(--muted)">P3</span></div>Closed chest icon: move it down a bit so it sits in the center of the glow.</div></div></details>
+<details class="card area"><summary><div class="num" style="font-size:18px">🏆</div><div class="st"><h3>Leaderboard &amp; Challenges<span class="cnt" data-c>2</span></h3><p>2 items · 1 fix first</p></div><div class="chev">▾</div></summary><div class="body"><div class="fx" data-t="bug" data-p="1" data-d="0"><div class="tags"><span class="ttag t-p1">Fix first</span><span class="ttag t-bug">Bug</span></div>Challenge placements look wrong; verify the ranking.</div><div class="fx" data-t="bug" data-p="2" data-d="0"><div class="tags"><span class="ttag t-bug">Bug</span><span class="ttag" style="color:var(--muted)">P2</span></div>Large XP numbers don&#x27;t fit; format them (e.g. 1.2M).</div></div></details>
+<details class="card area"><summary><div class="num" style="font-size:18px">📱</div><div class="st"><h3>App Icon &amp; Website<span class="cnt" data-c>2</span></h3><p>2 items</p></div><div class="chev">▾</div></summary><div class="body"><div class="fx" data-t="bug" data-p="2" data-d="0"><div class="tags"><span class="ttag t-bug">Bug</span><span class="ttag" style="color:var(--muted)">P2</span></div>Android: app icon looks stretched on the phone (fine in the Play Store). The icon artwork already has safe padding, so check the launcher / legacy icon on a device.</div><div class="fx" data-t="imp" data-p="3" data-d="0"><div class="tags"><span class="ttag t-imp">Improve</span><span class="ttag" style="color:var(--muted)">P3</span></div>SEO + GEO (AI search visibility) for the app&#x27;s web page. The site already has a sitemap and llms.txt; audit and improve them.</div></div></details>
+<details class="card"><summary><div class="num" style="font-size:18px">✅</div><div class="st"><h3>Already covered by the feature plan</h3><p>Notes that became features above</p></div><div class="chev">▾</div></summary><div class="body"><ul class="l ok"><li>remove daily challenge → ~3 daily quests → <b>Feature 1: Daily Quests</b></li><li>weekly challenges must be percentage / quiz specific → <b>Feature 2: Weekly Challenge</b></li><li>weekly challenge announcement (top 3, avatars, score) → <b>Feature 3: Winners Announcement</b></li><li>Quests + Home → Passport with stamps, animation, sub-tabs → <b>Feature 4: Passport</b></li><li>economy controlled from the dashboard (DB table) → <b>Feature 5: Economy Config</b></li><li>new mode: country direction with a compass → <b>Feature 6: Compass Quiz</b></li><li>events: 1-2 days a week with double rewards → <b>Feature 10: Events</b></li></ul></div></details>
 <h2 class="sec" id="open">Still open</h2>
 <div class="card" style="padding:12px 16px">
 <ul class="l open">
@@ -493,20 +568,25 @@ footer{color:var(--muted);font-size:12px;text-align:center;margin-top:36px}
   <li><b>Daily Challenge:</b> one guess vs several, rewards + unique reward, link to quests, streak / share.</li>
   <li><b>Events:</b> 5 questions with suggested answers.</li>
   <li><b>Notifications:</b> 5 questions with suggested answers.</li>
+  <li><b>From your notes (7):</b> daily chest rule, country prices ×5 (affects Wonders), flags as 5,000-gold collectibles, bulk buying tiers, mythic chest / gold purchase balance, expedition display, quiz summary XP/gold display.</li>
 </ul>
 </div>
 
 <h2 class="sec" id="later">Later (not this update)</h2>
 <div class="card" style="padding:14px 16px">
-  <span class="tag">Monthly quest</span><span class="tag">Stamp milestone quests</span><span class="tag">Hall of Fame</span><span class="tag">1st-place crown</span><span class="tag">Fanfare / stamp sounds</span><span class="tag">Compass difficulty</span><span class="tag">Mystery Country</span>
+  <span class="tag">Monthly quest</span><span class="tag">Stamp milestone quests</span><span class="tag">Hall of Fame</span><span class="tag">1st-place crown</span><span class="tag">Fanfare / stamp sounds</span><span class="tag">Compass difficulty</span><span class="tag">Mystery Country</span><span class="tag">Seasons</span><span class="tag">Country Mastery</span><span class="tag">Backgrounds in the Shop</span>
 </div>
 
-<footer>GeoConquest · plan last updated Nov 21, 2026</footer>
+<footer>GeoConquest · plan last updated Nov 23, 2026</footer>
 </div>
 <script>
 document.getElementById('openAll').onclick=()=>document.querySelectorAll('details').forEach(d=>d.open=true);
 document.getElementById('closeAll').onclick=()=>document.querySelectorAll('details').forEach(d=>d.open=false);
 document.querySelectorAll('nav.chips a[href^="#f"]').forEach(a=>a.addEventListener('click',()=>{const d=document.querySelector(a.getAttribute('href'));if(d)d.open=true;}));
+const flt=document.getElementById('flt');
+flt.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;flt.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));const f=b.dataset.f;
+document.querySelectorAll('.card.area').forEach(card=>{let n=0;card.querySelectorAll('.fx').forEach(r=>{const ok=f==='all'||(f==='p1'&&r.dataset.p==='1')||(f==='disc'&&r.dataset.d==='1')||r.dataset.t===f||(f==='bug'&&r.dataset.t==='sec');r.classList.toggle('hidden',!ok);if(ok)n++;});
+card.classList.toggle('hidden',n===0);card.querySelector('[data-c]').textContent=n;if(f!=='all'&&n)card.open=true;});});
 </script>
 </body>
 </html>
