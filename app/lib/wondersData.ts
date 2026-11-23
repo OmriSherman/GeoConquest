@@ -69,6 +69,24 @@ export const WONDERS: Wonder[] = [
       require('../../assets/wonders/great-wall/layer_9.webp'),
     ],
   },
+  {
+    id: 'machu-picchu',
+    name: "Machu Picchu",
+    cca2: 'PE',
+    palette: ["#0E1A1C", "#1F4A2A", "#1F4E8C", "#4C8A32", "#4F8FD0", "#5E8C86", "#7A6A52", "#A6C84A", "#C8B08A", "#F4F6F2"],
+    layers: [
+      require('../../assets/wonders/machu-picchu/layer_0.webp'),
+      require('../../assets/wonders/machu-picchu/layer_1.webp'),
+      require('../../assets/wonders/machu-picchu/layer_2.webp'),
+      require('../../assets/wonders/machu-picchu/layer_3.webp'),
+      require('../../assets/wonders/machu-picchu/layer_4.webp'),
+      require('../../assets/wonders/machu-picchu/layer_5.webp'),
+      require('../../assets/wonders/machu-picchu/layer_6.webp'),
+      require('../../assets/wonders/machu-picchu/layer_7.webp'),
+      require('../../assets/wonders/machu-picchu/layer_8.webp'),
+      require('../../assets/wonders/machu-picchu/layer_9.webp'),
+    ],
+  },
 ];
 
 export function getWonder(id: string): Wonder | undefined {
