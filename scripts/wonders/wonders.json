@@ -5,5 +5,6 @@
   {"id": "machu-picchu", "name": "Machu Picchu", "cca2": "PE"},
   {"id": "petra", "name": "Petra", "cca2": "JO"},
   {"id": "colosseum", "name": "Colosseum", "cca2": "IT"},
-  {"id": "christ-redeemer", "name": "Christ the Redeemer", "cca2": "BR"}
+  {"id": "christ-redeemer", "name": "Christ the Redeemer", "cca2": "BR"},
+  {"id": "angkor-wat", "name": "Angkor Wat", "cca2": "KH"}
 ]

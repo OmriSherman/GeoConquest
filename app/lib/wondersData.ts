@@ -141,6 +141,24 @@ export const WONDERS: Wonder[] = [
       require('../../assets/wonders/christ-redeemer/layer_9.webp'),
     ],
   },
+  {
+    id: 'angkor-wat',
+    name: "Angkor Wat",
+    cca2: 'KH',
+    palette: ["#120A1E", "#2E1A3A", "#2E5A3A", "#5A3058", "#6E9A4A", "#A8466A", "#E89AB0", "#F08A48", "#FFD27A", "#FFF4DA"],
+    layers: [
+      require('../../assets/wonders/angkor-wat/layer_0.webp'),
+      require('../../assets/wonders/angkor-wat/layer_1.webp'),
+      require('../../assets/wonders/angkor-wat/layer_2.webp'),
+      require('../../assets/wonders/angkor-wat/layer_3.webp'),
+      require('../../assets/wonders/angkor-wat/layer_4.webp'),
+      require('../../assets/wonders/angkor-wat/layer_5.webp'),
+      require('../../assets/wonders/angkor-wat/layer_6.webp'),
+      require('../../assets/wonders/angkor-wat/layer_7.webp'),
+      require('../../assets/wonders/angkor-wat/layer_8.webp'),
+      require('../../assets/wonders/angkor-wat/layer_9.webp'),
+    ],
+  },
 ];
 
 export function getWonder(id: string): Wonder | undefined {
