@@ -932,20 +932,24 @@ WONDER ART & REVEAL SYSTEM  (ASSETS + DATA BUILT, SCREEN NOT BUILT YET)
     to wonders.json, run:  python3 -I scripts/wonders/build_layers.py
   - Built so far: Great Pyramid of Giza (Egypt).
 
-  Wonder candidates (10; the plan launches with 5)
-     1 Great Pyramid of Giza  Egypt         Ancient     (art DONE)
-     2 Great Wall of China    China         New 7
-     3 Taj Mahal              India         New 7
-     4 Machu Picchu           Peru          New 7
-     5 Petra                  Jordan        New 7
-     6 Colosseum              Italy         New 7
-     7 Christ the Redeemer    Brazil        New 7
-     8 Chichen Itza           Mexico        New 7
-     9 Angkor Wat             Cambodia      Landmark
-    10 Victoria Falls         Zambia/Zimbabwe  Natural (border: owner
-                              = whoever holds Zambia, or a special case)
-     No Oceania wonder yet (Uluru or the Sydney Opera House could
-     replace one).
+  The 10 wonders (AGREED; the plan launches with 5) - drawn in this
+  order, each with its own mood so the set doesn't repeat:
+     1 Great Pyramid of Giza  Egypt      golden-hour sunset   (art DONE)
+     2 Taj Mahal              India      pre-dawn, reflecting pool
+     3 Great Wall of China    China      misty blue-green dawn
+     4 Machu Picchu           Peru       sunrise, green terraces, mist
+     5 Petra (the Treasury)   Jordan     red canyon, beam of sun
+     6 Colosseum              Italy      blue-hour dusk, glowing arches
+     7 Christ the Redeemer    Brazil     above the clouds, Rio lights
+     8 Angkor Wat             Cambodia   sunrise over a lotus pond
+     9 Uluru                  Australia  red rock, starry desert sky
+    10 Victoria Falls         Zambia/Zimbabwe  mist + rainbow (hardest;
+                              border: owner = whoever holds Zambia, or a
+                              special case)
+  Chichen Itza was swapped for Uluru: it is another stepped pyramid (too
+  close to Giza) and Uluru covers Oceania.
+  Easiest / most recognisable, good launch picks: Taj Mahal, Christ the
+  Redeemer, Angkor Wat, Uluru, + Great Wall or Machu Picchu (see W4).
 
   QUESTIONS TO DECIDE BEFORE BUILDING THE SCREEN
    W1. Applying a pigment: does the random colour appear immediately on
