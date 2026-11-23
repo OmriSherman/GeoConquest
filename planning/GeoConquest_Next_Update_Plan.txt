@@ -1,6 +1,6 @@
 GEOCONQUEST - NEXT UPDATE PLAN
 ==============================
-Status: 13 features (most designed; 8, 10, 11, 13 still have open questions) (no code changes yet)
+Status: 13 features (most designed; 8, 10, 11 still have open questions) (no code changes yet)
 Base code: the user's newest app version (with daily chest logic and
 quiz starting pages) must be pushed before implementation starts.
 Last updated: 2026-11-21
@@ -832,7 +832,7 @@ ENDLESS LEVEL MILESTONES (DECIDED)
     ready; milestones with nothing assigned pay gold by default.
 
 ------------------------------------------------------------
-FEATURE 13: AVATAR BACKGROUNDS  (in design)
+FEATURE 13: AVATAR BACKGROUNDS  (DESIGNED)
 ------------------------------------------------------------
 IDEA
   A new cosmetic slot. A player's look becomes:
@@ -843,7 +843,8 @@ WHERE BACKGROUNDS COME FROM
     background.
   - Endless level milestones: every 3rd milestone after level 300
     (450, 600, 750...) gives an exclusive avatar OR background.
-  - Later: events, seasons, Shop sales.
+  - Conqueror subscription: an exclusive Conqueror background.
+  - Later: events, seasons (Shop sales not planned for now).
 
 WHERE THEY SHOW
   - Passport header (the "ID page"), leaderboard rows, the weekly
@@ -859,12 +860,14 @@ HOW IT WORKS
   - Background list (name, image, source) managed from the dashboard,
     so new ones can be added without an app update where possible.
 
-OPEN QUESTIONS (suggested answer in [brackets])
-  B1. A few free starter backgrounds for everyone (plain colours /
-      simple map patterns), so the slot isn't empty? [Yes]
-  B2. Sell backgrounds in the Shop too, or only earn them?
-      [Earn-only at first; Shop later]
-  B3. Conqueror subscribers get an exclusive background? [Yes, one]
+DECISIONS
+  - No free starter backgrounds: players have NO background until
+    they earn one (the slot stays empty / default look).
+  - NOT sold in the Shop for now (earn-only).
+  - Conqueror subscribers get an exclusive Conqueror background.
+    It may REPLACE the current star marking for Conqueror players
+    (the background itself shows they're a subscriber) - to confirm
+    when we see how the star is used in the newest app version.
 
 ============================================================
 BUILD ORDER
@@ -885,8 +888,8 @@ BUILD ORDER
   9. Events (after Economy config + server-side rewards)
  10. Notifications (after Daily Quests, Weekly and Events, which it
      announces; local streak reminders could ship earlier)
- 11. Avatar backgrounds (Feature 13) - the background slot + starter
-     backgrounds; needed before Wonders hands out wonder backgrounds
+ 11. Avatar backgrounds (Feature 13) - the background slot + the
+     Conqueror background; needed before Wonders hands out backgrounds
  12. Wonders + endless level milestones (Feature 12)
 
 ============================================================
