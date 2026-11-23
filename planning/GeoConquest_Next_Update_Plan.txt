@@ -819,10 +819,17 @@ MORE DECISIONS
   - No hard level cap today; after level 300 nothing new happens
     (level quests exist only at 150 / 200 / 250 / 300).
 
-SUGGESTION (to confirm)
-  - Keep level milestones going forever, generated automatically
-    (every 50 levels: 350, 400, ...), with rewards from the dashboard,
-    so leveling always means something.
+ENDLESS LEVEL MILESTONES (DECIDED)
+  - After level 300, a milestone quest every 50 levels, forever
+    (350, 400, 450, ...), generated automatically.
+  - Rewards spread out so new avatars aren't needed every time:
+      * most milestones: a big gold reward (+ tickets), growing a bit
+        each time
+      * now and then (suggested every 4th milestone, i.e. levels 500,
+        700, 900...): an exclusive avatar or avatar background
+  - Milestone rewards live in a dashboard table: you can assign an
+    avatar / background to any future milestone whenever you have one
+    ready; milestones with nothing assigned pay gold by default.
 
 ============================================================
 BUILD ORDER
