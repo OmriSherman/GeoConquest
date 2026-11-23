@@ -942,14 +942,15 @@ WONDER ART & REVEAL SYSTEM  (ASSETS + DATA BUILT, SCREEN NOT BUILT YET)
      6 Colosseum              Italy      blue-hour dusk, glowing arches
      7 Christ the Redeemer    Brazil     above the clouds, Rio lights
      8 Angkor Wat             Cambodia   sunrise over a lotus pond
-     9 Uluru                  Australia  red rock, starry desert sky
+     9 Ha Long Bay            Vietnam    golden sunset, karst towers, red-sailed junks
     10 Victoria Falls         Zambia/Zimbabwe  mist + rainbow (hardest;
                               border: owner = whoever holds Zambia, or a
                               special case)
-  Chichen Itza was swapped for Uluru: it is another stepped pyramid (too
-  close to Giza) and Uluru covers Oceania.
+  Chichen Itza was swapped out: it is another stepped pyramid (too close
+  to Giza). Uluru replaced it first but was dropped after the art review;
+  Ha Long Bay (Vietnam) took its place. No Oceania wonder for now.
   Easiest / most recognisable, good launch picks: Taj Mahal, Christ the
-  Redeemer, Angkor Wat, Uluru, + Great Wall or Machu Picchu (see W4).
+  Redeemer, Angkor Wat, Ha Long Bay, + Great Wall or Machu Picchu (see W4).
 
   QUESTIONS TO DECIDE BEFORE BUILDING THE SCREEN
    W1. Applying a pigment: does the random colour appear immediately on

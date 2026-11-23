@@ -159,6 +159,24 @@ export const WONDERS: Wonder[] = [
       require('../../assets/wonders/angkor-wat/layer_9.webp'),
     ],
   },
+  {
+    id: 'ha-long-bay',
+    name: "Ha Long Bay",
+    cca2: 'VN',
+    palette: ["#0E1A1A", "#1E3A34", "#3E6A5A", "#5A3226", "#8AA08A", "#C0402A", "#E6D8B0", "#E8956A", "#F6C060", "#FFF2CE"],
+    layers: [
+      require('../../assets/wonders/ha-long-bay/layer_0.webp'),
+      require('../../assets/wonders/ha-long-bay/layer_1.webp'),
+      require('../../assets/wonders/ha-long-bay/layer_2.webp'),
+      require('../../assets/wonders/ha-long-bay/layer_3.webp'),
+      require('../../assets/wonders/ha-long-bay/layer_4.webp'),
+      require('../../assets/wonders/ha-long-bay/layer_5.webp'),
+      require('../../assets/wonders/ha-long-bay/layer_6.webp'),
+      require('../../assets/wonders/ha-long-bay/layer_7.webp'),
+      require('../../assets/wonders/ha-long-bay/layer_8.webp'),
+      require('../../assets/wonders/ha-long-bay/layer_9.webp'),
+    ],
+  },
 ];
 
 export function getWonder(id: string): Wonder | undefined {
