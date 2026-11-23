@@ -164,6 +164,12 @@ DECISIONS
       [Stop now, so nobody is rewarded twice]
 
 
+FROM YOUR NOTES (merged into this feature)
+  - Daily chest redesign: closed chest sits in the centre of its glow;
+    ticket amount from the chest follows the ticket price (from config).
+  - Show the Conqueror 2x XP and gold in the new quests and weekly
+    screens.
+
 ------------------------------------------------------------
 FEATURE 2: WEEKLY CHALLENGE  (DESIGNED)
 ------------------------------------------------------------
@@ -229,6 +235,9 @@ STILL OPEN (settle together with Economy config)
   W6. Prizes for 1st-3rd, participation reward, badge for 1st.
       All amounts set in the dashboard.
 
+FROM YOUR NOTES (merged into this feature)
+  - Leaderboard rework: format large XP numbers (1.2M) so they fit.
+
 ------------------------------------------------------------
 FEATURE 3: WEEKLY WINNERS ANNOUNCEMENT  (DESIGNED)
 ------------------------------------------------------------
@@ -274,6 +283,10 @@ LATER (not in this update)
   - Crown / lasting mark for 1st place.
   - Fanfare / drumroll sound effects (animation ships without them,
     or with existing sounds).
+
+FROM YOUR NOTES (merged into this feature)
+  - One shared 'share card' for all share images (results, passport,
+    podium, wonder) using the correct app icon, bigger.
 
 ------------------------------------------------------------
 FEATURE 4: PASSPORT  (DESIGNED)
@@ -336,6 +349,17 @@ DECISIONS
 LATER
   - Stamp milestone quests (10/25/50 stamps, full continent).
 
+FROM YOUR NOTES (merged into this feature)
+  - Profile/user menu moves behind the avatar in the Passport header:
+    shorter rows, smaller icons.
+  - Collection must list avatars from every source (shop, quests, daily
+    chest, milestones, wonders). Fixes: chest avatars missing from
+    Owned.
+  - Check the 'Game Master' quest icon when Quests move into the
+    Passport.
+  - Flags as collectibles live in Passport > Collection with avatars and
+    backgrounds (see C7).
+
 ------------------------------------------------------------
 FEATURE 5: ECONOMY CONFIG IN THE DASHBOARD  (DESIGNED)
 ------------------------------------------------------------
@@ -397,6 +421,16 @@ DECISIONS (user accepted all suggestions)
   - Dashboard stays single-admin with the admin key.
   - Minimum level requirements are editable (user addition).
 
+FROM YOUR NOTES (merged into this feature)
+  - Country price x5 / minimum 200 becomes a dashboard value (see
+    conflict C2).
+  - Mythic chest odds stored in config; the server rolls with the same
+    numbers the shop shows, so stated and real chances can't differ.
+  - Potions included in server-side reward calculation, applied last;
+    same-tier XP potions stack.
+  - Mythic chest / gold pack rebalance and bulk-buy tiers (x1 / x5 /
+    x10) priced from the dashboard (see C3).
+
 ------------------------------------------------------------
 FEATURE 6: COMPASS QUIZ  (DESIGNED)
 ------------------------------------------------------------
@@ -431,6 +465,10 @@ ACCESS
     Whatever is chosen should be editable from the dashboard
     (Economy config -> Levels / Shop).
 
+
+FROM YOUR NOTES (merged into this feature)
+  - Millionaire gets new question types and harder questions at higher
+    levels (uses F7 country difficulty). See C6.
 
 ------------------------------------------------------------
 FEATURE 7: QUIZ DIFFICULTY (Easy / Medium / Hard)  (DESIGNED)
@@ -493,6 +531,16 @@ HARD MODE: 6-ANSWER QUESTIONS (user addition)
     multiple choice, but some can't have 6 options (e.g. a question
     built from a country's neighbours when it only has 3). In that case
     the question stays at 4 answers. Same fallback rule for every quiz.
+
+FROM YOUR NOTES (merged into this feature)
+  - Starting page shows a better quiz description and the XP / gold per
+    correct for each difficulty.
+  - Gauntlet boss round uses the Hard-mode 6-answer layout (orange /
+    purple), with a smaller time penalty.
+  - Summary redesign: one reward breakdown (base, difficulty, event,
+    Conqueror, ad, potion), faster count-up like Millionaire, special
+    effect for Conqueror / event bonuses, stamp animation (F4). See C4
+    and C5.
 
 ------------------------------------------------------------
 FEATURE 8: DAILY CHALLENGE  (in design)
@@ -618,6 +666,12 @@ MISSING SHAPES (part of this feature - the "?" problem)
     out of shape questions and shown as a flag - never a "?".
   - Full lists: planning/overseas_territories_audit.txt (sections E1/E2).
 
+FROM YOUR NOTES (merged into this feature)
+  - Missing shapes, USA / New Zealand / Russia fixes, the same shapes
+    used in Learn, Antarctica from the South Pole.
+  - Learn uses the new bundled shapes: slower zoom, move / zoom the mini
+    map; Learn button in every regular quiz except Borders.
+
 ------------------------------------------------------------
 FEATURE 10: EVENTS (Double Rewards days + Shop Sales)  (in design)
 ------------------------------------------------------------
@@ -734,6 +788,10 @@ OPEN QUESTIONS
       top 10 changes]
   N5. Should the dashboard be able to send a one-off notification to
       everyone (announcements, updates)? [Yes]
+
+FROM YOUR NOTES (merged into this feature)
+  - One Settings screen: sound effects on/off + volume next to the
+    notification switches.
 
 ------------------------------------------------------------
 FEATURE 12: ENDGAME - WONDERS  (DESIGNED)
@@ -875,13 +933,11 @@ DECISIONS
 BUILD ORDER
 ============================================================
   0. HOTFIX: purchase exploits (server-side prices + level checks)
-     + the P1 bugs from Part B (password reset, Conqueror discount
-     abuse, missing chest avatars, Millionaire back button, Draw the
-     Border Next button, mythic chest re-open + drop rates, challenge
-     placements). P2/P3 items ride along with the feature that touches
-     the same screen (e.g. summary items with Difficulty/Economy, shop
-     items with Economy, Millionaire question types after Compass and
-     Daily Challenge).
+     + P1 standalone fixes (password reset, Conqueror discount abuse,
+     Millionaire back button, Draw the Border Next button, mythic chest
+     re-open) + a quick patch for daily-chest avatars missing from
+     Owned (fully fixed later by the Passport Collection).
+     Everything merged into a feature is built with that feature.
   1. Mainland outlines + missing shapes (Feature 9) - fixes a live bug
      (the "?" shapes) and Daily Challenge / Compass Quiz depend on it
   2. Economy config (game_config table, app config loader, dashboard
@@ -922,150 +978,206 @@ LATER / NOT IN THIS UPDATE
   - Difficulty levels for Compass Quiz
 
 ============================================================
-PART B: BUGS, QUALITY OF LIFE & IMPROVEMENTS (from your notes)
+PART B: YOUR NOTES, RECONCILED WITH THE FEATURES
 ============================================================
-Tags: BUG / SECURITY / QOL / IMPROVE / ECONOMY.  Priority: P1 = fix
-first (with the hotfix), P2 = this update, P3 = nice to have.
-[DISCUSS] = needs a decision before building.
-Note: many items (Gauntlet, potions, mythic chest, expedition, Draw
-the Border, pause menu, password reset) live in the newer build that
-isn't in this repo yet, so they can only be confirmed once it's pushed.
+Every note is now in exactly one place:
+  B1. CONFLICTS - a note and a feature disagree; you decide.
+  B2. MERGED     - the note is now part of a feature (also listed
+                   under 'FROM YOUR NOTES' in that feature).
+  B3. STANDALONE - fixes that don't belong to any feature.
+Many notes (Gauntlet, potions, mythic chest, expedition, Draw the
+Border, pause menu, password reset) are about the newer build; they
+get confirmed once it's pushed.
 
---- Account & Conqueror ---
-  [P1 BUG] Password reset fails: after saving the new password you get
-      "Auth session missing". Likely cause: the reset link's session
-      isn't set up before the password is saved. (Reset flow is in the
-      newer build.)
-  [P1 SECURITY] Conqueror 50% off first month must be once per user.
-      Block repeat use (e.g. cancel and re-subscribe, new account on the
-      same store account).
-  [P2 BUG] Conqueror double XP and gold isn't shown in the challenges /
-      weekly screens.
+B1. CONFLICTS TO DECIDE
+------------------------
+  C1. Daily chest rule
+      Your note: the daily chest only after X daily quests are done.
+      Feature 1: the hard quest's chest IS the daily chest.
+      - A: chest opens after all 3 quests are done
+      - B: chest = reward of the hard quest (current plan)
+      - C: chest after any 2 of 3 quests
+      Suggestion: A or C: easier for weaker players than requiring the
+      hard quest, and it keeps all 3 quests relevant.
 
---- Profile & User Menu ---
-  [P1 BUG] Avatars won from the daily chest don't appear in the Owned
-      tab or in the owned unique avatars.
-  [P2 BUG] "Game Master" quest icon looks broken on the user page.
-  [P2 BUG] Sound effects lower other apps' audio (e.g. music in
-      headphones). Cause found: the app never sets its audio mode, so
-      the default ducks other audio. Fix: set it to mix with other apps.
-  [P2 QOL] Add a sound effects on/off (and volume) option in the user
-      menu.
-  [P3 QOL] User menu rows are too tall; make them shorter, smaller icons
-      if needed.
+  C2. Country prices x5 vs the Wonders unlock
+      Your note: countries x5, minimum 200 gold. Feature 12: Wonders
+      unlock needs every country owned. Buying all 250 goes from about
+      1.5M to about 7.5M gold.
+      - A: x5 and keep 'all countries' for Wonders (very long road)
+      - B: x5, but Wonders needs e.g. 200 of 250 countries
+      - C: a smaller increase (x2-x3)
+      Suggestion: Set the price in the dashboard (Feature 5) and pick
+      the multiplier after looking at real gold earned per day by active
+      players.
 
---- All Quizzes ---
-  [P2 IMPROVE] Add the "Learn" button to every regular quiz except
+  C3. Is buying gold with real money still needed?
+      Your note asks whether gold purchasing is needed. The plan assumes
+      it exists: editable gold per pack (F5), bonus-gold sales (F10),
+      and bought gold excluded from Weekly Gold Efficiency (F2).
+      - A: keep gold packs (rebalance amounts)
+      - B: remove gold packs; money goes to Conqueror, tickets and
+        chests
+      Suggestion: Decide before Economy config; if B, drop the related
+      bits from F2, F5 and F10.
+
+  C4. Too many multipliers stacking
+      Rewards can now be multiplied by difficulty (F7), event 2x (F10),
+      Conqueror 2x, the 'double next round' ad (notes) and potions
+      (notes, 'applied last'). Hard 1.25 x event 2 x Conqueror 2 x ad 2
+      x potion = 10x or more.
+      - A: all multiply, with a cap (e.g. max 5x before potions)
+      - B: some add instead of multiply (e.g. event + Conqueror = 3x,
+        not 4x)
+      - C: no cap
+      Suggestion: One fixed order on the server: base -> difficulty ->
+      event -> Conqueror -> ad bonus -> potion last, with a dashboard
+      cap.
+
+  C5. Two different 'watch an ad for double rewards'
+      The current build already asks for an ad when pressing Play Again
+      (double rewards). Your note adds a 'double rewards next round'
+      button on the summary.
+      - A: keep only the Play Again popup
+      - B: replace it with the summary button
+      - C: both
+      Suggestion: B: one clear button on the summary is less pushy than
+      a popup on Play Again.
+
+  C6. Millionaire: new question types
+      Your note: add Compass and Daily Challenge question types to
+      Millionaire. But Daily Challenge answers are typed and Compass
+      uses a dial; Millionaire is 4 answers.
+      - A: convert them to 4-answer versions inside Millionaire (e.g.
+        'Which flag has this palette?')
+      - B: only add types that are already multiple choice
+      Suggestion: A, after Compass Quiz and Daily Challenge ship.
+
+  C7. Flags as 5,000-gold collectibles
+      Your note: each flag costs 5,000 and is collected like avatars.
+      Today players pick their flag freely, and the flag shows next to
+      their name everywhere.
+      - A: everyone keeps their current flag + their own country free;
+        others cost 5,000
+      - B: all flags free to show, but 'collecting' them is a separate
+        collection
+      Suggestion: A, so nobody loses what they have.
+
+  C8. Existing challenges screen vs the new Weekly Challenge
+      Your notes mention 'challenges weekly/challenges' and wrong
+      placements, so the newer build seems to have a challenges screen
+      already. Feature 2 designs a new Weekly Challenge.
+      - A: Feature 2 replaces the existing challenges
+      - B: keep existing challenges and add Weekly next to them
+      Suggestion: A. The placement bug then becomes 'make sure the new
+      server ranking is correct'. Confirm once the newer build is
+      pushed.
+
+B2. MERGED INTO FEATURES
+------------------------
+  [F1 Daily Quests] Daily chest redesign: closed chest sits in the
+      centre of its glow; ticket amount from the chest follows the
+      ticket price (from config).
+  [F1 / F2 Daily Quests & Weekly] Show the Conqueror 2x XP and gold in
+      the new quests and weekly screens.
+  [F2 Weekly + Leaderboard] Leaderboard rework: format large XP numbers
+      (1.2M) so they fit.
+  [F3 Winners / F4 Passport / F12 Wonders] One shared 'share card' for
+      all share images (results, passport, podium, wonder) using the
+      correct app icon, bigger.
+  [F4 Passport] Profile/user menu moves behind the avatar in the
+      Passport header: shorter rows, smaller icons.
+  [F4 Passport] Collection must list avatars from every source (shop,
+      quests, daily chest, milestones, wonders). Fixes: chest avatars
+      missing from Owned.
+  [F4 Passport] Check the 'Game Master' quest icon when Quests move into
+      the Passport.
+  [F5 Economy config] Country price x5 / minimum 200 becomes a dashboard
+      value (see conflict C2).
+  [F5 Economy config] Mythic chest odds stored in config; the server
+      rolls with the same numbers the shop shows, so stated and real
+      chances can't differ.
+  [F5 Economy config] Potions included in server-side reward
+      calculation, applied last; same-tier XP potions stack.
+  [F5 Economy config] Mythic chest / gold pack rebalance and bulk-buy
+      tiers (x1 / x5 / x10) priced from the dashboard (see C3).
+  [F7 Difficulty (starting page)] Starting page shows a better quiz
+      description and the XP / gold per correct for each difficulty.
+  [F7 Difficulty] Gauntlet boss round uses the Hard-mode 6-answer layout
+      (orange / purple), with a smaller time penalty.
+  [F7 / F10 / F5 Quiz Summary] Summary redesign: one reward breakdown
+      (base, difficulty, event, Conqueror, ad, potion), faster count-up
+      like Millionaire, special effect for Conqueror / event bonuses,
+      stamp animation (F4). See C4 and C5.
+  [F9 Mainland outlines + shapes] Missing shapes, USA / New Zealand /
+      Russia fixes, the same shapes used in Learn, Antarctica from the
+      South Pole.
+  [F9 + Learn] Learn uses the new bundled shapes: slower zoom, move /
+      zoom the mini map; Learn button in every regular quiz except
       Borders.
-  [P2 QOL] Learn: slower zoom-in, or let players move and zoom the mini
-      map themselves.
-  [P2 IMPROVE] Better quiz descriptions; move "XP / gold per correct" to
-      each quiz's starting page.
+  [F11 Notifications (Settings)] One Settings screen: sound effects
+      on/off + volume next to the notification switches.
+  [F6 / F8 then Millionaire] Millionaire gets new question types and
+      harder questions at higher levels (uses F7 country difficulty).
+      See C6.
+  [F4 / F13 Cosmetics] Flags as collectibles live in Passport >
+      Collection with avatars and backgrounds (see C7).
+
+B3. STANDALONE FIXES
+--------------------
+  (P1 = fix first, P2 = this update, P3 = nice to have)
+  --- Account & Conqueror ---
+  [P1 BUG] Password reset fails with "Auth session missing" after saving
+      the new password.
+  [P1 SECURITY] Conqueror 50% off first month: once per user, block
+      repeat use.
+
+  --- Sound ---
+  [P2 BUG] Sound effects lower other apps' audio (music in headphones).
+      Cause: the app never sets its audio mode; set it to mix with other
+      apps.
+
+  --- All Quizzes ---
   [P2 QOL] Hide the bottom tab bar while a quiz is running.
-  [P3 QOL] Pause menu: center it on screen.
+  [P3 QOL] Pause menu: center it.
 
---- Quiz Summary (results screen) ---
-  [P2 QOL] XP and gold count-up is too slow; match the Millionaire
-      summary speed.
-  [P2 IMPROVE] Special effect when Conqueror double XP / gold is
-      applied.
-  [P2 IMPROVE] Add a "Watch ad: double rewards next round" button.
-  [P3 IMPROVE] [DISCUSS] Better way to show XP and gold gained (layout /
-      visuals).
-  [P2 BUG] Share results: use the correct app icon, and make it bigger.
+  --- Millionaire Quiz ---
+  [P1 BUG] "Back to quizzes" on the summary does nothing.
+  [P2 QOL] "Play again" message only when the player has 3 tickets or
+      fewer.
+  [P2 IMPROVE] "On fire" popup: remove the icon, redesign, explain that
+      taking the money gives no XP.
+  [P2 IMPROVE] Question ladder (prize levels) in a column on the right
+      side.
 
---- Millionaire Quiz ---
-  [P1 BUG] "Back to quizzes" button on the summary does nothing.
-  [P2 QOL] "Play again" message should only pop up when the player has 3
-      tickets or fewer.
-  [P2 IMPROVE] "On fire" popup: remove the icon, redesign it, and
-      explain that taking the money means no XP.
-  [P2 IMPROVE] Show the question ladder (prize levels) in a column on
-      the right side of the screen.
-  [P3 IMPROVE] Add all question types: Compass, Daily Challenge types,
-      harder (tier 2) questions on higher levels. After those features
-      ship.
+  --- Nightmare Quiz ---
+  [P3 IMPROVE] Replace the darkness fade-in with a pixelated flag that
+      sharpens.
 
---- Nightmare Quiz ---
-  [P3 IMPROVE] Replace the "out of darkness" fade-in with a pixelated
-      flag that sharpens to clear.
-
---- The Gauntlet ---
+  --- The Gauntlet ---
   [P2 QOL] Bigger answer text.
-  [P2 ECONOMY] Remove multipliers; give rewards for each level advanced
-      instead.
+  [P2 ECONOMY] Remove multipliers; reward each level advanced instead.
   [P2 IMPROVE] Better checkpoint popups.
-  [P2 QOL] "Shield acquired" shouldn't be a popup; use something lighter
-      (a toast / banner).
-  [P3 IMPROVE] Better visual effects for each stage.
-  [P2 IMPROVE] Boss round: 6 answers (same layout as Hard mode) and a
-      smaller time penalty.
-  [P3 QOL] Reword "X correct left" to something that sounds better.
+  [P2 QOL] "Shield acquired" as a light toast, not a popup.
+  [P3 IMPROVE] Better visual effects per stage.
+  [P3 QOL] Reword "X correct left".
 
---- Draw the Border Quiz ---
-  [P1 BUG] The Next button doesn't fit on the screen.
+  --- Draw the Border Quiz ---
+  [P1 BUG] Next button doesn't fit on the screen.
 
---- Shapes & Map Data (Feature 9) ---
-  [P1 BUG] Missing country shapes (the "?"), also missing in Learn.
-  [P1 BUG] USA, New Zealand and Russia shapes are wrong (date line / far
-      islands).
-  [P3 IMPROVE] Antarctica: show it like on its flag (seen from above the
-      South Pole) instead of the stretched flat-map version. Doable with
-      a polar view.
-
---- Shop, Chests & Items ---
-  [P1 BUG] Mythic chest: after opening one you can't open another
-      without leaving the page.
-  [P1 BUG] Mythic chest real drop rates must match the stated chances.
-  [P2 IMPROVE] Mythic chest: open several at once (bulk open / bulk
-      buy).
+  --- Shop & Items ---
+  [P1 BUG] Mythic chest: can't open another without leaving the page
+      (bulk open fixes this too).
   [P2 QOL] Mythic avatar icon: a silhouette instead of the question
       mark.
-  [P2 ECONOMY] [DISCUSS] Bulk buying with 3 tiers (e.g. x1 / x5 / x10
-      with a discount).
-  [P2 ECONOMY] [DISCUSS] Mythic chest and gold purchasing need
-      rebalancing; is buying gold even needed?
-  [P3 QOL] [DISCUSS] Expedition upgrade: clearer display (maybe radio
-      buttons).
-  [P2 BUG] XP potions of the same tier should stack.
-  [P2 ECONOMY] Potions should apply last, after all other buffs.
-  [P3 QOL] Call them "Mythic gold potion" / "Mythic XP potion" in the
+  [P3 QOL] Expedition upgrade: clearer display (maybe radio buttons).
+  [P3 QOL] Name them "Mythic gold potion" / "Mythic XP potion" in the
       potions tab.
 
---- Prices (Economy config) ---
-  [P2 ECONOMY] [DISCUSS] Countries: price x5, minimum 200 gold. Total to
-      buy all 250 goes from about 1.5M to about 7.5M gold; this is also
-      the Wonders unlock, so check it together.
-  [P2 ECONOMY] [DISCUSS] Flags as collectibles for 5,000 gold each,
-      shown in the Passport Collection like avatars.
+  --- App Icon & Website ---
+  [P2 BUG] Android icon looks stretched on the phone (fine in the Play
+      Store); artwork padding is fine, check the launcher / legacy icon
+      on a device.
+  [P3 IMPROVE] SEO + GEO (AI search) for the app's web page.
 
---- Daily Chest ---
-  [P2 ECONOMY] [DISCUSS] Daily chest only after X daily quests are done.
-      The plan says the hard quest's chest is the daily chest; decide
-      which.
-  [P2 ECONOMY] If the ticket price goes up, rebalance how many tickets
-      the daily chest gives.
-  [P3 QOL] Closed chest icon: move it down a bit so it sits in the
-      center of the glow.
-
---- Leaderboard & Challenges ---
-  [P1 BUG] Challenge placements look wrong; verify the ranking.
-  [P2 BUG] Large XP numbers don't fit; format them (e.g. 1.2M).
-
---- App Icon & Website ---
-  [P2 BUG] Android: app icon looks stretched on the phone (fine in the
-      Play Store). The icon artwork already has safe padding, so check
-      the launcher / legacy icon on a device.
-  [P3 IMPROVE] SEO + GEO (AI search visibility) for the app's web page.
-      The site already has a sitemap and llms.txt; audit and improve
-      them.
---- Notes already covered by the feature plan ---
-  remove daily challenge → ~3 daily quests  ->  Feature 1: Daily Quests
-  weekly challenges must be percentage / quiz specific  ->  Feature 2: Weekly Challenge
-  weekly challenge announcement (top 3, avatars, score)  ->  Feature 3: Winners Announcement
-  Quests + Home → Passport with stamps, animation, sub-tabs  ->  Feature 4: Passport
-  economy controlled from the dashboard (DB table)  ->  Feature 5: Economy Config
-  new mode: country direction with a compass  ->  Feature 6: Compass Quiz
-  events: 1-2 days a week with double rewards  ->  Feature 10: Events
-
-Totals: 54 items, 10 at P1, 7 need a decision.
+Totals: 8 conflicts, 19 merged notes, 23 standalone fixes.
