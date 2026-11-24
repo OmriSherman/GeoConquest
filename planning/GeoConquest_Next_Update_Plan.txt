@@ -934,7 +934,8 @@ BUILD ORDER
 ============================================================
   0. HOTFIX: purchase exploits (server-side prices + level checks)
      + P1 standalone fixes (password reset, Conqueror discount abuse,
-     Millionaire back button, Draw the Border Next button, mythic chest
+     Millionaire back button, Draw the Border Next button + multi-line
+     borders, mythic chest
      re-open) + a quick patch for daily-chest avatars missing from
      Owned (fully fixed later by the Passport Collection).
      Everything merged into a feature is built with that feature.
@@ -1164,6 +1165,15 @@ B3. STANDALONE FIXES
 
   --- Draw the Border Quiz ---
   [P1 BUG] Next button doesn't fit on the screen.
+  [P1 BUG] Allow drawing MORE THAN ONE line. Some borders are in
+      separate pieces (USA-Canada: Alaska + mainland), so these
+      questions can't be answered correctly today. Let the player draw
+      several strokes, score them together, and show a hint like "This
+      border has 2 parts". The map data has 25 such pairs, e.g. USA-
+      Canada, Armenia-Azerbaijan, Oman-UAE, China-India, China-Russia,
+      Russia-Lithuania (Kaliningrad), Argentina-Chile, Austria-
+      Switzerland, France-Spain. Use the full outlines here, not the
+      mainland-only ones (Feature 9).
 
   --- Shop & Items ---
   [P1 BUG] Mythic chest: can't open another without leaving the page
@@ -1180,4 +1190,4 @@ B3. STANDALONE FIXES
       on a device.
   [P3 IMPROVE] SEO + GEO (AI search) for the app's web page.
 
-Totals: 8 conflicts, 19 merged notes, 23 standalone fixes.
+Totals: 8 conflicts, 19 merged notes, 24 standalone fixes.
