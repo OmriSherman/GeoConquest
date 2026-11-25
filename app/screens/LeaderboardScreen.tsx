@@ -23,7 +23,10 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { AVATAR_CHARACTERS, CUSTOM_AVATARS, CUSTOM_FLAGS, FLAG_OPTIONS } from '../lib/avatarData';
 import { calcQuizXP, getLevelInfo } from '../lib/xpSystem';
 import { playMillionairePrize } from '../lib/audio';
+import { t } from '../lib/i18n';
+import { getDisplayFlagEmoji } from '../lib/flagDisplay';
 import AnalogCountdownClock from '../components/AnalogCountdownClock';
+import { XpAmount, XpIcon } from '../components/XpIcon';
 
 const ACHIEVEMENT_ICON_IMAGES: Record<string, any> = {
   png_domination:      require('../../assets/avatars/domination.png'),
@@ -58,18 +61,22 @@ const ACHIEVEMENT_ICON_IMAGES: Record<string, any> = {
   png_atlas_rune:      require('../../assets/avatars/atlas_rune.png'),
   png_eternal_seal:    require('../../assets/avatars/eternal_seal.png'),
   png_the_singularity: require('../../assets/avatars/the_singularity.png'),
+  png_hourglass:       require('../../assets/avatars/hourglass.png'),
+  png_caravel:         require('../../assets/avatars/caravel.png'),
+  png_crucible:        require('../../assets/avatars/crucible.png'),
+  png_sextant:         require('../../assets/avatars/sextant.png'),
 };
 import { ACHIEVEMENTS_DATA } from '../lib/achievementsData';
 import { CUSTOM_FLAG_COMPONENTS, isCustomFlag } from '../lib/customFlags';
 
 const WORLD_LAND_AREA = 150_000_000; // km²
 
-const DAILY_CHALLENGES: { label: string; key: string; metricLabel: string; format: (v: number) => string }[] = [
-  { label: 'Most XP Earned',         key: 'xp',        metricLabel: 'XP',       format: v => v.toLocaleString() },
-  { label: 'Most Quizzes Done',       key: 'quizzes',   metricLabel: 'Quizzes',  format: v => v.toString() },
-  { label: 'Most Gold Earned',        key: 'gold',      metricLabel: 'Gold',     format: v => v.toLocaleString() },
-  { label: 'Most Correct Answers',    key: 'questions', metricLabel: 'Correct',  format: v => v.toLocaleString() },
-  { label: 'Highest Accuracy',        key: 'accuracy',  metricLabel: 'Accuracy', format: v => v.toFixed(1) + '%' },
+const DAILY_CHALLENGES: { labelKey: string; key: string; metricLabelKey: string; format: (v: number) => string }[] = [
+  { labelKey: 'leaderboard.mostXP',        key: 'xp',        metricLabelKey: 'leaderboard.metricXP',       format: v => v.toLocaleString() },
+  { labelKey: 'leaderboard.mostQuizzes',   key: 'quizzes',   metricLabelKey: 'leaderboard.metricQuizzes',  format: v => v.toString() },
+  { labelKey: 'leaderboard.mostGold',      key: 'gold',      metricLabelKey: 'leaderboard.metricGold',     format: v => v.toLocaleString() },
+  { labelKey: 'leaderboard.mostCorrect',   key: 'questions', metricLabelKey: 'leaderboard.metricCorrect',  format: v => v.toLocaleString() },
+  { labelKey: 'leaderboard.highestAccuracy', key: 'accuracy', metricLabelKey: 'leaderboard.metricAccuracy', format: v => v.toFixed(1) + '%' },
 ];
 
 function getTodayChallenge() {
@@ -78,11 +85,20 @@ function getTodayChallenge() {
   return DAILY_CHALLENGES[dayIndex % DAILY_CHALLENGES.length];
 }
 
-const ALLTIME_CATEGORIES: { key: 'xp' | 'land' | 'quizzes' | 'avatars'; label: string; metricLabel: string; getValue: (e: LeaderboardEntry) => number; format: (v: number) => string }[] = [
-  { key: 'xp',      label: 'XP',      metricLabel: 'XP',      getValue: e => e.xp ?? 0,              format: v => v.toLocaleString() },
-  { key: 'land',    label: 'Land',    metricLabel: 'Land',    getValue: e => e.conquest_pct ?? 0,    format: v => `${v.toFixed(1)}%` },
-  { key: 'quizzes', label: 'Quizzes', metricLabel: 'Quizzes', getValue: e => e.quiz_count ?? 0,      format: v => v.toLocaleString() },
-  { key: 'avatars', label: 'Avatars', metricLabel: 'Avatars', getValue: e => e.avatar_count ?? 0,    format: v => v.toString() },
+function getWeekChallenge() {
+  const start = Date.UTC(2024, 0, 1);
+  const monday = new Date();
+  monday.setUTCHours(0, 0, 0, 0);
+  monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7));
+  const weekIndex = Math.floor((monday.getTime() - start) / (7 * 86_400_000));
+  return DAILY_CHALLENGES[((weekIndex % DAILY_CHALLENGES.length) + DAILY_CHALLENGES.length) % DAILY_CHALLENGES.length];
+}
+
+const ALLTIME_CATEGORIES: { key: 'xp' | 'land' | 'quizzes' | 'avatars'; labelKey: string; metricLabelKey: string; getValue: (e: LeaderboardEntry) => number; format: (v: number) => string }[] = [
+  { key: 'xp',      labelKey: 'leaderboard.catXP',      metricLabelKey: 'leaderboard.metricXP',      getValue: e => e.xp ?? 0,              format: v => v.toLocaleString() },
+  { key: 'land',    labelKey: 'leaderboard.catLand',    metricLabelKey: 'leaderboard.catLand',        getValue: e => e.conquest_pct ?? 0,    format: v => `${v.toFixed(1)}%` },
+  { key: 'quizzes', labelKey: 'leaderboard.catQuizzes', metricLabelKey: 'leaderboard.metricQuizzes',  getValue: e => e.quiz_count ?? 0,      format: v => v.toLocaleString() },
+  { key: 'avatars', labelKey: 'leaderboard.catAvatars', metricLabelKey: 'leaderboard.catAvatars',     getValue: e => e.avatar_count ?? 0,    format: v => v.toString() },
 ];
 const DAILY_WINNER_POPUP_KEY_PREFIX = '@daily_winner_reward_popup_seen:';
 const DAILY_REFRESH_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
@@ -150,7 +166,7 @@ export default function LeaderboardScreen() {
   const { user, profile } = useAuth();
   const navigation = useNavigation<any>();
   const { showAlert } = useAlert();
-  const [leaderboardType, setLeaderboardType] = useState<'alltime' | 'daily'>('daily');
+  const [leaderboardType, setLeaderboardType] = useState<'alltime' | 'daily' | 'weekly'>('daily');
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [dailyXpEntries, setDailyXpEntries] = useState<(LeaderboardEntry & { daily_xp: number })[]>([]);
   const [visibleCount, setVisibleCount] = useState(LEADERBOARD_PAGE_SIZE);
@@ -182,23 +198,34 @@ export default function LeaderboardScreen() {
 
   const ALLTIME_INTERVAL = 900_000; // 15 min — aligned to UTC clock marks
 
+  // Patch the current user's own row instantly when profile changes (avatar, flag, XP, Conqueror badge).
+  // No need to re-fetch the whole leaderboard for self-updates.
+  useEffect(() => {
+    if (!user?.id || !profile) return;
+    setEntries(prev => prev.map(e =>
+      e.id === user.id
+        ? {
+            ...e,
+            username: profile.username ?? e.username,
+            avatar_emoji: profile.avatar_emoji ?? e.avatar_emoji,
+            avatar_flag: profile.avatar_flag ?? e.avatar_flag,
+            xp: profile.xp ?? e.xp,
+            is_conquerer: profile.is_conquerer ?? e.is_conquerer,
+          }
+        : e
+    ));
+  }, [user?.id, profile?.username, profile?.avatar_emoji, profile?.avatar_flag, profile?.xp, profile?.is_conquerer]);
+
   useFocusEffect(
     useCallback(() => {
-      if (leaderboardType === 'daily') {
-        loadDailyXpLeaderboard();
-        const interval = setInterval(loadDailyXpLeaderboard, 300_000);
+      if (leaderboardType !== 'alltime') {
+        loadChallengeLeaderboard();
+        const interval = setInterval(loadChallengeLeaderboard, 300_000);
         return () => clearInterval(interval);
       } else {
         loadLeaderboard();
-        // Fire next refresh exactly at the next 15-min UTC mark, then every 15 min
-        const now = Date.now();
-        const nextMark = Math.ceil((now + 1) / ALLTIME_INTERVAL) * ALLTIME_INTERVAL;
-        let intervalId: ReturnType<typeof setInterval>;
-        const timeoutId = setTimeout(() => {
-          loadLeaderboard();
-          intervalId = setInterval(loadLeaderboard, ALLTIME_INTERVAL);
-        }, nextMark - now);
-        return () => { clearTimeout(timeoutId); clearInterval(intervalId); };
+        const intervalId = setInterval(loadLeaderboard, ALLTIME_INTERVAL);
+        return () => clearInterval(intervalId);
       }
     }, [leaderboardType])
   );
@@ -210,6 +237,11 @@ export default function LeaderboardScreen() {
         const now = new Date();
         const midnight = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
         return Math.max(0, Math.floor((midnight.getTime() - Date.now()) / 1000));
+      } else if (leaderboardType === 'weekly') {
+        const now = new Date();
+        const daysUntilMonday = now.getUTCDay() === 0 ? 1 : 8 - now.getUTCDay();
+        const nextMonday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + daysUntilMonday));
+        return Math.max(0, Math.floor((nextMonday.getTime() - Date.now()) / 1000));
       } else {
         const now = Date.now();
         const nextMark = Math.ceil((now + 1) / ALLTIME_INTERVAL) * ALLTIME_INTERVAL;
@@ -293,14 +325,14 @@ export default function LeaderboardScreen() {
 
     await AsyncStorage.setItem(key, '1');
     const rankMsg = rank === 1
-      ? 'You topped yesterday\'s leaderboard!'
-      : `You finished #${rank} on yesterday's leaderboard!`;
+      ? t('leaderboard.toppedYesterday')
+      : t('leaderboard.finishedYesterday', { rank });
     const goldAmount = Number(row.gold || 0);
     const ticketAmount = Number(row.tickets || 0);
     playMillionairePrize();
     showAlert({
       icon: <Image source={require('../../assets/avatars/trophy.png')} style={{ width: 80, height: 80 }} resizeMode="contain" />,
-      title: `#${rank} Place!`,
+      title: t('leaderboard.rankPlace', { rank }),
       contentNode: (
         <View style={{ alignItems: 'center', gap: 6 }}>
           <Text style={{ color: '#ccc', fontSize: 14, textAlign: 'center', marginBottom: 8 }}>{rankMsg}</Text>
@@ -314,17 +346,21 @@ export default function LeaderboardScreen() {
           </View>
         </View>
       ),
-      buttons: [{ text: 'Awesome!', style: 'cta' }],
+      buttons: [{ text: t('leaderboard.awesome'), style: 'cta' }],
       confetti: true,
     });
   }
 
-  async function loadDailyXpLeaderboard() {
+  async function loadChallengeLeaderboard() {
     setLoading(true);
     try {
-      const { data: awardData, error: awardError } = await supabase.rpc('award_daily_leaderboard_winner');
+      const { data: awardData, error: awardError } = leaderboardType === 'daily'
+        ? await supabase.rpc('award_daily_leaderboard_winner')
+        : leaderboardType === 'weekly'
+          ? await supabase.rpc('award_weekly_leaderboard_rewards')
+        : { data: null, error: null };
       if (awardError) {
-        console.warn('Failed to award daily winner reward:', awardError.message);
+        console.warn('Failed to award leaderboard reward:', awardError.message);
       } else {
         try {
           await maybeShowDailyWinnerRewardPopup((awardData as AwardDailyWinnerResult[] | null) ?? null);
@@ -335,8 +371,9 @@ export default function LeaderboardScreen() {
 
       // Get today's UTC date range
       const now = new Date();
-      const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
-      const todayEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)).toISOString();
+      const weekStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - ((now.getUTCDay() + 6) % 7)));
+      const todayStart = (leaderboardType === 'weekly' ? weekStart : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))).toISOString();
+      const todayEnd = (leaderboardType === 'weekly' ? new Date(weekStart.getTime() + 7 * 86400000) : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1))).toISOString();
 
       // Get all profiles
       let { data: profiles, error: profileErr } = await supabase
@@ -371,11 +408,11 @@ export default function LeaderboardScreen() {
         areaTotal[row.user_id] = (areaTotal[row.user_id] || 0) + ((areaMap as Record<string, number>)[row.country_code] || 0);
       }
 
-      const todayChallenge = getTodayChallenge();
+      const todayChallenge = leaderboardType === 'weekly' ? getWeekChallenge() : getTodayChallenge();
       const dailyXpMap: Record<string, number> = {};
       const metricMap: Record<string, number> = {};
 
-      const rpcDaily = await supabase.rpc('get_daily_xp_leaderboard', {
+      const rpcDaily = await supabase.rpc(leaderboardType === 'weekly' ? 'get_weekly_xp_leaderboard' : 'get_daily_xp_leaderboard', {
         p_limit: 500,
         p_challenge_type: todayChallenge.key,
       });
@@ -515,7 +552,7 @@ export default function LeaderboardScreen() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#FFD700" />
-        <Text style={styles.loadingText}>Loading leaderboard…</Text>
+        <Text style={styles.loadingText}>{t('leaderboard.loading')}</Text>
       </View>
     );
   }
@@ -538,7 +575,7 @@ export default function LeaderboardScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Leaderboard</Text>
+        <Text style={styles.title}>{t('leaderboard.title')}</Text>
         {!profile?.is_conquerer && (
           <TouchableOpacity
             style={styles.commanderBanner}
@@ -547,41 +584,50 @@ export default function LeaderboardScreen() {
           >
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <Image source={require('../../assets/avatars/crown.png')} style={{ width: 16, height: 16 }} resizeMode='contain' />
-              <Text style={styles.commanderBannerText}>Conqueror's Pass — Unlock Everything</Text>
+              <Text style={styles.commanderBannerText}>{t('achievements.conquerorPass')}</Text>
             </View>
           </TouchableOpacity>
         )}
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
           <Text style={styles.subtitle}>
             {leaderboardType === 'alltime'
-              ? `${entries.length} explorers`
-              : `${dailyXpEntries.length} competing today`}
+              ? t('leaderboard.explorers', { n: entries.length })
+              : leaderboardType === 'weekly'
+                ? t('leaderboard.competingThisWeek', { n: dailyXpEntries.length })
+                : t('leaderboard.competingToday', { n: dailyXpEntries.length })}
           </Text>
           <View style={{ alignItems: 'flex-end', gap: 2 }}>
             <Text style={{ color: '#FFD700', fontSize: 10, opacity: 0.7 }}>
-              {leaderboardType === 'daily' ? 'resets in' : 'updates in'}
+              {leaderboardType === 'alltime' ? t('leaderboard.updatesIn') : t('leaderboard.resetsIn')}
             </Text>
             <AnalogCountdownClock
               remainingSeconds={leaderboardRemainingSeconds}
-              totalSeconds={leaderboardType === 'daily' ? 86400 : 900}
-              format={leaderboardType === 'daily' ? 'hh:mm:ss' : 'mm:ss'}
+              totalSeconds={leaderboardType === 'daily' ? 86400 : leaderboardType === 'weekly' ? 604800 : 900}
+              format={leaderboardType === 'alltime' ? 'mm:ss' : 'hh:mm:ss'}
               size={46}
               color="#FFD700"
             />
           </View>
         </View>
-        {leaderboardType === 'daily' && (
+        {leaderboardType !== 'alltime' && (
           <>
             <View style={{ height: 1, backgroundColor: '#1a1a2e', marginTop: 10, marginBottom: 8 }} />
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Text style={{ color: '#888', fontSize: 10, fontWeight: '600' }}>Today's Challenge:</Text>
-                <Text style={{ color: '#FFD700', fontSize: 10, fontWeight: '700' }}>{getTodayChallenge().label}</Text>
+                <Text style={{ color: '#888', fontSize: 10, fontWeight: '600' }}>{leaderboardType === 'weekly' ? t('leaderboard.thisWeeksChallenge') : t('leaderboard.todaysChallenge')}</Text>
+                {(leaderboardType === 'weekly' ? getWeekChallenge() : getTodayChallenge()).key === 'xp' ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <Text style={{ color: '#FFD700', fontSize: 10, fontWeight: '700' }}>{t('leaderboard.mostXP').replace(/\s*XP\s*/i, ' ')}</Text>
+                    <XpIcon size={12} />
+                  </View>
+                ) : (
+                  <Text style={{ color: '#FFD700', fontSize: 10, fontWeight: '700' }}>{t((leaderboardType === 'weekly' ? getWeekChallenge() : getTodayChallenge()).labelKey)}</Text>
+                )}
               </View>
               <TouchableOpacity onPress={() => setShowRewardsModal(true)}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#1a1a2e', borderRadius: 8, borderWidth: 1, borderColor: '#2a2a4e', paddingHorizontal: 10, paddingVertical: 4 }}>
                   <Image source={require('../../assets/avatars/gold_bag.png')} style={{ width: 14, height: 14 }} resizeMode="contain" />
-                  <Text style={{ color: '#aaa', fontSize: 12, fontWeight: '600' }}>Rewards</Text>
+                  <Text style={{ color: '#aaa', fontSize: 12, fontWeight: '600' }}>{t('leaderboard.rewards')}</Text>
                 </View>
               </TouchableOpacity>
             </View>
@@ -598,16 +644,19 @@ export default function LeaderboardScreen() {
             setSearchQuery('');
           }}
         >
-          <Text style={[styles.tabText, leaderboardType === 'daily' && styles.tabTextActive]}>Daily</Text>
+          <Text style={[styles.tabText, leaderboardType === 'daily' && styles.tabTextActive]}>{t('leaderboard.daily')}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, leaderboardType === 'weekly' && styles.tabActive]}
+          onPress={() => { setLeaderboardType('weekly'); setSearchQuery(''); }}
+        >
+          <Text style={[styles.tabText, leaderboardType === 'weekly' && styles.tabTextActive]}>{t('leaderboard.weekly')}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tab, leaderboardType === 'alltime' && styles.tabActive]}
-          onPress={() => {
-            setLeaderboardType('alltime');
-            setSearchQuery('');
-          }}
+          onPress={() => { setLeaderboardType('alltime'); setSearchQuery(''); }}
         >
-          <Text style={[styles.tabText, leaderboardType === 'alltime' && styles.tabTextActive]}>All-Time</Text>
+          <Text style={[styles.tabText, leaderboardType === 'alltime' && styles.tabTextActive]}>{t('leaderboard.allTime')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -627,9 +676,13 @@ export default function LeaderboardScreen() {
                 marginRight: i < ALLTIME_CATEGORIES.length - 1 ? 8 : 0,
               }}
             >
-              <Text style={{ color: alltimeCategory === cat.key ? '#0a0a1a' : '#aaa', fontSize: 12, fontWeight: '700' }}>
-                {cat.label}
-              </Text>
+              {cat.key === 'xp' ? (
+                <XpIcon size={15} />
+              ) : (
+                <Text style={{ color: alltimeCategory === cat.key ? '#0a0a1a' : '#aaa', fontSize: 12, fontWeight: '700' }}>
+                  {t(cat.labelKey)}
+                </Text>
+              )}
             </TouchableOpacity>
           ))}
         </View>
@@ -639,7 +692,7 @@ export default function LeaderboardScreen() {
       <View style={styles.searchRow}>
         <TextInput
           style={styles.searchInput}
-          placeholder="Search players…"
+          placeholder={t('leaderboard.searchPlayers')}
           placeholderTextColor="#555"
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -667,7 +720,7 @@ export default function LeaderboardScreen() {
               <Image source={require('../../assets/avatars/eyes.png')} style={styles.emptyIcon} resizeMode="contain" />
             )}
             <Text style={styles.emptyText}>
-              {searchQuery ? `No players found for "${searchQuery}"` : 'No explorers yet. Be the first!'}
+              {searchQuery ? t('leaderboard.noPlayersFound', { query: searchQuery }) : t('leaderboard.noExplorers')}
             </Text>
           </View>
         }
@@ -677,16 +730,14 @@ export default function LeaderboardScreen() {
           const medalSrc = item.rank === 1 ? require('../../assets/avatars/gold_medal.png') : item.rank === 2 ? require('../../assets/avatars/silver_medal.png') : require('../../assets/avatars/bronze_medal.png');
           const conquestPct = (item.conquest_pct ?? 0) as number;
           const levelInfo = getLevelInfo(item.xp ?? 0);
-          const isDailyBoard = leaderboardType === 'daily';
-          const todayChallenge = getTodayChallenge();
+          const isDailyBoard = leaderboardType !== 'alltime';
+          const todayChallenge = leaderboardType === 'weekly' ? getWeekChallenge() : getTodayChallenge();
           const metricVal = (item as any).metric_value ?? (item as any).daily_xp ?? 0;
           const primaryMetric = isDailyBoard
             ? todayChallenge.format(metricVal)
             : activeCat.format(activeCat.getValue(item));
-          const primaryMetricLabel = isDailyBoard ? todayChallenge.metricLabel : activeCat.metricLabel;
-          const secondaryLabel = isDailyBoard
-            ? `Lv ${levelInfo.level}`
-            : `Lv ${levelInfo.level} · ${(item.xp ?? 0).toLocaleString()} XP`;
+          const primaryMetricLabel = isDailyBoard ? t(todayChallenge.metricLabelKey) : t(activeCat.metricLabelKey);
+          const secondaryLevel = t('leaderboard.levelShort', { n: levelInfo.level });
 
           return (
             <TouchableOpacity
@@ -711,14 +762,19 @@ export default function LeaderboardScreen() {
 
               <View style={styles.userInfo}>
                 <Text style={[styles.username, isCurrentUser && styles.usernameHighlight]} numberOfLines={1}>
-                  {item.username}{isCurrentUser ? ' (You)' : ''}
+                  {item.username}{isCurrentUser ? t('leaderboard.you') : ''}
                 </Text>
-                <Text style={styles.ownedCount}>
-                  {secondaryLabel}
-                </Text>
+                {isDailyBoard ? (
+                  <Text style={styles.ownedCount}>{secondaryLevel}</Text>
+                ) : (
+                  <View style={styles.secondaryXpRow}>
+                    <Text style={styles.ownedCount}>{secondaryLevel} ·</Text>
+                    <XpAmount amount={(item.xp ?? 0).toLocaleString()} iconSize={11} textStyle={styles.ownedCount} />
+                  </View>
+                )}
               </View>
 
-              <View style={styles.levelContainer}>
+              <View style={[styles.levelContainer, primaryMetricLabel === t('leaderboard.metricXP') && { flexDirection: 'row', alignItems: 'center', gap: 4 }]}>
                 <Text style={[
                   styles.levelValue,
                   isTop3 && styles.levelValueTop3,
@@ -726,9 +782,13 @@ export default function LeaderboardScreen() {
                 ]}>
                   {primaryMetric}
                 </Text>
-                <Text style={[styles.levelLabel, { color: '#FFD700', opacity: 0.7 }]}>
-                  {primaryMetricLabel}
-                </Text>
+                {primaryMetricLabel === t('leaderboard.metricXP') ? (
+                  <XpIcon size={13} style={{ opacity: 0.85 }} />
+                ) : (
+                  <Text style={[styles.levelLabel, { color: '#FFD700', opacity: 0.7 }]}>
+                    {primaryMetricLabel}
+                  </Text>
+                )}
               </View>
             </TouchableOpacity>
           );
@@ -755,12 +815,14 @@ export default function LeaderboardScreen() {
       <Modal visible={showRewardsModal} animationType="fade" transparent statusBarTranslucent onRequestClose={() => setShowRewardsModal(false)}>
         <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center' }} activeOpacity={1} onPress={() => setShowRewardsModal(false)}>
           <View style={{ backgroundColor: '#12122a', borderRadius: 16, borderWidth: 1, borderColor: '#2a2a4e', padding: 20, width: 280 }} onStartShouldSetResponder={() => true}>
-            <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700', textAlign: 'center', marginBottom: 16 }}>Daily Challenge Rewards</Text>
-            {[
-              { rank: '#1', gold: '2,500', tickets: 3 },
-              { rank: '#2', gold: '1,500', tickets: 2 },
-              { rank: '#3', gold: '1,000', tickets: 1 },
-            ].map(({ rank, gold, tickets }) => (
+            <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700', textAlign: 'center', marginBottom: 16 }}>{leaderboardType === 'weekly' ? t('leaderboard.weeklyChallengeRewards') : t('leaderboard.dailyChallengeRewards')}</Text>
+            {(leaderboardType === 'weekly' ? [
+              { rank: '#1', gold: '9,000', tickets: 15 }, { rank: '#2', gold: '6,000', tickets: 12 },
+              { rank: '#3', gold: '4,500', tickets: 9 }, { rank: '#4', gold: '3,000', tickets: 6 }, { rank: '#5', gold: '3,000', tickets: 6 },
+            ] : [
+              { rank: '#1', gold: '3,000', tickets: 5 }, { rank: '#2', gold: '2,000', tickets: 4 },
+              { rank: '#3', gold: '1,500', tickets: 3 }, { rank: '#4', gold: '1,000', tickets: 2 }, { rank: '#5', gold: '1,000', tickets: 2 },
+            ]).map(({ rank, gold, tickets }) => (
               <View key={rank} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#1e1e3a' }}>
                 <Text style={{ color: '#aaa', fontSize: 15, fontWeight: '700', width: 36 }}>{rank}</Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
@@ -773,7 +835,7 @@ export default function LeaderboardScreen() {
                 </View>
               </View>
             ))}
-            <Text style={{ color: '#555', fontSize: 11, textAlign: 'center', marginTop: 14 }}>Paid out when the countdown reaches zero · Top 3 by today's challenge</Text>
+            <Text style={{ color: '#555', fontSize: 11, textAlign: 'center', marginTop: 14 }}>{t('leaderboard.paidOut')}</Text>
           </View>
         </TouchableOpacity>
       </Modal>
@@ -837,14 +899,14 @@ function ProfileModalContent({
         <TouchableOpacity onPress={onClose} style={modal.closeBtn}>
           <Text style={modal.closeBtnText}>✕</Text>
         </TouchableOpacity>
-        <Text style={modal.topBarTitle}>Explorer Profile</Text>
+        <Text style={modal.topBarTitle}>{t('leaderboard.explorerProfile')}</Text>
         <View style={{ width: 36 }} />
       </View>
 
       {loading ? (
         <View style={modal.loadingCenter}>
           <ActivityIndicator size="large" color="#FFD700" />
-          <Text style={modal.loadingText}>Loading profile…</Text>
+          <Text style={modal.loadingText}>{t('leaderboard.loadingProfile')}</Text>
         </View>
       ) : (
         <ScrollView contentContainerStyle={modal.content} showsVerticalScrollIndicator={false}>
@@ -858,29 +920,29 @@ function ProfileModalContent({
               isConqueror={profile?.is_conquerer}
             />
             <View style={modal.identityInfo}>
-              <Text style={modal.profileUsername}>{entry.username}{isMe ? ' (You)' : ''}</Text>
+              <Text style={modal.profileUsername}>{entry.username}{isMe ? t('leaderboard.you') : ''}</Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                 {entry.rank <= 3 && <Image source={rankMedalSrc} style={{ width: 16, height: 16 }} resizeMode="contain" />}
                 <Text style={modal.profileRank}>{rankLabelText}</Text>
               </View>
-              {memberSince && <Text style={modal.memberSince}>Member since {memberSince}</Text>}
+              {memberSince && <Text style={modal.memberSince}>{t('leaderboard.memberSince', { date: memberSince })}</Text>}
             </View>
           </View>
 
           {/* World Domination meter */}
           <View style={modal.section}>
-            <Text style={modal.sectionTitle}>World Domination</Text>
+            <Text style={modal.sectionTitle}>{t('leaderboard.worldDomination')}</Text>
             <View style={modal.conquestBar}>
               <View style={[modal.conquestFill, { width: `${Math.max(0, Math.min(conquestPct, 100))}%` as any }]} />
             </View>
             <Text style={modal.conquestLabel}>
-              {conquestPct}% of Earth's land · {(ownedArea / 1_000_000).toFixed(1)}M km²
+              {t('leaderboard.conquestLabel', { pct: conquestPct, area: (ownedArea / 1_000_000).toFixed(1) })}
             </Text>
           </View>
 
           {/* Map */}
           <View style={modal.section}>
-            <Text style={modal.sectionTitle}>Empire Map</Text>
+            <Text style={modal.sectionTitle}>{t('leaderboard.empireMap')}</Text>
             <WorldMapView
               ownedCountries={ownedCountryCodes}
               height={200}
@@ -895,26 +957,26 @@ function ProfileModalContent({
               <Text style={modal.statValue}>
                 {formatNumberShort(profile?.quiz_count ?? 0)}
               </Text>
-              <Text style={modal.statLabel}>Quizzes</Text>
+              <Text style={modal.statLabel}>{t('leaderboard.metricQuizzes')}</Text>
             </View>
             <View style={modal.statBox}>
               <Text style={modal.statValue}>{formatNumberShort(profile?.xp)}</Text>
-              <Text style={modal.statLabel}>XP</Text>
+              <XpIcon size={13} />
             </View>
             <View style={modal.statBox}>
               <Text style={modal.statValue}>{ownedCount}</Text>
-              <Text style={modal.statLabel}>Countries</Text>
+              <Text style={modal.statLabel}>{t('worldMap.title')}</Text>
             </View>
             <View style={modal.statBox}>
               <Text style={modal.statValue}>{trophyCount}/{ACHIEVEMENTS_DATA.length}</Text>
-              <Text style={modal.statLabel}>Quests</Text>
+              <Text style={modal.statLabel}>{t('achievements.title')}</Text>
             </View>
           </View>
 
           {/* Trophies */}
           {claimedTrophies.length > 0 && (
             <View style={modal.section}>
-              <Text style={modal.sectionTitle}>Quests ({trophyCount} / {ACHIEVEMENTS_DATA.length})</Text>
+              <Text style={modal.sectionTitle}>{t('leaderboard.questsCount', { claimed: trophyCount, total: ACHIEVEMENTS_DATA.length })}</Text>
               <View style={modal.trophyGrid}>
                 {claimedTrophies.map(t => (
                   <View key={t.id} style={modal.trophyChip}>
@@ -932,11 +994,11 @@ function ProfileModalContent({
           {/* Inventory */}
           {(ownedAvatarIds.length > 0 || ownedFlagIds.length > 0) && (
             <View style={modal.section}>
-              <Text style={modal.sectionTitle}>Inventory</Text>
+              <Text style={modal.sectionTitle}>{t('leaderboard.inventory')}</Text>
 
               {ownedAvatarIds.length > 0 && (
                 <>
-                  <Text style={modal.inventorySubtitle}>Avatars ({ownedAvatarIds.length})</Text>
+                  <Text style={modal.inventorySubtitle}>{t('leaderboard.avatarsCount', { n: ownedAvatarIds.length })}</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={modal.inventoryScroll}>
                     {ownedAvatarIds.map(id => (
                       <TouchableOpacity
@@ -958,7 +1020,7 @@ function ProfileModalContent({
 
               {ownedFlagIds.length > 0 && (
                 <>
-                  <Text style={modal.inventorySubtitle}>Flags ({ownedFlagIds.length})</Text>
+                  <Text style={modal.inventorySubtitle}>{t('leaderboard.flagsCount', { n: ownedFlagIds.length })}</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={modal.inventoryScroll}>
                     {ownedFlagIds.map(id => {
                       const FlagComp = isCustomFlag(id) ? CUSTOM_FLAG_COMPONENTS[id] : null;
@@ -972,7 +1034,7 @@ function ProfileModalContent({
                         >
                           {FlagComp
                             ? <FlagComp size={36} />
-                            : <Text style={{ fontSize: 30, textAlign: 'center' }}>{id}</Text>
+                            : <Text style={{ fontSize: 30, textAlign: 'center' }}>{getDisplayFlagEmoji(id)}</Text>
                           }
                           {entry.avatar_flag === id && (
                             <View style={modal.equippedDot} />
@@ -1008,7 +1070,7 @@ function ProfileModalContent({
               })()}
             </View>
             <Text style={modal.previewLabel}>{previewItem.label}</Text>
-            <Text style={modal.previewHint}>Tap anywhere to close</Text>
+            <Text style={modal.previewHint}>{t('leaderboard.tapToClose')}</Text>
           </View>
         </TouchableOpacity>
       )}
@@ -1113,6 +1175,7 @@ const styles = StyleSheet.create({
   username: { color: '#fff', fontSize: 14, fontWeight: '600' },
   usernameHighlight: { color: '#FFD700' },
   ownedCount: { color: '#888', fontSize: 11 },
+  secondaryXpRow: { flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'wrap' },
   pctContainer: { alignItems: 'flex-end', width: 60, gap: 4 },
   pctValue: { color: '#aaa', fontSize: 15, fontWeight: 'bold' },
   pctValueTop3: { color: '#FFD700' },

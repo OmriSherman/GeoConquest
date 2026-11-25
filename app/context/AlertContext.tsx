@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import ConfettiCannon from 'react-native-confetti-cannon';
+import { t } from '../lib/i18n';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -89,12 +90,12 @@ export function AlertProvider({ children }: { children: React.ReactNode }) {
   }) {
     setConfig({
       variant: 'default',
-      title: 'Not Enough Gold',
+      title: t('alerts.notEnoughGold'),
       icon: itemNode,
-      message: `You don't have enough gold to purchase${itemName ? ` ${itemName}` : ' this item'}.`,
+      message: t(itemName ? 'alerts.notEnoughGoldNamed' : 'alerts.notEnoughGoldGeneric', { item: itemName }),
       buttons: [
-        { text: 'Buy Gold', style: 'cta', onPress: onBuyGold },
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('alerts.buyGold'), style: 'cta', onPress: onBuyGold },
+        { text: t('common.cancel'), style: 'cancel' },
       ],
     });
   }

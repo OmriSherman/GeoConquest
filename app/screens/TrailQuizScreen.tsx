@@ -15,6 +15,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { Country, QuizStackParamList } from '../types';
 import { fetchCountries, getOfflineFullCountries, getCca3ToCca2Map } from '../lib/countryData';
+import { isQuizEligibleCountry } from '../lib/quizCountryFilters';
 import { useGame } from '../context/GameContext';
 import { useAuth } from '../context/AuthContext';
 import WorldMapView from '../components/WorldMapView';
@@ -22,12 +23,12 @@ import { playDingStreak, playWrong } from '../lib/audio';
 import HeatStreakBadge from '../components/HeatStreakBadge';
 import QuitConfirmModal from '../components/QuitConfirmModal';
 import EarningsStrip from '../components/EarningsStrip';
+import { t } from '../lib/i18n';
 
-const GOLD_PER_CORRECT = 22;
+const GOLD_PER_CORRECT = 20;
 const ANSWER_COLORS = ['#4FC3F7', '#F44336', '#FFD700', '#4CAF50'];
 const MAX_LIVES = 3;
 const AUTO_ADVANCE_DELAY_MS = 2200;
-const MIN_TRAIL_COUNTRY_AREA_KM2 = 15000;
 const MAX_VISIBLE_TRAIL_STEPS = 24;
 
 type Props = {
@@ -67,7 +68,7 @@ function buildNameQuestion(country: Country, pool: Country[]): TrailQuestion {
   return {
     country,
     type: 'name',
-    prompt: 'What country is this?',
+    prompt: t('trailQuiz.whatCountry'),
     options,
     correctIndex: options.findIndex((opt) => opt === country.name),
   };
@@ -96,7 +97,7 @@ function buildCapitalQuestion(country: Country, pool: Country[]): TrailQuestion 
   return {
     country,
     type: 'capital',
-    prompt: 'What is the capital of this country?',
+    prompt: t('trailQuiz.whatCapital'),
     options,
     correctIndex: options.findIndex((opt) => opt === country.capital),
   };
@@ -124,22 +125,27 @@ function buildFlagQuestion(country: Country, pool: Country[]): TrailQuestion {
   return {
     country,
     type: 'flag',
-    prompt: 'What is this country\'s flag?',
+    prompt: t('trailQuiz.whatFlag'),
     options,
     correctIndex: options.findIndex(opt => opt === country.flagUrl),
   };
 }
 
-function buildQuestion(country: Country, pool: Country[]): TrailQuestion {
+function buildQuestion(country: Country, pool: Country[], difficulty = 0): TrailQuestion {
   const r = Math.random();
-  if (r < 0.34) return buildCapitalQuestion(country, pool);
-  if (r < 0.67) return buildFlagQuestion(country, pool);
+  if (r < 0.25 + difficulty * 0.2) return buildCapitalQuestion(country, pool);
+  if (r < 0.5 + difficulty * 0.35) return buildFlagQuestion(country, pool);
   return buildNameQuestion(country, pool);
+}
+
+function trailRewardMultiplier(lives: number): number {
+  return lives >= 3 ? 2 : lives === 2 ? 1.5 : lives === 1 ? 1.25 : 1;
 }
 
 export default function TrailQuizScreen({ navigation }: Props) {
   const { addGold } = useGame();
-  const { profile } = useAuth();
+  const { profile, effectiveMaxTurns } = useAuth();
+  const TRAIL_QUESTION_COUNT = useRef(effectiveMaxTurns).current;
 
   const [loading, setLoading] = useState(true);
   const [ready, setReady] = useState(false);
@@ -268,11 +274,9 @@ export default function TrailQuizScreen({ navigation }: Props) {
         }
 
         const eligible = countries.filter((c) =>
+          isQuizEligibleCountry(c) &&
           !!c.capital &&
-          c.capital.trim().length > 0 &&
-          Number(c.area || 0) >= MIN_TRAIL_COUNTRY_AREA_KM2 &&
-          Array.isArray(c.borders) &&
-          c.borders.length > 0
+          c.capital.trim().length > 0
         );
 
         if (eligible.length < 4) {
@@ -323,12 +327,12 @@ export default function TrailQuizScreen({ navigation }: Props) {
       playDingStreak(comboRef.current);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
       scoreRef.current += 1;
-      const earned = Math.round(GOLD_PER_CORRECT * (1 + (comboRef.current - 1) * 0.1));
+      const earned = GOLD_PER_CORRECT;
       goldRef.current += earned;
       setScore(scoreRef.current);
       setGoldEarned(goldRef.current);
       setGoldDelta(earned);
-      setAnimTrigger(t => t + 1);
+      setAnimTrigger(prev => prev + 1);
       setLongestTrail(prev => Math.max(prev, comboRef.current));
       addGold(earned);
     } else {
@@ -364,14 +368,19 @@ export default function TrailQuizScreen({ navigation }: Props) {
       autoAdvanceTimer.current = null;
     }
 
-    if (gameOver || livesRef.current <= 0) {
+    if (gameOver || livesRef.current <= 0 || questionNumberRef.current >= TRAIL_QUESTION_COUNT) {
+      const multiplier = trailRewardMultiplier(livesRef.current);
+      const baseGold = goldRef.current;
+      const bonusGold = Math.round(baseGold * (multiplier - 1));
+      if (bonusGold > 0) addGold(bonusGold);
       allowLeaveRef.current = true;
       navigation.replace('QuizResults', {
         score: scoreRef.current,
-        total: Math.max(1, attemptsRef.current),
-        goldEarned: goldRef.current,
+        total: TRAIL_QUESTION_COUNT,
+        goldEarned: baseGold + bonusGold,
         quizType: 'trail',
         elapsedSeconds: Math.floor((Date.now() - quizStartRef.current) / 1000),
+        rewardMultiplier: multiplier,
       });
       return;
     }
@@ -382,7 +391,8 @@ export default function TrailQuizScreen({ navigation }: Props) {
       useNativeDriver: true,
     }).start(() => {
       const nextCountry = resolveNextCountry(currentQuestionRef.current!.country);
-      const nextQuestion = buildQuestion(nextCountry, eligibleCountriesRef.current);
+      const difficulty = Math.min(1, (questionNumberRef.current - 1) / (TRAIL_QUESTION_COUNT - 1));
+      const nextQuestion = buildQuestion(nextCountry, eligibleCountriesRef.current, difficulty);
 
       questionNumberRef.current += 1;
       setQuestionNumber(questionNumberRef.current);
@@ -403,7 +413,7 @@ export default function TrailQuizScreen({ navigation }: Props) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#FFD700" />
-        <Text style={styles.loadingText}>Preparing trail…</Text>
+        <Text style={styles.loadingText}>{t('trailQuiz.loading')}</Text>
       </View>
     );
   }
@@ -413,15 +423,15 @@ export default function TrailQuizScreen({ navigation }: Props) {
       return (
         <View style={styles.centered}>
           <Text style={{ fontSize: 40, marginBottom: 12 }}>📡</Text>
-          <Text style={[styles.errorText, { color: '#FFD700', fontWeight: 'bold' }]}>You're Offline</Text>
+          <Text style={[styles.errorText, { color: '#FFD700', fontWeight: 'bold' }]}>{t('quizCommon.offline.title')}</Text>
           <Text style={[styles.errorText, { color: '#aaa', fontSize: 14, marginTop: 8 }]}>
-            Upgrade to Conqueror&apos;s Pass to play all quizzes without an internet connection.
+            {t('quizCommon.offline.body')}
           </Text>
           <TouchableOpacity
             onPress={() => navigation.getParent()?.navigate('Premium')}
             style={{ marginTop: 20, backgroundColor: '#7B2FBE', paddingHorizontal: 28, paddingVertical: 12, borderRadius: 12 }}
           >
-            <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>Upgrade</Text>
+            <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>{t('quizCommon.offline.upgrade')}</Text>
           </TouchableOpacity>
         </View>
       );
@@ -429,7 +439,7 @@ export default function TrailQuizScreen({ navigation }: Props) {
 
     return (
       <View style={styles.centered}>
-        <Text style={styles.errorText}>{error ?? 'No questions available'}</Text>
+        <Text style={styles.errorText}>{error ?? t('quizCommon.noQuestions')}</Text>
       </View>
     );
   }
@@ -438,13 +448,13 @@ export default function TrailQuizScreen({ navigation }: Props) {
     return (
       <View style={[styles.centered, { backgroundColor: '#0a0a1a' }]}>
         <Image source={require('../../assets/avatars/compass.png')} style={{ width: 80, height: 80, marginBottom: 20 }} resizeMode="contain" />
-        <Text style={styles.readyTitle}>TRAIL QUIZ</Text>
-        <Text style={styles.readySubtitle}>Follow the trail of neighboring countries</Text>
+        <Text style={styles.readyTitle}>{t('nav.trailQuiz').toUpperCase()}</Text>
+        <Text style={styles.readySubtitle}>{t('trailQuiz.subtitle')}{'\n'}{t('drawQuiz.round', { current: 1, total: TRAIL_QUESTION_COUNT })}</Text>
         <TouchableOpacity style={styles.readyBtn} onPress={() => { quizStartRef.current = Date.now(); setReady(true); }}>
-          <Text style={styles.readyBtnText}>LET'S GO</Text>
+          <Text style={styles.readyBtnText}>{t('quizCommon.letsGo')}</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.readyBackLink}>
-          <Text style={styles.readyBackLinkText}>Go Back</Text>
+          <Text style={styles.readyBackLinkText}>{t('quizCommon.goBack')}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -457,12 +467,12 @@ export default function TrailQuizScreen({ navigation }: Props) {
         {paused && (
           <View style={[StyleSheet.absoluteFill, styles.pauseOverlay]}>
             <Image source={require('../../assets/avatars/stop_it.png')} style={styles.pauseStopIt} resizeMode="contain" />
-            <Text style={styles.pauseTitle}>PAUSED</Text>
+            <Text style={styles.pauseTitle}>{t('quizCommon.paused')}</Text>
             <TouchableOpacity style={styles.resumeBtn} onPress={() => setPaused(false)}>
-              <Text style={styles.resumeBtnText}>RESUME</Text>
+              <Text style={styles.resumeBtnText}>{t('quizCommon.resume')}</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => { allowLeaveRef.current = true; navigation.goBack(); }} style={{ marginTop: 16 }}>
-              <Text style={styles.quitText}>Quit</Text>
+              <Text style={styles.quitText}>{t('quizCommon.quit')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -484,7 +494,7 @@ export default function TrailQuizScreen({ navigation }: Props) {
             </View>
             <View style={styles.longestTrailBadge}>
               <Image source={require('../../assets/avatars/footprint_trail.png')} style={styles.trailIcon} resizeMode="contain" />
-              <Text style={styles.longestTrailText}>{longestTrail}</Text>
+              <Text style={styles.longestTrailText}>{questionNumber}/{TRAIL_QUESTION_COUNT}</Text>
             </View>
             <TouchableOpacity onPress={() => !answered && setPaused(p => !p)} style={styles.pauseBtn}>
               <View style={styles.pauseIconBar} />
@@ -567,7 +577,7 @@ export default function TrailQuizScreen({ navigation }: Props) {
               })}
             </View>
 
-            <Text style={[styles.tapHint, { opacity: answered ? 1 : 0 }]}>Tap anywhere to continue →</Text>
+            <Text style={[styles.tapHint, { opacity: answered ? 1 : 0 }]}>{t('quizCommon.tapToContinue')}</Text>
             </Animated.View>
           </View>
         </ScrollView>

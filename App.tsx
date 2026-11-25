@@ -9,9 +9,12 @@ import { GameProvider } from './app/context/GameContext';
 import { ToastProvider } from './app/context/ToastContext';
 import { AlertProvider } from './app/context/AlertContext';
 import AppNavigator from './app/navigation/AppNavigator';
-import AudioEngine from './app/components/AudioEngine';
+import ForceUpdateGate from './app/components/ForceUpdateGate';
 import { supabase } from './app/lib/supabase';
 import { getAllCustomAvatarImageSources } from './app/lib/customAvatars';
+import { initRevenueCat } from './app/lib/revenueCat';
+import { initI18n, isLocaleRTL, useLocale } from './app/lib/i18n';
+import { initAudio } from './app/lib/audio';
 
 // Tells Supabase Auth to continuously refresh the session automatically
 // if the app is in the foreground. When this is added, you will continue
@@ -29,6 +32,9 @@ if (Platform.OS !== 'web') {
 }
 
 export default function App() {
+  const locale = useLocale(); // remount the tree on language change
+  const direction = isLocaleRTL(locale) ? 'rtl' : 'ltr';
+
   useEffect(() => {
     const sources = getAllCustomAvatarImageSources();
     for (const source of sources) {
@@ -40,28 +46,43 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const ads = require('react-native-google-mobile-ads');
-      const mobileAds = ads?.default;
-      if (typeof mobileAds === 'function') {
-        mobileAds().initialize().catch(() => {});
+    initRevenueCat();
+  }, []);
+
+  useEffect(() => {
+    initI18n();
+  }, []);
+
+  useEffect(() => {
+    initAudio().catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const ads = require('react-native-google-mobile-ads');
+        const mobileAds = ads?.default;
+        if (typeof mobileAds === 'function') {
+          await mobileAds().initialize();
+        }
+      } catch {
+        // Ads module is unavailable in Expo Go / unsupported environments.
       }
-    } catch {
-      // Ads module is unavailable in Expo Go / unsupported environments.
-    }
+    })();
   }, []);
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={{ flex: 1, direction }} key={`root-${direction}`}>
       <SafeAreaProvider>
         <AlertProvider>
           <ToastProvider>
             <AuthProvider>
               <GameProvider>
                 <StatusBar style="light" />
-                <AudioEngine />
-                <AppNavigator />
+                <ForceUpdateGate>
+                  <AppNavigator key={locale} />
+                </ForceUpdateGate>
               </GameProvider>
             </AuthProvider>
           </ToastProvider>

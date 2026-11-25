@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+import { t } from '../lib/i18n';
 
 export default function UsernamePickerScreen() {
   const { setUsername, profile } = useAuth();
@@ -19,15 +20,15 @@ export default function UsernamePickerScreen() {
   async function handleContinue() {
     const trimmed = username.trim();
     if (!trimmed) {
-      Alert.alert('Error', 'Please enter a username');
+      Alert.alert(t('common.error'), t('username.enter'));
       return;
     }
     if (trimmed.length < 3) {
-      Alert.alert('Error', 'Username must be at least 3 characters');
+      Alert.alert(t('common.error'), t('username.tooShort'));
       return;
     }
     if (trimmed.length > 20) {
-      Alert.alert('Error', 'Username must be 20 characters or fewer');
+      Alert.alert(t('common.error'), t('username.tooLong'));
       return;
     }
 
@@ -35,7 +36,7 @@ export default function UsernamePickerScreen() {
     try {
       await setUsername(trimmed);
     } catch (err: any) {
-      Alert.alert('Error', err.message ?? 'Failed to set username');
+      Alert.alert(t('common.error'), err.message ?? t('username.failed'));
     } finally {
       setLoading(false);
     }
@@ -48,14 +49,14 @@ export default function UsernamePickerScreen() {
     >
       <View style={styles.inner}>
         <Text style={styles.emoji}>🌍</Text>
-        <Text style={styles.title}>Choose Your Name</Text>
+        <Text style={styles.title}>{t('username.title')}</Text>
         <Text style={styles.subtitle}>
-          Pick a username that other explorers will see on the leaderboard
+          {t('username.subtitle')}
         </Text>
 
         <TextInput
           style={styles.input}
-          placeholder="Enter your username"
+          placeholder={t('username.placeholder')}
           placeholderTextColor="#555"
           value={username}
           onChangeText={setUsernameInput}
@@ -64,7 +65,7 @@ export default function UsernamePickerScreen() {
           maxLength={20}
         />
 
-        <Text style={styles.hint}>3–20 characters, no spaces</Text>
+        <Text style={styles.hint}>{t('username.hint')}</Text>
 
         <TouchableOpacity
           style={[styles.button, loading && styles.buttonDisabled]}
@@ -72,7 +73,7 @@ export default function UsernamePickerScreen() {
           disabled={loading}
         >
           <Text style={styles.buttonText}>
-            {loading ? 'Setting up…' : 'Start Exploring →'}
+            {loading ? t('username.setup') : t('username.start')}
           </Text>
         </TouchableOpacity>
       </View>

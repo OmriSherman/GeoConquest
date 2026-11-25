@@ -1,6 +1,26 @@
 import { Image } from 'react-native';
 import { Country, QuizQuestion } from '../types';
 import { supabase } from './supabase';
+import { getLocale } from './i18n';
+import { isQuizEligibleCca2 } from './countryExclusions';
+
+// Localized country names + capitals keyed by cca2 (generated; see scripts/gen-country-i18n.js).
+const _countryI18n = require('../assets/data/country-i18n.json') as
+  Record<string, Record<string, { name: string; capital: string }>>;
+
+// Overlay localized name/capital for the active locale; re-sort by localized name.
+// _cache stays the English base, so switching locale just re-overlays.
+function localizeCountries(list: Country[]): Country[] {
+  const locale = getLocale();
+  const table = _countryI18n[locale];
+  if (!table || locale === 'en') return list;
+  return list
+    .map((c) => {
+      const tr = table[c.cca2];
+      return tr ? { ...c, name: tr.name || c.name, capital: tr.capital || c.capital } : c;
+    })
+    .sort((a, b) => a.name.localeCompare(b.name, locale));
+}
 
 // ─── Local flag overrides (for countries whose remote flags are wrong/unavailable) ──
 // Resolved lazily to avoid boot-time issues
@@ -50,7 +70,7 @@ export function getCcn3ToCca2Map(): Record<string, string> {
 // ─── Fetch & Transform ────────────────────────────────────────────────────────
 
 export async function fetchCountries(): Promise<Country[]> {
-  if (_cache) return _cache;
+  if (_cache) return localizeCountries(_cache);
 
   // Try Supabase cache first
   const { data: cached } = await supabase
@@ -62,11 +82,8 @@ export async function fetchCountries(): Promise<Country[]> {
     // Check if cache has the new cca3 field — if not, it's stale
     const hasNewFields = cached.some((c: any) => c.cca3 && c.cca3.length > 0);
     const hasAfghanistan = cached.some((c: any) => c.cca2 === 'AF' && c.flag_url);
-    // ccn3 (ISO numeric) is required for WorldMapView feature ID lookups
-    const hasCcn3 = cached.some((c: any) => c.ccn3 && c.ccn3.length > 0);
 
-    if (!hasNewFields || !hasAfghanistan || !hasCcn3) {
-      // console.log(`[Countries] Cache stale (missing cca3: ${!hasNewFields}, missing AF: ${!hasAfghanistan}), re-fetching from API...`);
+    if (!hasNewFields || !hasAfghanistan) {
       // Fall through to API fetch below
     } else {
       _cache = cached.map((c: any) => ({
@@ -88,7 +105,7 @@ export async function fetchCountries(): Promise<Country[]> {
         if (c.ccn3) _ccn3ToCca2[c.ccn3] = c.cca2;
       }
 
-      return _cache;
+      return localizeCountries(_cache);
     }
   }
   // Fetch from REST Countries API
@@ -98,6 +115,7 @@ export async function fetchCountries(): Promise<Country[]> {
   if (!res.ok) throw new Error(`RestCountries fetch failed: ${res.status}`);
 
   const raw: RestCountry[] = await res.json();
+  if (!Array.isArray(raw)) throw new Error(`RestCountries returned unexpected response`);
 
   _cache = raw
     .filter((c) => c.cca2 && c.name?.common && c.flags?.png)
@@ -124,7 +142,7 @@ export async function fetchCountries(): Promise<Country[]> {
   // Seed Supabase cache in background (don't block)
   seedSupabaseCache(_cache).catch(console.warn);
 
-  return _cache;
+  return localizeCountries(_cache);
 }
 
 // ─── Seed Supabase ───────────────────────────────────────────────────────────
@@ -166,7 +184,7 @@ const _countriesOffline = require('../assets/data/countries-offline.json') as Ar
  * Available to ALL users when offline.
  */
 export function getOfflineFlagCountries(): Country[] {
-  return _flagsOffline.map(c => ({
+  return localizeCountries(_flagsOffline.map(c => ({
     name: c.name,
     cca2: c.cca2,
     cca3: '',
@@ -177,7 +195,7 @@ export function getOfflineFlagCountries(): Country[] {
     population: 0,
     area: 0,
     capital: '',
-  }));
+  })));
 }
 
 /**
@@ -191,7 +209,7 @@ export function getOfflineFullCountries(): Country[] {
     if (c.cca3) _cca3ToCca2[c.cca3] = c.cca2;
     if (c.ccn3) _ccn3ToCca2[c.ccn3] = c.cca2;
   }
-  return _countriesOffline.map(c => ({
+  return localizeCountries(_countriesOffline.map(c => ({
     name:       c.name,
     cca2:       c.cca2,
     cca3:       c.cca3,
@@ -202,7 +220,7 @@ export function getOfflineFullCountries(): Country[] {
     population: c.population,
     area:       c.area,
     capital:    c.capital,
-  }));
+  })));
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -213,7 +231,7 @@ export function getRandomCountries(
   exclude: Country,
   count: number
 ): Country[] {
-  const pool = all.filter((c) => c.cca2 !== exclude.cca2);
+  const pool = all.filter((c) => c.cca2 !== exclude.cca2 && isQuizEligibleCca2(c.cca2));
   const shuffled = [...pool].sort(() => Math.random() - 0.5);
   return shuffled.slice(0, count);
 }
@@ -224,25 +242,26 @@ type QuizBuildOptions = {
 
 /** Builds an N-question session array (no repeats). */
 export function buildQuizQuestions(countries: Country[], count: number = 10, options: QuizBuildOptions = {}): QuizQuestion[] {
-  const shuffled = [...countries].sort(() => Math.random() - 0.5);
+  const quizCountries = countries.filter((c) => isQuizEligibleCca2(c.cca2));
+  const shuffled = [...quizCountries].sort(() => Math.random() - 0.5);
   const selected = shuffled.slice(0, count);
 
   return selected.map((country, index) => {
-    const wrong = getRandomCountries(countries, country, 3);
+    const wrong = getRandomCountries(quizCountries, country, 3);
     const answerOptions = [...wrong, country].sort(() => Math.random() - 0.5);
     const correctIndex = answerOptions.findIndex((o) => o.cca2 === country.cca2);
     return {
       country,
       options: answerOptions,
       correctIndex,
-      mode: options.reverseFirst && Math.random() < 0.3 ? 'reverse' : 'standard',
+      mode: options.reverseFirst && Math.random() < 0.5 ? 'reverse' : 'standard',
     };
   });
 }
 
 /** Builds an N-question session for the Capitals Quiz */
 export function buildCapitalsQuizQuestions(countries: Country[], count: number = 10, options: QuizBuildOptions = {}): QuizQuestion[] {
-  const validTargets = countries.filter(c => c.capital && c.capital.length > 0);
+  const validTargets = countries.filter(c => isQuizEligibleCca2(c.cca2) && c.capital && c.capital.length > 0);
   const shuffled = [...validTargets].sort(() => Math.random() - 0.5);
   const selected = shuffled.slice(0, count);
 
@@ -254,15 +273,16 @@ export function buildCapitalsQuizQuestions(countries: Country[], count: number =
       country,
       options: answerOptions,
       correctIndex,
-      mode: options.reverseFirst && Math.random() < 0.3 ? 'reverse' : 'standard',
+      mode: options.reverseFirst && Math.random() < 0.5 ? 'reverse' : 'standard',
     };
   });
 }
 
 /** Builds an N-question session for the Borders Quiz */
 export function buildBordersQuizQuestions(countries: Country[], count: number = 10) {
+  const quizCountries = countries.filter((c) => isQuizEligibleCca2(c.cca2));
   // Only target countries with at least 3 borders, so we can pick 3 real borders
-  const validTargets = countries.filter(c => c.borders && c.borders.length >= 3);
+  const validTargets = quizCountries.filter(c => c.borders && c.borders.length >= 3);
   const shuffledTargets = [...validTargets].sort(() => Math.random() - 0.5);
   const selected = shuffledTargets.slice(0, count);
 
@@ -272,13 +292,13 @@ export function buildBordersQuizQuestions(countries: Country[], count: number = 
     // 1. Get real borders
     const actualBorderCca2s = targetCountry.borders
       .map(b => cca3Map[b])
-      .filter(Boolean); // some borders might not map correctly if they are missing
+      .filter((cca2): cca2 is string => !!cca2 && isQuizEligibleCca2(cca2)); // some borders might not map correctly if they are missing
 
     // Choose 3 real borders
     const shuffledBorders = [...actualBorderCca2s].sort(() => Math.random() - 0.5);
     const threeBorders = shuffledBorders.slice(0, 3);
     const borderCountries = threeBorders
-      .map(code => countries.find(c => c.cca2 === code))
+      .map(code => quizCountries.find(c => c.cca2 === code))
       .filter((c): c is Country => c !== undefined);
 
     // 2. Choose 1 non-border that is proximal (neighbor of a neighbor)
@@ -291,9 +311,9 @@ export function buildBordersQuizQuestions(countries: Country[], count: number = 
 
     const neighborsOfNeighborsCca2 = Array.from(neighborsOfNeighborsCca3)
       .map(b => cca3Map[b])
-      .filter(Boolean);
+      .filter((cca2): cca2 is string => !!cca2 && isQuizEligibleCca2(cca2));
 
-    let candidateProxys = countries.filter(
+    let candidateProxys = quizCountries.filter(
       c => c.cca2 !== targetCountry.cca2 &&
         !actualBorderCca2s.includes(c.cca2) &&
         neighborsOfNeighborsCca2.includes(c.cca2)
@@ -301,7 +321,7 @@ export function buildBordersQuizQuestions(countries: Country[], count: number = 
 
     // Fallback if no neighbors of neighbors exist (e.g., small clusters)
     if (candidateProxys.length === 0) {
-      candidateProxys = countries.filter(
+      candidateProxys = quizCountries.filter(
         c => c.cca2 !== targetCountry.cca2 &&
           !actualBorderCca2s.includes(c.cca2) &&
           c.region === targetCountry.region
@@ -310,7 +330,7 @@ export function buildBordersQuizQuestions(countries: Country[], count: number = 
 
     // Deep fallback
     if (candidateProxys.length === 0) {
-      candidateProxys = countries.filter(
+      candidateProxys = quizCountries.filter(
         c => c.cca2 !== targetCountry.cca2 && !actualBorderCca2s.includes(c.cca2)
       );
     }

@@ -9,6 +9,7 @@ import React from 'react';
 import { Image, ImageSourcePropType, Text, TextStyle, View } from 'react-native';
 import { CUSTOM_AVATAR_COMPONENTS, isCustomAvatar, isSpriteSheet } from '../lib/customAvatars';
 import { CUSTOM_FLAG_COMPONENTS, isCustomFlag } from '../lib/customFlags';
+import { getDisplayFlagEmoji } from '../lib/flagDisplay';
 
 const FALLBACK_AVATAR = require('../../assets/avatars/explorer_male.png');
 
@@ -30,7 +31,7 @@ export default function AvatarDisplay({ avatarId, avatarFlag, size = 32, style, 
   const flagBadge = avatarFlag
     ? FlagComponent
       ? <View style={{ position: 'absolute', bottom: -2, right: -2 }}><FlagComponent size={flagSize} /></View>
-      : <Text style={{ position: 'absolute', bottom: -2, right: -2, fontSize: flagSize }}>{avatarFlag}</Text>
+      : <Text style={{ position: 'absolute', bottom: -2, right: -2, fontSize: flagSize }}>{getDisplayFlagEmoji(avatarFlag)}</Text>
     : null;
 
   const starSize = Math.round(size * 0.4);

@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useAuth } from '../context/AuthContext';
+import { t } from '../lib/i18n';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { supabase } from '../lib/supabase';
 import { AuthStackParamList } from '../types';
@@ -30,6 +31,7 @@ export default function LoginScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [appleLoading, setAppleLoading] = useState(false);
+  const [appleAvailable, setAppleAvailable] = useState(false);
   const [showForgot, setShowForgot] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotLoading, setForgotLoading] = useState(false);
@@ -38,18 +40,21 @@ export default function LoginScreen({ navigation }: Props) {
   useEffect(() => {
     const resolved = Image.resolveAssetSource(bgSource);
     if (resolved?.uri) Image.prefetch(resolved.uri).catch(() => {});
+    if (Platform.OS === 'ios') {
+      AppleAuthentication.isAvailableAsync().then(setAppleAvailable).catch(() => {});
+    }
   }, []);
 
   async function handleSignIn() {
     if (!email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
+      Alert.alert(t('login.error'), t('login.fillFields'));
       return;
     }
     setLoading(true);
     try {
       await signIn(email.trim(), password);
     } catch (err: any) {
-      Alert.alert('Sign In Failed', err.message ?? 'Something went wrong');
+      Alert.alert(t('login.signInFailed'), err.message ?? 'Something went wrong');
     } finally {
       setLoading(false);
     }
@@ -57,7 +62,7 @@ export default function LoginScreen({ navigation }: Props) {
 
   async function handleForgotPassword() {
     if (!forgotEmail.trim()) {
-      Alert.alert('Error', 'Please enter your email address.');
+      Alert.alert(t('login.error'), t('login.enterEmail'));
       return;
     }
     setForgotLoading(true);
@@ -68,7 +73,7 @@ export default function LoginScreen({ navigation }: Props) {
       if (error) throw error;
       setForgotSent(true);
     } catch (err: any) {
-      Alert.alert('Error', err.message ?? 'Failed to send reset email.');
+      Alert.alert(t('login.error'), err.message ?? 'Failed to send reset email.');
     } finally {
       setForgotLoading(false);
     }
@@ -79,7 +84,7 @@ export default function LoginScreen({ navigation }: Props) {
     try {
       await signInWithGoogle();
     } catch (err: any) {
-      Alert.alert('Google Sign In Failed', err.message ?? 'Something went wrong');
+      Alert.alert(t('login.googleFailed'), err.message ?? 'Something went wrong');
     } finally {
       setGoogleLoading(false);
     }
@@ -91,7 +96,7 @@ export default function LoginScreen({ navigation }: Props) {
       await signInWithApple();
     } catch (err: any) {
       if ((err as any).code !== 'ERR_REQUEST_CANCELED') {
-        Alert.alert('Apple Sign In Failed', err.message ?? 'Something went wrong');
+        Alert.alert(t('login.appleFailed'), err.message ?? 'Something went wrong');
       }
     } finally {
       setAppleLoading(false);
@@ -114,11 +119,22 @@ export default function LoginScreen({ navigation }: Props) {
             {/* Hero text — floats over the animated map */}
             <View style={styles.heroSection}>
               <Text style={styles.title}>GeoConquest</Text>
-              <Text style={styles.subtitle}>Conquer the world, one quiz at a time</Text>
+              <Text style={styles.subtitle}>{t('login.tagline')}</Text>
             </View>
 
             {/* Form card */}
             <View style={styles.formCard}>
+              {/* Apple Sign In — iOS only, shown first as an equivalent primary option */}
+              {appleAvailable && (
+                <AppleAuthentication.AppleAuthenticationButton
+                  buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                  buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
+                  cornerRadius={12}
+                  style={{ width: '100%', height: 50 }}
+                  onPress={handleAppleSignIn}
+                />
+              )}
+
               {/* Google button */}
               <TouchableOpacity
                 style={[styles.googleButton, googleLoading && styles.buttonDisabled]}
@@ -128,31 +144,20 @@ export default function LoginScreen({ navigation }: Props) {
               >
                 <Text style={styles.googleIcon}>G</Text>
                 <Text style={styles.googleButtonText}>
-                  {googleLoading ? 'Connecting…' : 'Continue with Google'}
+                  {googleLoading ? t('login.connecting') : t('login.continueWithGoogle')}
                 </Text>
               </TouchableOpacity>
-
-              {/* Apple Sign In — iOS only */}
-              {Platform.OS === 'ios' && (
-                <AppleAuthentication.AppleAuthenticationButton
-                  buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
-                  buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
-                  cornerRadius={12}
-                  style={{ width: '100%', height: 50, marginTop: 10 }}
-                  onPress={handleAppleSignIn}
-                />
-              )}
 
               {/* Divider */}
               <View style={styles.divider}>
                 <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>or</Text>
+                <Text style={styles.dividerText}>{t('login.or')}</Text>
                 <View style={styles.dividerLine} />
               </View>
 
               <TextInput
                 style={styles.input}
-                placeholder="Email"
+                placeholder={t('login.email')}
                 placeholderTextColor="#555"
                 value={email}
                 onChangeText={setEmail}
@@ -161,7 +166,7 @@ export default function LoginScreen({ navigation }: Props) {
               />
               <TextInput
                 style={styles.input}
-                placeholder="Password"
+                placeholder={t('login.password')}
                 placeholderTextColor="#555"
                 value={password}
                 onChangeText={setPassword}
@@ -173,11 +178,11 @@ export default function LoginScreen({ navigation }: Props) {
                 onPress={handleSignIn}
                 disabled={loading}
               >
-                <Text style={styles.buttonText}>{loading ? 'Signing in…' : 'Sign In'}</Text>
+                <Text style={styles.buttonText}>{loading ? t('login.signingIn') : t('login.signIn')}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity onPress={() => { setForgotSent(false); setForgotEmail(email); setShowForgot(true); }}>
-                <Text style={styles.forgotLink}>Forgot Password?</Text>
+                <Text style={styles.forgotLink}>{t('login.forgotPassword')}</Text>
               </TouchableOpacity>
             </View>
 
@@ -187,19 +192,19 @@ export default function LoginScreen({ navigation }: Props) {
                 <View style={styles.modalCard}>
                   {forgotSent ? (
                     <>
-                      <Text style={styles.modalTitle}>Email Sent</Text>
-                      <Text style={styles.modalMessage}>Check your inbox for a password reset link.</Text>
+                      <Text style={styles.modalTitle}>{t('login.emailSentTitle')}</Text>
+                      <Text style={styles.modalMessage}>{t('login.emailSentBody')}</Text>
                       <TouchableOpacity style={styles.modalButton} onPress={() => setShowForgot(false)}>
-                        <Text style={styles.modalButtonText}>Done</Text>
+                        <Text style={styles.modalButtonText}>{t('login.done')}</Text>
                       </TouchableOpacity>
                     </>
                   ) : (
                     <>
-                      <Text style={styles.modalTitle}>Reset Password</Text>
-                      <Text style={styles.modalMessage}>Enter your email and we'll send you a reset link.</Text>
+                      <Text style={styles.modalTitle}>{t('login.forgotPasswordTitle')}</Text>
+                      <Text style={styles.modalMessage}>{t('login.forgotPasswordBody')}</Text>
                       <TextInput
                         style={styles.input}
-                        placeholder="Email"
+                        placeholder={t('login.email')}
                         placeholderTextColor="#555"
                         value={forgotEmail}
                         onChangeText={setForgotEmail}
@@ -211,10 +216,10 @@ export default function LoginScreen({ navigation }: Props) {
                         onPress={handleForgotPassword}
                         disabled={forgotLoading}
                       >
-                        <Text style={styles.modalButtonText}>{forgotLoading ? 'Sending…' : 'Send Reset Link'}</Text>
+                        <Text style={styles.modalButtonText}>{forgotLoading ? t('login.sending') : t('login.sendResetLink')}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity onPress={() => setShowForgot(false)}>
-                        <Text style={styles.modalCancel}>Cancel</Text>
+                        <Text style={styles.modalCancel}>{t('login.cancel')}</Text>
                       </TouchableOpacity>
                     </>
                   )}
@@ -223,7 +228,7 @@ export default function LoginScreen({ navigation }: Props) {
             </Modal>
 
             <TouchableOpacity onPress={() => navigation.navigate('SignUp')}>
-              <Text style={styles.link}>Don't have an account? Sign Up</Text>
+              <Text style={styles.link}>{t('login.noAccount')}</Text>
             </TouchableOpacity>
 
             <View style={styles.poweredByRow}>

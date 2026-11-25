@@ -14,6 +14,14 @@ export interface Profile {
   login_streak?: number;
   last_reward_claim?: string;
   is_conquerer?: boolean;
+  conqueror_plan?: 'unlimited' | 'monthly' | 'yearly' | null;
+  mythic_chests?: number;
+  mythic_monthly_chests?: number;
+  mythic_bonus_chests?: number;
+  mythic_monthly_opened?: number;
+  mythic_dust?: number;
+  mythic_month_key?: string | null;
+  mythic_lifetime_bonus_claimed?: boolean;
   tickets?: number;
   quiz_count?: number;
   referred_by?: string | null;
@@ -66,7 +74,7 @@ export interface OwnedCountry {
 
 // ─── Quiz ─────────────────────────────────────────────────────────────────────
 
-export type QuizType = 'flag' | 'shape' | 'borders' | 'millionaire' | 'capitals' | 'nightmare' | 'trail' | 'gauntlet';
+export type QuizType = 'flag' | 'shape' | 'borders' | 'millionaire' | 'capitals' | 'nightmare' | 'trail' | 'gauntlet' | 'draw';
 
 export interface QuizResult {
   id: string;
@@ -115,6 +123,7 @@ export type RootStackParamList = {
   ChooseUsername: undefined;
   Main: undefined;
   Premium: undefined;
+  MythicChest: undefined;
 };
 
 export type AuthStackParamList = {
@@ -140,6 +149,7 @@ export type QuizStackParamList = {
   MillionaireQuiz: undefined;
   NightmareQuiz: undefined;
   Gauntlet: undefined;
+  BorderDrawQuiz: undefined;
   QuizResults: {
     score: number;
     total: number;
@@ -147,9 +157,12 @@ export type QuizStackParamList = {
     quizType: QuizType;
     quizMode?: 'standard' | 'easy';
     elapsedSeconds?: number;
+    rewardMultiplier?: number;
     tierAccent?: string;
     tierLabel?: string;
     tierBg?: string;
+    millionairePowerUpsUsed?: boolean;
+    xpOverride?: number;
   };
 };
 
@@ -188,4 +201,5 @@ export const GOLD_REWARDS: Record<QuizType, number> = {
   millionaire: 25, // base; scales per level
   nightmare: 50000,
   gauntlet: 0,    // per-round gold is calculated dynamically in GauntletScreen
+  draw: 0,        // per-question gold calculated dynamically based on drawing accuracy
 };

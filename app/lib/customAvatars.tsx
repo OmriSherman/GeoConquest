@@ -5,6 +5,7 @@
  */
 
 import { ImageSourcePropType } from 'react-native';
+import { CHEST_AVATARS } from './dailyChest';
 
 export interface SpriteSheet {
   source: ImageSourcePropType;
@@ -31,6 +32,7 @@ export function isSpriteSheet(entry: CustomAvatarEntry): entry is SpriteSheet {
 const MONKEY_AR = 938 / 1536; // ≈ 0.611
 
 export const CUSTOM_AVATAR_COMPONENTS: Record<string, CustomAvatarEntry> = {
+  ...Object.fromEntries(CHEST_AVATARS.map(a => [a.id, a.image])),
   // Frog Collection
   svg_froga: require('../../assets/avatars/avatar_1.png'),
   svg_froglord: require('../../assets/avatars/avatar_2.png'),
@@ -186,6 +188,22 @@ export const CUSTOM_AVATAR_COMPONENTS: Record<string, CustomAvatarEntry> = {
   // Internal use — Nightmare Quiz screens
   png_demon_hand:      require('../../assets/avatars/demon_hand.png'),
   png_evil_vanquished: require('../../assets/avatars/evil_vanquished.png'),
+
+  // Mythic Chest avatars
+  png_worldbreaker_empress: require('../../assets/avatars/worldbreaker_empress.png'),
+  png_storm_navigator:      require('../../assets/avatars/storm_navigator.png'),
+  png_mapless_heroine:      require('../../assets/avatars/mapless_heroine.png'),
+  png_mapless_hero:         require('../../assets/avatars/mapless_hero.png'),
+  png_longitude_ronin:      require('../../assets/avatars/longitude_ronin.png'),
+  png_meridian_oracle:      require('../../assets/avatars/meridian_oracle.png'),
+  png_border_phantom:       require('../../assets/avatars/border_phantom.png'),
+  png_cosmic_pigeon:        require('../../assets/avatars/cosmic_pigeon.png'),
+  png_globe_eater:          require('../../assets/avatars/globe_eater.png'),
+  png_conquest_frog:        require('../../assets/avatars/conquest_frog.png'),
+  png_meme_emperor:         require('../../assets/avatars/meme_emperor.png'),
+  png_gigachad_cartographer: require('../../assets/avatars/gigachad_cartographer.png'),
+  png_surprised_explorer:   require('../../assets/avatars/surprised_explorer.png'),
+  png_wojak_wanderer:       require('../../assets/avatars/wojak_wanderer.png'),
 };
 
 

@@ -28,6 +28,8 @@ import {
 import { supabase } from '../lib/supabase';
 import { Country, QuizStackParamList } from '../types';
 import TierBackground, { TierLabel } from '../components/TierBackground';
+import { t } from '../lib/i18n';
+import { filterQuizCountries } from '../lib/quizCountryFilters';
 
 type Props = {
   navigation: StackNavigationProp<QuizStackParamList, 'Gauntlet'>;
@@ -83,7 +85,10 @@ const TIERS = [
 ];
 
 function getTier(score: number) {
-  return TIERS.find(t => score >= t.minScore) ?? TIERS[TIERS.length - 1];
+  return TIERS.find(tier => score >= tier.minScore) ?? TIERS[TIERS.length - 1];
+}
+function getTierDisplayLabel(label: string) {
+  return t(`gauntlet.tiers.${label.toLowerCase()}` as any) || label;
 }
 
 // ─── Difficulty ───────────────────────────────────────────────────────────────
@@ -247,61 +252,61 @@ function buildQuestion(
   // ─── Base types ─────────────────────────────────────────────────────────────
   if (type === 'flag') {
     const options = buildCountryNameOptions();
-    return { type, prompt: 'Which country has this flag?', options, correctIndex: options.indexOf(subject.name), flagUrl: subject.flagUrl, dragTokenLabel: 'DRAG FLAG', isBoss: boss, gold };
+    return { type, prompt: t('gauntlet.whichFlag'), options, correctIndex: options.indexOf(subject.name), flagUrl: subject.flagUrl, dragTokenLabel: 'DRAG FLAG', isBoss: boss, gold };
   }
   if (type === 'capital') {
     const options = buildCountryNameOptions();
-    return { type, prompt: 'Which country has this capital?', options, correctIndex: options.indexOf(subject.name), dragLabel: subject.capital, dragTokenLabel: 'DRAG CAPITAL', isBoss: boss, gold };
+    return { type, prompt: t('gauntlet.whichCountryCapital'), options, correctIndex: options.indexOf(subject.name), dragLabel: subject.capital, dragTokenLabel: 'DRAG CAPITAL', isBoss: boss, gold };
   }
   if (type === 'shape') {
     const options = buildCountryNameOptions();
-    return { type: 'shape', prompt: 'Which country has this shape?', options, correctIndex: options.indexOf(subject.name), subjectCca2: subject.cca2, subjectArea: subject.area, dragTokenLabel: 'DRAG SHAPE', isBoss: boss, gold };
+    return { type: 'shape', prompt: t('gauntlet.whichShape'), options, correctIndex: options.indexOf(subject.name), subjectCca2: subject.cca2, subjectArea: subject.area, dragTokenLabel: 'DRAG SHAPE', isBoss: boss, gold };
   }
   if (type === 'borders') {
     if (!subjectHasBorders) {
       const options = buildCountryNameOptions();
-      return { type: 'flag', prompt: 'Which country has this flag?', options, correctIndex: options.indexOf(subject.name), flagUrl: subject.flagUrl, isBoss: boss, gold };
+      return { type: 'flag', prompt: t('gauntlet.whichFlag'), options, correctIndex: options.indexOf(subject.name), flagUrl: subject.flagUrl, isBoss: boss, gold };
     }
     const { options, correctIndex } = buildNeighborOptions();
-    return { type: 'borders', prompt: `Which country borders ${subject.name}?`, options, correctIndex, dragLabel: subject.name, dragTokenLabel: 'DRAG COUNTRY', isBoss: boss, gold };
+    return { type: 'borders', prompt: t('gauntlet.sharesBorder', { country: subject.name }), options, correctIndex, dragLabel: subject.name, dragTokenLabel: 'DRAG COUNTRY', isBoss: boss, gold };
   }
 
   // ─── Tier 2 types ───────────────────────────────────────────────────────────
   if (type === 't2_flag_capital') {
     const { options, correctIndex } = buildCapitalOptions();
-    return { type, prompt: 'Which capital belongs to this flag?', options, correctIndex, flagUrl: subject.flagUrl, dragTokenLabel: 'DRAG FLAG', isBoss: boss, gold: t2Gold };
+    return { type, prompt: t('gauntlet.t2FlagCapital'), options, correctIndex, flagUrl: subject.flagUrl, dragTokenLabel: 'DRAG FLAG', isBoss: boss, gold: t2Gold };
   }
   if (type === 't2_flag_border') {
     const { options, correctIndex } = buildNeighborOptions();
-    return { type, prompt: "Which country borders this flag's country?", options, correctIndex, flagUrl: subject.flagUrl, dragTokenLabel: 'DRAG FLAG', isBoss: boss, gold: t2Gold };
+    return { type, prompt: t('gauntlet.t2FlagBorder'), options, correctIndex, flagUrl: subject.flagUrl, dragTokenLabel: 'DRAG FLAG', isBoss: boss, gold: t2Gold };
   }
   if (type === 't2_flag_shape') {
     const { optionCountries, options, correctIndex } = buildShapeAnswerOptions();
-    return { type, prompt: 'Which shape belongs to this flag?', options, optionCountries, answerVisual: 'shape', correctIndex, flagUrl: subject.flagUrl, dragTokenLabel: 'DRAG FLAG', isBoss: boss, gold: t2Gold };
+    return { type, prompt: t('gauntlet.t2FlagShape'), options, optionCountries, answerVisual: 'shape', correctIndex, flagUrl: subject.flagUrl, dragTokenLabel: 'DRAG FLAG', isBoss: boss, gold: t2Gold };
   }
   if (type === 't2_shape_capital') {
     const { options, correctIndex } = buildCapitalOptions();
-    return { type, prompt: 'Which capital belongs to this shape?', options, correctIndex, subjectCca2: subject.cca2, subjectArea: subject.area, dragTokenLabel: 'DRAG SHAPE', isBoss: boss, gold: t2Gold };
+    return { type, prompt: t('gauntlet.t2ShapeCapital'), options, correctIndex, subjectCca2: subject.cca2, subjectArea: subject.area, dragTokenLabel: 'DRAG SHAPE', isBoss: boss, gold: t2Gold };
   }
   if (type === 't2_shape_border') {
     const { options, correctIndex } = buildNeighborOptions();
-    return { type, prompt: "Which country borders this shape's country?", options, correctIndex, subjectCca2: subject.cca2, subjectArea: subject.area, dragTokenLabel: 'DRAG SHAPE', isBoss: boss, gold: t2Gold };
+    return { type, prompt: t('gauntlet.t2ShapeBorder'), options, correctIndex, subjectCca2: subject.cca2, subjectArea: subject.area, dragTokenLabel: 'DRAG SHAPE', isBoss: boss, gold: t2Gold };
   }
   if (type === 't2_shape_flag') {
     const { optionCountries, options, correctIndex } = buildFlagAnswerOptions();
-    return { type, prompt: 'Which flag belongs to this shape?', options, optionCountries, answerVisual: 'flag', correctIndex, subjectCca2: subject.cca2, subjectArea: subject.area, dragTokenLabel: 'DRAG SHAPE', isBoss: boss, gold: t2Gold };
+    return { type, prompt: t('gauntlet.t2ShapeFlag'), options, optionCountries, answerVisual: 'flag', correctIndex, subjectCca2: subject.cca2, subjectArea: subject.area, dragTokenLabel: 'DRAG SHAPE', isBoss: boss, gold: t2Gold };
   }
   if (type === 't2_capital_flag') {
     const { optionCountries, options, correctIndex } = buildFlagAnswerOptions();
-    return { type, prompt: 'Which flag belongs to this capital?', options, optionCountries, answerVisual: 'flag', correctIndex, dragLabel: subject.capital, dragTokenLabel: 'DRAG CAPITAL', isBoss: boss, gold: t2Gold };
+    return { type, prompt: t('gauntlet.t2CapitalFlag'), options, optionCountries, answerVisual: 'flag', correctIndex, dragLabel: subject.capital, dragTokenLabel: 'DRAG CAPITAL', isBoss: boss, gold: t2Gold };
   }
   if (type === 't2_capital_shape') {
     const { optionCountries, options, correctIndex } = buildShapeAnswerOptions();
-    return { type, prompt: 'Which shape belongs to this capital?', options, optionCountries, answerVisual: 'shape', correctIndex, dragLabel: subject.capital, dragTokenLabel: 'DRAG CAPITAL', isBoss: boss, gold: t2Gold };
+    return { type, prompt: t('gauntlet.t2CapitalShape'), options, optionCountries, answerVisual: 'shape', correctIndex, dragLabel: subject.capital, dragTokenLabel: 'DRAG CAPITAL', isBoss: boss, gold: t2Gold };
   }
   if (type === 't2_capital_border') {
     const { options, correctIndex } = buildNeighborOptions();
-    return { type, prompt: "Which country borders this capital's country?", options, correctIndex, dragLabel: subject.capital, dragTokenLabel: 'DRAG CAPITAL', isBoss: boss, gold: t2Gold };
+    return { type, prompt: t('gauntlet.t2CapitalBorder'), options, correctIndex, dragLabel: subject.capital, dragTokenLabel: 'DRAG CAPITAL', isBoss: boss, gold: t2Gold };
   }
 
   return null;
@@ -344,32 +349,24 @@ const SCORE_MILESTONES = new Set([5, 10, 15, 20, 25, 30, 40, 50, 60, 75, 100]);
 const BURST_ANGLES = [0, 45, 90, 135, 180, 225, 270, 315];
 const BURST_DIST = 90;
 
-const MILESTONE_TAGLINES: Record<number, string> = {
-  5:   'JUST GETTING STARTED',
-  10:  'DOUBLE DIGITS',
-  15:  'LOCKED IN',
-  20:  'INTO THE ABYSS',
-  25:  'QUARTER CENTURY',
-  30:  'THE VOID OPENS',
-  40:  'WELCOME TO HELL',
-  50:  'HALFWAY TO INFERNO',
-  55:  'NO MERCY NOW',
-  60:  'NO TURNING BACK',
-  70:  'OBLIVION REACHED',
-  75:  'LEGENDARY',
-  85:  'BEYOND TIME',
-  100: 'UNSTOPPABLE',
+const MILESTONE_TAGLINE_KEYS: Record<number, string> = {
+  5: 'milestone5', 10: 'milestone10', 15: 'milestone15', 20: 'milestone20',
+  25: 'milestone25', 30: 'milestone30', 40: 'milestone40', 50: 'milestone50',
+  60: 'milestone60', 70: 'milestone70', 75: 'milestone75', 100: 'milestone100',
 };
+function getMilestoneTagline(score: number) {
+  const key = MILESTONE_TAGLINE_KEYS[score];
+  return key ? t(`gauntlet.${key}` as any) : t('gauntlet.keepGoing');
+}
 
-const TIER_DESCRIPTIONS: Record<string, string> = {
-  PERIL:    'The heat is rising...',
-  ABYSS:    'The deep unknown...',
-  VOID:     'Endless conquest',
-  HELL:     'Hell - REBORN',
-  INFERNO:  'Subjugation',
-  OBLIVION: 'Nothing remains',
-  ETERNITY: 'The beyond',
+const TIER_DESC_KEYS: Record<string, string> = {
+  PERIL: 'tierDescPeril', ABYSS: 'tierDescAbyss', VOID: 'tierDescVoid',
+  HELL: 'tierDescHell', INFERNO: 'tierDescInferno', OBLIVION: 'tierDescOblivion', ETERNITY: 'tierDescEternity',
 };
+function getTierDescription(label: string) {
+  const key = TIER_DESC_KEYS[label];
+  return key ? t(`gauntlet.${key}` as any) : '';
+}
 
 // Corner positions for the 4 answer zones (TL, TR, BL, BR)
 const CORNER_POSITIONS = [
@@ -636,6 +633,7 @@ export default function GauntletScreen({ navigation }: Props) {
 
   useEffect(() => {
     fetchCountries().then(cs => {
+      cs = filterQuizCountries(cs);
       allCountriesRef.current = cs;
       const map: Record<string, string> = {};
       cs.forEach(c => { map[c.cca3] = c.cca2; });
@@ -878,7 +876,7 @@ export default function GauntletScreen({ navigation }: Props) {
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#020610' }]}>
         <TierBackground tierLabel="DANGER" />
         <Image source={require('../../assets/avatars/flame.png')} style={{ width: 56, height: 56, marginBottom: 16 }} resizeMode="contain" />
-        <Text style={styles.loadingText}>Entering the Gauntlet...</Text>
+        <Text style={styles.loadingText}>{t('gauntlet.loading')}</Text>
       </View>
     );
   }
@@ -891,15 +889,15 @@ export default function GauntletScreen({ navigation }: Props) {
         <TierBackground tierLabel="DANGER" />
         <Image source={require('../../assets/avatars/crucible.png')} style={{ width: 80, height: 80, marginBottom: 20 }} resizeMode="contain" />
         <Text style={styles.readyTitle}>THE GAUNTLET</Text>
-        <Text style={styles.readySubtitle}>Answer fast and survive the climb.</Text>
+        <Text style={styles.readySubtitle}>{t('gauntlet.readySubtitle')}</Text>
         <TouchableOpacity
           style={styles.readyBtn}
           onPress={() => { startTimeRef.current = Date.now(); setPhase('playing'); beginRound(0); }}
         >
-          <Text style={styles.readyBtnText}>LET'S GO</Text>
+          <Text style={styles.readyBtnText}>{t('quizCommon.letsGo')}</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.readyBackLink}>
-          <Text style={styles.readyBackLinkText}>Go Back</Text>
+          <Text style={styles.readyBackLinkText}>{t('quizCommon.goBack')}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -914,8 +912,8 @@ export default function GauntletScreen({ navigation }: Props) {
   const phaseProgressScore = score >= FINAL_PHASE_SCORE ? PHASE_STEP : score % PHASE_STEP;
   const phaseProgressPct = score >= FINAL_PHASE_SCORE ? 100 : (phaseProgressScore / PHASE_STEP) * 100;
   const nextPhaseScore = Math.min(FINAL_PHASE_SCORE, (Math.floor(score / PHASE_STEP) + 1) * PHASE_STEP);
-  const nextPhaseLabel = score >= FINAL_PHASE_SCORE ? 'FINAL PHASE' : `NEXT PHASE ${phaseProgressScore}/${PHASE_STEP}`;
-  const nextPhaseDetail = score >= FINAL_PHASE_SCORE ? tier.label : `${nextPhaseScore - score} correct left`;
+  const nextPhaseLabel = score >= FINAL_PHASE_SCORE ? t('gauntlet.finalPhase') : t('gauntlet.nextPhase', { progress: phaseProgressScore, step: PHASE_STEP });
+  const nextPhaseDetail = score >= FINAL_PHASE_SCORE ? getTierDisplayLabel(tier.label) : t('gauntlet.correctLeft', { n: nextPhaseScore - score });
   const isShapeType = q.type === 'shape' || q.type === 't2_shape_capital' || q.type === 't2_shape_border' || q.type === 't2_shape_flag';
   const isFlagType = q.type === 'flag' || q.type === 't2_flag_capital' || q.type === 't2_flag_border' || q.type === 't2_flag_shape';
   const subjectCardStyle = [
@@ -931,8 +929,8 @@ export default function GauntletScreen({ navigation }: Props) {
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <View style={styles.header}>
         <View style={styles.headerCenter}>
-          <Text style={[styles.headerTitle, { color: tier.accent }]}>THE GAUNTLET</Text>
-          <Text style={[styles.tierLabel, { color: tier.accent + 'aa' }]}>{tier.label}</Text>
+          <Text style={[styles.headerTitle, { color: tier.accent }]}>{t('gauntlet.title')}</Text>
+          <Text style={[styles.tierLabel, { color: tier.accent + 'aa' }]}>{getTierDisplayLabel(tier.label)}</Text>
         </View>
 
         <View style={styles.headerRight}>
@@ -965,7 +963,7 @@ export default function GauntletScreen({ navigation }: Props) {
       {q.isBoss && (
         <Animated.View style={[styles.bossBanner, { transform: [{ translateY: bossBannerAnim }] }]}>
           <Image source={require('../../assets/avatars/crown.png')} style={{ width: 13, height: 13 }} resizeMode="contain" />
-          <Text style={styles.bossBannerText}>BOSS ROUND  x2</Text>
+          <Text style={styles.bossBannerText}>{t('gauntlet.bossRound')}</Text>
           <Image source={require('../../assets/avatars/gold_bag.png')} style={{ width: 14, height: 14 }} resizeMode="contain" />
           <Image source={require('../../assets/avatars/crown.png')} style={{ width: 13, height: 13 }} resizeMode="contain" />
         </Animated.View>
@@ -973,7 +971,7 @@ export default function GauntletScreen({ navigation }: Props) {
 
       {/* ── Meta row ────────────────────────────────────────────────────── */}
       <View style={styles.metaRow}>
-        <Text style={styles.roundText}>Round {round + 1}</Text>
+        <Text style={styles.roundText}>{t('gauntlet.round', { n: round + 1 })}</Text>
         <View style={styles.metaRight}>
           <View style={[styles.typeBadge, { borderColor: typeColor }]}>
             <Text style={[styles.typeBadgeText, { color: typeColor }]}>{TYPE_LABEL[q.type]}</Text>
@@ -1080,12 +1078,12 @@ export default function GauntletScreen({ navigation }: Props) {
       {paused && (
         <View style={[StyleSheet.absoluteFill, styles.pauseOverlay]}>
           <Image source={require('../../assets/avatars/stop_it.png')} style={styles.pauseStopIt} resizeMode="contain" />
-          <Text style={[styles.pauseTitle, { color: tier.accent }]}>PAUSED</Text>
+          <Text style={[styles.pauseTitle, { color: tier.accent }]}>{t('quizCommon.paused')}</Text>
           <TouchableOpacity style={[styles.resumeBtn, { borderColor: tier.accent }]} onPress={resumeGame}>
-            <Text style={[styles.resumeBtnText, { color: tier.accent }]}>RESUME</Text>
+            <Text style={[styles.resumeBtnText, { color: tier.accent }]}>{t('quizCommon.resume')}</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => { timerAnimRef.current?.stop(); allowLeaveRef.current = true; navigation.goBack(); }}>
-            <Text style={styles.quitText}>Quit</Text>
+            <Text style={styles.quitText}>{t('quizCommon.quit')}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -1098,7 +1096,7 @@ export default function GauntletScreen({ navigation }: Props) {
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.shieldOverlay, { opacity: shieldFlashAnim }]}>
         <View style={styles.shieldOverlayInner}>
           <Image source={require('../../assets/gauntlet/gauntlet_danger.png')} style={{ width: 36, height: 36 }} resizeMode="contain" />
-          <Text style={styles.shieldOverlayText}>SHIELD ABSORBED</Text>
+          <Text style={styles.shieldOverlayText}>{t('gauntlet.shieldAbsorbed')}</Text>
         </View>
       </Animated.View>
 
@@ -1108,11 +1106,11 @@ export default function GauntletScreen({ navigation }: Props) {
           style={[StyleSheet.absoluteFill, styles.tierFlashOverlay, { opacity: tierFlashAnim, backgroundColor: tier.accent + '18' }]}
         >
           <Animated.View style={[styles.tierFlashCard, { borderColor: tier.accent + '55', transform: [{ scale: tierFlashScale }] }]}>
-            <Text style={styles.tierFlashWelcome}>WELCOME TO</Text>
+            <Text style={styles.tierFlashWelcome}>{t('gauntlet.welcomeTo')}</Text>
             <View style={[styles.tierFlashDivider, { backgroundColor: tier.accent + '66' }]} />
             <Text style={[styles.tierFlashText, { color: tier.accent }]}>{tierFlashLabel}</Text>
-            {TIER_DESCRIPTIONS[tierFlashLabel] !== undefined && (
-              <Text style={[styles.tierFlashDesc, { color: tier.accent + 'cc' }]}>{TIER_DESCRIPTIONS[tierFlashLabel]}</Text>
+            {TIER_DESC_KEYS[tierFlashLabel] !== undefined && (
+              <Text style={[styles.tierFlashDesc, { color: tier.accent + 'cc' }]}>{getTierDescription(tierFlashLabel)}</Text>
             )}
           </Animated.View>
         </Animated.View>
@@ -1123,7 +1121,7 @@ export default function GauntletScreen({ navigation }: Props) {
           <Animated.View style={[styles.milestoneInner, { transform: [{ scale: milestoneScaleAnim }] }]}>
             <Image source={require('../../assets/avatars/flame.png')} style={{ width: 40, height: 40 }} resizeMode="contain" />
             <Text style={styles.milestoneScoreText}>{milestoneLabel}</Text>
-            <Text style={styles.milestoneTagline}>{MILESTONE_TAGLINES[milestoneScore] ?? 'KEEP GOING'}</Text>
+            <Text style={styles.milestoneTagline}>{getMilestoneTagline(milestoneScore)}</Text>
           </Animated.View>
         </Animated.View>
       )}
@@ -1132,7 +1130,7 @@ export default function GauntletScreen({ navigation }: Props) {
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.shieldAcquireOverlay, { opacity: shieldAcquireAnim }]}>
           <Animated.View style={[styles.shieldAcquireInner, { transform: [{ scale: shieldAcquireScale }] }]}>
             <Image source={require('../../assets/gauntlet/gauntlet_danger.png')} style={{ width: 48, height: 48 }} resizeMode="contain" />
-            <Text style={[styles.shieldAcquireText, { color: tier.accent }]}>SHIELD ACQUIRED</Text>
+            <Text style={[styles.shieldAcquireText, { color: tier.accent }]}>{t('gauntlet.shieldAcquired')}</Text>
           </Animated.View>
         </Animated.View>
       )}
@@ -1168,8 +1166,8 @@ export default function GauntletScreen({ navigation }: Props) {
 
       <QuitConfirmModal
         visible={showQuitModal}
-        title="Leave Gauntlet?"
-        message="Your progress will be lost."
+        title={t('gauntlet.leaveTitle')}
+        message={t('quizCommon.progressLost')}
         onStay={() => { setShowQuitModal(false); onConfirmQuitRef.current = null; }}
         onQuit={() => { setShowQuitModal(false); onConfirmQuitRef.current?.(); onConfirmQuitRef.current = null; }}
       />

@@ -3,6 +3,7 @@ import { Animated, Easing, Image, StyleSheet, Text, TouchableOpacity, View } fro
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import TopFallConfetti from './TopFallConfetti';
 import { playQuestComplete } from '../lib/audio';
+import { t } from '../lib/i18n';
 
 interface Props {
   message: string | null;
@@ -64,7 +65,7 @@ export default function QuestToastBanner({ message, onDismiss, onNavigateToQuest
         <TouchableOpacity style={styles.inner} onPress={() => { onNavigateToQuests?.(highlightId); slideOut(); }} activeOpacity={0.85}>
           <Image source={require('../../assets/avatars/war_medal.png')} style={{ width: 28, height: 28 }} resizeMode="contain" />
           <View style={styles.textContainer}>
-            <Text style={styles.title}>Quest Complete!</Text>
+            <Text style={styles.title}>{t('questToast.complete')}</Text>
             <Text style={styles.message} numberOfLines={1}>{message ?? ''}</Text>
           </View>
           <Text style={styles.dismiss}>✕</Text>

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, Image, StyleSheet, Text, View } from 'react-native';
 import HeatStreakBadge from './HeatStreakBadge';
+import { t } from '../lib/i18n';
 
 interface Props {
   goldTotal: number;
@@ -47,7 +48,7 @@ export default function EarningsStrip({ goldTotal, goldDelta, animTrigger, accur
         <Text style={styles.accuracyValue}>
           {accuracy === null ? '—' : `${accuracy}%`}
         </Text>
-        <Text style={styles.label}> accuracy</Text>
+        <Text style={styles.label}> {t('miscUi.accuracy')}</Text>
       </View>
 
       {combo !== undefined && combo >= 3 ? (

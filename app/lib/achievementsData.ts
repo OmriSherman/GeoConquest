@@ -37,7 +37,8 @@ export interface Achievement {
         gauntletBestScore?: number;
         dailyFirstPlaceWins?: number;
         perfectAccuracyCount?: number;
-    }) => [number, number];
+        gameMasterCompleted?: boolean;
+      }) => [number, number];
 }
 
 // Max-tier avatar keys: avatars whose collection name contains "Tier 3"
@@ -314,11 +315,11 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
     {
         id: 'trail_blazer_50',
         title: 'Trail Blazer',
-        description: 'Answer 50 questions correctly in a single Trail Quiz run.',
+        description: 'Answer 30 questions correctly in a single Trail Quiz run.',
         icon: 'png_caravel',
         rewardGold: 3000,
         rewardTickets: 1,
-        getProgress: (stats) => [Math.min(stats.trailBestScore ?? 0, 50), 50],
+        getProgress: (stats) => [Math.min(stats.trailBestScore ?? 0, 30), 30],
     },
     {
         id: 'gauntlet_ascendant',
@@ -338,6 +339,14 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
         rewardGold: 7000,
         rewardTickets: 3,
         getProgress: (stats) => [Math.min(stats.perfectAccuracyCount ?? 0, 15), 15],
+    },
+    {
+        id: 'game_master',
+        title: 'Game Master',
+        description: 'Complete a Millionaire Quiz perfectly without using 50/50, Audience, or Swap.',
+        icon: 'png_winner',
+        rewardGold: 10000,
+        getProgress: (stats) => [stats.gameMasterCompleted ? 1 : 0, 1],
     },
     {
         id: 'daily_champion_5',

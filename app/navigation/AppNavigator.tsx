@@ -42,14 +42,17 @@ import TrailQuizScreen from '../screens/TrailQuizScreen';
 import MillionaireQuizScreen from '../screens/MillionaireQuizScreen';
 import NightmareQuizScreen from '../screens/NightmareQuizScreen';
 import GauntletScreen from '../screens/GauntletScreen';
+import BorderDrawQuizScreen from '../screens/BorderDrawQuizScreen';
 import QuizResultsScreen from '../screens/QuizResultsScreen';
 import ShopScreen from '../screens/ShopScreen';
 import GoldShopScreen from '../screens/GoldShopScreen';
 import LeaderboardScreen from '../screens/LeaderboardScreen';
 import AchievementsScreen from '../screens/AchievementsScreen';
 import PremiumScreen from '../screens/PremiumScreen';
+import MythicChestScreen from '../screens/MythicChestScreen';
 import QuestToastBanner from '../components/QuestToastBanner';
 import { useGame } from '../context/GameContext';
+import { t } from '../lib/i18n';
 
 // ─── Stack / Tab creators ─────────────────────────────────────────────────────
 
@@ -96,37 +99,37 @@ function QuizNavigator() {
       <QuizStack.Screen
         name="FlagQuiz"
         component={FlagQuizScreen}
-        options={{ title: 'Flag Quiz' }}
+        options={{ title: t('nav.flagQuiz') }}
       />
       <QuizStack.Screen
         name="ShapeQuiz"
         component={ShapeQuizScreen}
-        options={{ title: 'Shape Quiz' }}
+        options={{ title: t('nav.shapeQuiz') }}
       />
       <QuizStack.Screen
         name="BordersQuiz"
         component={BordersQuizScreen}
-        options={{ title: 'Borders Quiz' }}
+        options={{ title: t('nav.bordersQuiz') }}
       />
       <QuizStack.Screen
         name="CapitalsQuiz"
         component={CapitalsQuizScreen}
-        options={{ title: 'Capitals Quiz' }}
+        options={{ title: t('nav.capitalsQuiz') }}
       />
       <QuizStack.Screen
         name="TrailQuiz"
         component={TrailQuizScreen}
-        options={{ title: 'Trail Quiz' }}
+        options={{ title: t('nav.trailQuiz') }}
       />
       <QuizStack.Screen
         name="MillionaireQuiz"
         component={MillionaireQuizScreen}
-        options={{ title: 'Millionaire Quiz' }}
+        options={{ title: t('nav.millionaireQuiz') }}
       />
       <QuizStack.Screen
         name="NightmareQuiz"
         component={NightmareQuizScreen}
-        options={{ title: 'Nightmare Mode' }}
+        options={{ title: t('nav.nightmareMode') }}
       />
       <QuizStack.Screen
         name="Gauntlet"
@@ -134,9 +137,14 @@ function QuizNavigator() {
         options={{ headerShown: false }}
       />
       <QuizStack.Screen
+        name="BorderDrawQuiz"
+        component={BorderDrawQuizScreen}
+        options={{ title: t('nav.drawBorder') }}
+      />
+      <QuizStack.Screen
         name="QuizResults"
         component={QuizResultsScreen}
-        options={{ title: 'Results', headerLeft: () => null }}
+        options={{ title: t('nav.results'), headerLeft: () => null }}
       />
     </QuizStack.Navigator>
   );
@@ -168,7 +176,7 @@ function MainNavigator() {
         name="Home"
         component={HomeScreen}
         options={{
-          tabBarLabel: 'Home',
+          tabBarLabel: t('tabs.home'),
           tabBarIcon: ({ focused }) => <TabIcon source={require('../../assets/avatars/castle.png')} focused={focused} />,
         }}
       />
@@ -176,7 +184,7 @@ function MainNavigator() {
         name="Quizzes"
         component={QuizNavigator}
         options={{
-          tabBarLabel: 'Quizzes',
+          tabBarLabel: t('tabs.quizzes'),
           tabBarIcon: ({ focused }) => <TabIcon source={require('../../assets/avatars/open_scroll.png')} focused={focused} />,
         }}
       />
@@ -184,7 +192,7 @@ function MainNavigator() {
         name="Shop"
         component={ShopScreen}
         options={{
-          tabBarLabel: 'Shop',
+          tabBarLabel: t('tabs.shop'),
           tabBarIcon: ({ focused }) => <TabIcon source={require('../../assets/avatars/cart.png')} focused={focused} />,
         }}
       />
@@ -192,7 +200,7 @@ function MainNavigator() {
         name="Leaderboard"
         component={LeaderboardScreen}
         options={{
-          tabBarLabel: 'Leaderboard',
+          tabBarLabel: t('tabs.leaderboard'),
           tabBarIcon: ({ focused }) => <TabIcon source={require('../../assets/avatars/trophy.png')} focused={focused} />,
         }}
       />
@@ -200,7 +208,7 @@ function MainNavigator() {
         name="Achievements"
         component={AchievementsScreen}
         options={{
-          tabBarLabel: 'Quests',
+          tabBarLabel: t('tabs.quests'),
           tabBarIcon: ({ focused }) => <TabIcon source={require('../../assets/avatars/war_medal.png')} focused={focused} />,
         }}
       />
@@ -246,11 +254,11 @@ export default function AppNavigator() {
 
   async function handlePasswordReset() {
     if (!newPassword || newPassword !== confirmPassword) {
-      Alert.alert('Error', 'Passwords must match and cannot be empty.');
+      Alert.alert(t('common.error'), t('nav.passwordMismatch'));
       return;
     }
     if (newPassword.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters.');
+      Alert.alert(t('common.error'), t('nav.passwordShort'));
       return;
     }
     setResetLoading(true);
@@ -260,9 +268,9 @@ export default function AppNavigator() {
       setShowResetModal(false);
       setNewPassword('');
       setConfirmPassword('');
-      Alert.alert('Success', 'Your password has been updated!');
+      Alert.alert('✓', t('nav.passwordSuccess'));
     } catch (err: any) {
-      Alert.alert('Error', err.message ?? 'Failed to update password.');
+      Alert.alert(t('common.error'), err.message ?? t('nav.passwordFailed'));
     } finally {
       setResetLoading(false);
     }
@@ -293,6 +301,11 @@ export default function AppNavigator() {
                   component={PremiumScreen}
                   options={{ presentation: 'modal', headerShown: false }}
                 />
+                <RootStack.Screen
+                  name="MythicChest"
+                  component={MythicChestScreen}
+                  options={{ presentation: 'modal', headerShown: false }}
+                />
               </>
             )}
           </RootStack.Navigator>
@@ -319,11 +332,11 @@ export default function AppNavigator() {
       <Modal visible={showResetModal} transparent animationType="fade" onRequestClose={() => {}}>
         <KeyboardAvoidingView style={resetStyles.overlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={resetStyles.card}>
-            <Text style={resetStyles.title}>Set New Password</Text>
-            <Text style={resetStyles.message}>Enter a new password for your account.</Text>
+            <Text style={resetStyles.title}>{t('nav.setPassword')}</Text>
+            <Text style={resetStyles.message}>{t('nav.setPasswordMsg')}</Text>
             <TextInput
               style={resetStyles.input}
-              placeholder="New password"
+              placeholder={t('nav.newPassword')}
               placeholderTextColor="#555"
               value={newPassword}
               onChangeText={setNewPassword}
@@ -332,7 +345,7 @@ export default function AppNavigator() {
             />
             <TextInput
               style={resetStyles.input}
-              placeholder="Confirm new password"
+              placeholder={t('nav.confirmPassword')}
               placeholderTextColor="#555"
               value={confirmPassword}
               onChangeText={setConfirmPassword}
@@ -343,7 +356,7 @@ export default function AppNavigator() {
               onPress={handlePasswordReset}
               disabled={resetLoading}
             >
-              <Text style={resetStyles.buttonText}>{resetLoading ? 'Saving…' : 'Save Password'}</Text>
+              <Text style={resetStyles.buttonText}>{resetLoading ? t('nav.saving') : t('nav.savePassword')}</Text>
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>

@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { t } from '../lib/i18n';
 
 type Props = {
   visible: boolean;
@@ -18,11 +19,13 @@ type Props = {
 
 export default function QuitConfirmModal({
   visible,
-  title = 'Leave Quiz?',
-  message = 'Your progress will be lost.',
+  title,
+  message,
   onStay,
   onQuit,
 }: Props) {
+  const resolvedTitle = title ?? t('quizCommon.leaveQuiz');
+  const resolvedMessage = message ?? t('quizCommon.progressLost');
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onStay}>
       <View style={styles.overlay}>
@@ -32,13 +35,13 @@ export default function QuitConfirmModal({
             style={styles.avatar}
             resizeMode="contain"
           />
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.message}>{message}</Text>
+          <Text style={styles.title}>{resolvedTitle}</Text>
+          <Text style={styles.message}>{resolvedMessage}</Text>
           <TouchableOpacity style={styles.stayBtn} onPress={onStay} activeOpacity={0.85}>
-            <Text style={styles.stayBtnText}>Stay</Text>
+            <Text style={styles.stayBtnText}>{t('quizCommon.stay')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.quitBtn} onPress={onQuit} activeOpacity={0.7}>
-            <Text style={styles.quitBtnText}>Quit</Text>
+            <Text style={styles.quitBtnText}>{t('quizCommon.quit')}</Text>
           </TouchableOpacity>
         </View>
       </View>

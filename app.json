@@ -1,17 +1,17 @@
 {
   "expo": {
-    "name": "GeoConquest",
+    "name": "Geo Conquest",
     "slug": "geoconquest",
-    "version": "1.2.3",
+    "version": "1.2.5",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/app-icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "updates": {
       "enabled": false
     },
     "splash": {
-      "image": "./assets/icon.png",
+      "image": "./assets/logo-new.png",
       "resizeMode": "contain",
       "backgroundColor": "#0a0a1a"
     },
@@ -21,7 +21,9 @@
       "bundleIdentifier": "com.geoconquest.app",
       "entitlements": {
         "com.apple.developer.game-center": true,
-        "com.apple.developer.applesignin": ["Default"]
+        "com.apple.developer.applesignin": [
+          "Default"
+        ]
       },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
@@ -29,7 +31,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/app-adaptive-foreground.png",
         "backgroundColor": "#0a0a1a"
       },
       "edgeToEdgeEnabled": true,
@@ -54,7 +56,9 @@
           "iosAppId": "ca-app-pub-7734903998169254~7018551092"
         }
       ],
-      "./plugins/withAdIdPermission"
+      "./plugins/withAdIdPermission",
+      "expo-localization",
+      "expo-font"
     ],
     "extra": {
       "eas": {

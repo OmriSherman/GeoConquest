@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useAuth } from '../context/AuthContext';
+import { t } from '../lib/i18n';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { AuthStackParamList } from '../types';
 
@@ -28,19 +29,23 @@ export default function SignUpScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [appleLoading, setAppleLoading] = useState(false);
+  const [appleAvailable, setAppleAvailable] = useState(false);
 
   useEffect(() => {
     const resolved = Image.resolveAssetSource(bgSource);
     if (resolved?.uri) Image.prefetch(resolved.uri).catch(() => {});
+    if (Platform.OS === 'ios') {
+      AppleAuthentication.isAvailableAsync().then(setAppleAvailable).catch(() => {});
+    }
   }, []);
 
   async function handleSignUp() {
     if (!email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
+      Alert.alert(t('signup.error'), t('signup.fillFields'));
       return;
     }
     if (password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters');
+      Alert.alert(t('signup.error'), t('signup.passwordTooShort'));
       return;
     }
     setLoading(true);
@@ -49,7 +54,7 @@ export default function SignUpScreen({ navigation }: Props) {
       // Since email verification is disabled, onAuthStateChange will handle
       // the redirection automatically when the session is returned.
     } catch (err: any) {
-      Alert.alert('Sign Up Failed', err.message ?? 'Something went wrong');
+      Alert.alert(t('signup.error'), err.message ?? 'Something went wrong');
     } finally {
       setLoading(false);
     }
@@ -60,7 +65,7 @@ export default function SignUpScreen({ navigation }: Props) {
     try {
       await signInWithGoogle();
     } catch (err: any) {
-      Alert.alert('Google Sign In Failed', err.message ?? 'Something went wrong');
+      Alert.alert(t('signup.googleFailed'), err.message ?? 'Something went wrong');
     } finally {
       setGoogleLoading(false);
     }
@@ -72,7 +77,7 @@ export default function SignUpScreen({ navigation }: Props) {
       await signInWithApple();
     } catch (err: any) {
       if ((err as any).code !== 'ERR_REQUEST_CANCELED') {
-        Alert.alert('Apple Sign In Failed', err.message ?? 'Something went wrong');
+        Alert.alert(t('signup.appleFailed'), err.message ?? 'Something went wrong');
       }
     } finally {
       setAppleLoading(false);
@@ -93,10 +98,21 @@ export default function SignUpScreen({ navigation }: Props) {
           <View style={styles.inner}>
             <View style={styles.heroSection}>
               <Text style={styles.title}>GeoConquest</Text>
-              <Text style={styles.subtitle}>Start your conquest</Text>
+              <Text style={styles.subtitle}>{t('signup.title')}</Text>
             </View>
 
             <View style={styles.formCard}>
+              {/* Apple Sign In — iOS only, shown first as an equivalent primary option */}
+              {appleAvailable && (
+                <AppleAuthentication.AppleAuthenticationButton
+                  buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP}
+                  buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
+                  cornerRadius={12}
+                  style={{ width: '100%', height: 50 }}
+                  onPress={handleAppleSignIn}
+                />
+              )}
+
               <TouchableOpacity
                 style={[styles.googleButton, googleLoading && styles.buttonDisabled]}
                 onPress={handleGoogleSignIn}
@@ -105,30 +121,19 @@ export default function SignUpScreen({ navigation }: Props) {
               >
                 <Text style={styles.googleIcon}>G</Text>
                 <Text style={styles.googleButtonText}>
-                  {googleLoading ? 'Connecting…' : 'Continue with Google'}
+                  {googleLoading ? t('signup.connecting') : t('signup.continueWithGoogle')}
                 </Text>
               </TouchableOpacity>
 
-              {/* Apple Sign In — iOS only */}
-              {Platform.OS === 'ios' && (
-                <AppleAuthentication.AppleAuthenticationButton
-                  buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP}
-                  buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
-                  cornerRadius={12}
-                  style={{ width: '100%', height: 50, marginTop: 10 }}
-                  onPress={handleAppleSignIn}
-                />
-              )}
-
               <View style={styles.divider}>
                 <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>or</Text>
+                <Text style={styles.dividerText}>{t('signup.or')}</Text>
                 <View style={styles.dividerLine} />
               </View>
 
               <TextInput
                 style={styles.input}
-                placeholder="Email"
+                placeholder={t('signup.email')}
                 placeholderTextColor="#555"
                 value={email}
                 onChangeText={setEmail}
@@ -137,7 +142,7 @@ export default function SignUpScreen({ navigation }: Props) {
               />
               <TextInput
                 style={styles.input}
-                placeholder="Password (min 6 characters)"
+                placeholder={t('signup.passwordMin')}
                 placeholderTextColor="#555"
                 value={password}
                 onChangeText={setPassword}
@@ -149,12 +154,12 @@ export default function SignUpScreen({ navigation }: Props) {
                 onPress={handleSignUp}
                 disabled={loading}
               >
-                <Text style={styles.buttonText}>{loading ? 'Creating account…' : 'Sign Up'}</Text>
+                <Text style={styles.buttonText}>{loading ? t('signup.signingUp') : t('signup.signUp')}</Text>
               </TouchableOpacity>
             </View>
 
             <TouchableOpacity onPress={() => navigation.goBack()}>
-              <Text style={styles.link}>Already have an account? Sign In</Text>
+              <Text style={styles.link}>{t('signup.haveAccount')}</Text>
             </TouchableOpacity>
 
             <View style={styles.poweredByRow}>

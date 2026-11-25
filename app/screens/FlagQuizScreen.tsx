@@ -24,6 +24,7 @@ import HeatStreakBadge from '../components/HeatStreakBadge';
 import { useAuth } from '../context/AuthContext';
 import AvatarDisplay from '../components/AvatarDisplay';
 import QuitConfirmModal from '../components/QuitConfirmModal';
+import { t } from '../lib/i18n';
 
 const GOLD_PER_CORRECT = 10;
 const AUTO_ADVANCE_DELAY_MS = 2500;
@@ -169,7 +170,7 @@ export default function FlagQuizScreen({ navigation }: Props) {
       setScore(scoreRef.current);
       setGoldEarned(goldRef.current);
       setGoldDelta(totalEarned);
-      setAnimTrigger(t => t + 1);
+      setAnimTrigger(prev => prev + 1);
       addGold(totalEarned);
     } else {
       comboRef.current = 0;
@@ -257,7 +258,7 @@ export default function FlagQuizScreen({ navigation }: Props) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#FFD700" />
-        <Text style={styles.loadingText}>Preparing flags…</Text>
+        <Text style={styles.loadingText}>{t('flagQuiz.loading')}</Text>
       </View>
     );
   }
@@ -265,7 +266,7 @@ export default function FlagQuizScreen({ navigation }: Props) {
   if (error || questions.length === 0) {
     return (
       <View style={styles.centered}>
-        <Text style={styles.errorText}>{error ?? 'No questions available'}</Text>
+        <Text style={styles.errorText}>{error ?? t('quizCommon.noQuestions')}</Text>
       </View>
     );
   }
@@ -274,8 +275,8 @@ export default function FlagQuizScreen({ navigation }: Props) {
     return (
       <View style={styles.readyContainer}>
         <Image source={require('../../assets/avatars/flags.png')} style={{ width: 80, height: 80, marginBottom: 20 }} resizeMode="contain" />
-        <Text style={styles.readyTitle}>FLAG QUIZ</Text>
-        <Text style={styles.readySubtitle}>Identify countries by their flags.</Text>
+        <Text style={styles.readyTitle}>{t('nav.flagQuiz').toUpperCase()}</Text>
+        <Text style={styles.readySubtitle}>{t('flagQuiz.subtitle')}</Text>
         <TouchableOpacity
           style={styles.readyBtn}
           onPress={() => {
@@ -286,10 +287,10 @@ export default function FlagQuizScreen({ navigation }: Props) {
             setReady(true);
           }}
         >
-          <Text style={styles.readyBtnText}>LET'S GO</Text>
+          <Text style={styles.readyBtnText}>{t('quizCommon.letsGo')}</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.readyBackLink}>
-          <Text style={styles.readyBackLinkText}>Go Back</Text>
+          <Text style={styles.readyBackLinkText}>{t('quizCommon.goBack')}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -304,12 +305,12 @@ export default function FlagQuizScreen({ navigation }: Props) {
         {paused && (
           <View style={[StyleSheet.absoluteFill, styles.pauseOverlay]}>
             <Image source={require('../../assets/avatars/stop_it.png')} style={styles.pauseStopIt} resizeMode="contain" />
-            <Text style={styles.pauseTitle}>PAUSED</Text>
+            <Text style={styles.pauseTitle}>{t('quizCommon.paused')}</Text>
             <TouchableOpacity style={styles.resumeBtn} onPress={() => setPaused(false)}>
-              <Text style={styles.resumeBtnText}>RESUME</Text>
+              <Text style={styles.resumeBtnText}>{t('quizCommon.resume')}</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => { if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current); allowLeaveRef.current = true; navigation.goBack(); }}>
-              <Text style={styles.quitText}>Quit</Text>
+              <Text style={styles.quitText}>{t('quizCommon.quit')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -348,8 +349,8 @@ export default function FlagQuizScreen({ navigation }: Props) {
             <View style={styles.questionCenter}>
               <Text style={styles.prompt}>
                 {isReverseQuestion
-                  ? `Which flag belongs to ${question.country.name}?`
-                  : 'Which country does this flag belong to?'}
+                  ? t('flagQuiz.whichFlagOf', { country: question.country.name })
+                  : t('flagQuiz.whichCountry')}
               </Text>
 
               <View style={styles.flagContainer}>
@@ -371,7 +372,7 @@ export default function FlagQuizScreen({ navigation }: Props) {
                 {answered && (
                   <TouchableOpacity style={styles.infoBadge} onPress={openCountryInfo}>
                     <Text style={styles.infoBadgeIcon}>ℹ️</Text>
-                    <Text style={styles.infoBadgeText}>Learn</Text>
+                    <Text style={styles.infoBadgeText}>{t('quizCommon.learn')}</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -402,7 +403,7 @@ export default function FlagQuizScreen({ navigation }: Props) {
               </View>
 
               <Text style={[styles.tapHint, { opacity: answered ? 1 : 0 }]}>
-                Tap anywhere to continue →
+                {t('quizCommon.tapToContinue')}
               </Text>
             </View>
           </Animated.View>
@@ -434,26 +435,26 @@ export default function FlagQuizScreen({ navigation }: Props) {
                   {/* Facts */}
                   <View style={styles.factsGrid}>
                     <View style={styles.factItem}>
-                      <Text style={styles.factLabel}>Capital</Text>
-                      <Text style={styles.factValue}>{infoCountry.capital || 'N/A'}</Text>
+                      <Text style={styles.factLabel}>{t('infoModal.capital')}</Text>
+                      <Text style={styles.factValue}>{infoCountry.capital || t('infoModal.na')}</Text>
                     </View>
                     <View style={styles.factItem}>
-                      <Text style={styles.factLabel}>Region</Text>
+                      <Text style={styles.factLabel}>{t('infoModal.region')}</Text>
                       <Text style={styles.factValue}>{infoCountry.region}</Text>
                     </View>
                     <View style={styles.factItem}>
-                      <Text style={styles.factLabel}>Population</Text>
+                      <Text style={styles.factLabel}>{t('infoModal.population')}</Text>
                       <Text style={styles.factValue}>{infoCountry.population.toLocaleString()}</Text>
                     </View>
                     <View style={styles.factItem}>
-                      <Text style={styles.factLabel}>Area</Text>
+                      <Text style={styles.factLabel}>{t('infoModal.area')}</Text>
                       <Text style={styles.factValue}>{infoCountry.area.toLocaleString()} km²</Text>
                     </View>
                   </View>
 
                   {/* Neighbors with flags */}
                   <View style={styles.neighborsSection}>
-                    <Text style={styles.factLabel}>Neighbors</Text>
+                    <Text style={styles.factLabel}>{t('infoModal.neighbors')}</Text>
                     {infoCountry.borders.length > 0 ? (
                       <View style={styles.neighborsRow}>
                         {infoCountry.borders.map((cca3Code) => {
@@ -467,12 +468,12 @@ export default function FlagQuizScreen({ navigation }: Props) {
                         })}
                       </View>
                     ) : (
-                      <Text style={styles.factValue}>🏝️ Island nation</Text>
+                      <Text style={styles.factValue}>{t('infoModal.islandNation')}</Text>
                     )}
                   </View>
 
                   <TouchableOpacity style={styles.closeButton} onPress={closeInfoAndContinue}>
-                    <Text style={styles.closeButtonText}>Got it!</Text>
+                    <Text style={styles.closeButtonText}>{t('infoModal.gotIt')}</Text>
                   </TouchableOpacity>
                 </>
               )}

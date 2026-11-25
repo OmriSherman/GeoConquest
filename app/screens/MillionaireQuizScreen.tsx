@@ -23,6 +23,7 @@ import {
 } from '../types';
 import { fetchCountries } from '../lib/countryData';
 import { buildMillionaireQuestions, buildSingleMillionaireQuestion } from '../lib/questionDifficulty';
+import { filterQuizCountries } from '../lib/quizCountryFilters';
 import { useAuth } from '../context/AuthContext';
 import { useAlert } from '../context/AlertContext';
 import { supabase } from '../lib/supabase';
@@ -31,13 +32,12 @@ import QuitConfirmModal from '../components/QuitConfirmModal';
 import CountryShapeView from '../components/CountryShapeView';
 import { playDing, playWrong, playTick, playTextToSpeech, playMillionaireSwap } from '../lib/audio';
 import * as Speech from 'expo-speech';
-import { showRewardedAd } from '../lib/rewardedAds';
+import { t } from '../lib/i18n';
 
 const ANSWER_COLORS = ['#4FC3F7', '#F44336', '#FFD700', '#4CAF50']; // blue, red, yellow, green
 
 const AUTO_ADVANCE_DELAY_MS = 2500;
 const TIMER_SECONDS = 15;
-const SECOND_CHANCE_POPUP_DELAY_MS = 500;
 
 // Show walk-or-continue checkpoint before these 0-indexed next-question indices:
 // after answering Q5 (250), Q10 (1.5k), Q13 (4k).
@@ -153,9 +153,6 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
   const [showWalkOrContinue, setShowWalkOrContinue] = useState(false);
   const [walkOrContinuePrize, setWalkOrContinuePrize] = useState(0);
   const pendingNextIndex = useRef<number | null>(null);
-  const [showSecondChanceModal, setShowSecondChanceModal] = useState(false);
-  const [secondChanceUsed, setSecondChanceUsed] = useState(false);
-  const [secondChanceLoading, setSecondChanceLoading] = useState(false);
   const [ready, setReady] = useState(false);
   const readyRef = useRef(false);
   readyRef.current = ready;
@@ -167,7 +164,6 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
   const currentIndexRef = useRef(0);
   const questionsRef = useRef<MillionaireQuestion[]>([]);
   const autoAdvanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const secondChanceModalTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const quizStartRef = useRef<number>(0);
   const ladderScrollRef = useRef<ScrollView>(null);
   const [ladderWidth, setLadderWidth] = useState(0);
@@ -253,6 +249,7 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
       goldEarned: prize,
       quizType: 'millionaire',
       elapsedSeconds: Math.floor((Date.now() - quizStartRef.current) / 1000),
+      millionairePowerUpsUsed: fiftyFiftyUsed || audienceUsed || skipUsed,
     });
   }
 
@@ -276,7 +273,7 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
     (async () => {
       try {
         const countries = await fetchCountries();
-        const withoutAF = countries.filter(c => c.cca2 !== 'AF');
+        const withoutAF = filterQuizCountries(countries).filter(c => c.cca2 !== 'AF');
         setAllCountries(withoutAF);
         const q = buildMillionaireQuestions(withoutAF);
         setQuestions(q);
@@ -304,7 +301,6 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
 
     return () => {
       if (autoAdvanceTimer.current) clearTimeout(autoAdvanceTimer.current);
-      if (secondChanceModalTimer.current) clearTimeout(secondChanceModalTimer.current);
       stopTimer();
       Speech.stop(); // Clean up speech on unmount
     };
@@ -353,7 +349,6 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
         stopTimer();
         Speech.stop();
         if (autoAdvanceTimer.current) clearTimeout(autoAdvanceTimer.current);
-        if (secondChanceModalTimer.current) clearTimeout(secondChanceModalTimer.current);
       };
     }, [])
   );
@@ -406,8 +401,8 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
 
     showAlert({
       variant: 'unique',
-      title: 'Power-Up Locked',
-      message: 'This power-up needs to be purchased from the Upgrades shop.',
+      title: t('millionaireQuiz.powerUpLocked'),
+      message: t('millionaireQuiz.powerUpLockedBody'),
       buttons: [
         { text: 'Display in Shop', style: 'cta', onPress: () => navigation.getParent()?.navigate('Shop', { initialTab: 'upgrades' }) },
         { text: 'Got it', style: 'cancel' },
@@ -456,37 +451,6 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
     });
   }
 
-  async function handleSecondChanceAd() {
-    setSecondChanceLoading(true);
-    try {
-      const adResult = await showRewardedAd();
-      if (!adResult.rewarded) {
-        console.warn(`[Ads] Second chance failed: ${adResult.reason} · ${adResult.errorCode ?? ''} · ${adResult.errorMessage ?? ''}`);
-        setShowSecondChanceModal(false);
-        setGameOver(true);
-        setTimeout(endGameWithLoss, 1500);
-        return;
-      }
-      setSecondChanceUsed(true);
-      setShowSecondChanceModal(false);
-      setAnswered(false);
-      setGameOver(false);
-      swapCurrentQuestionAndContinue();
-    } finally {
-      setSecondChanceLoading(false);
-    }
-  }
-
-  function declineSecondChance() {
-    if (secondChanceModalTimer.current) {
-      clearTimeout(secondChanceModalTimer.current);
-      secondChanceModalTimer.current = null;
-    }
-    setShowSecondChanceModal(false);
-    setGameOver(true);
-    setTimeout(endGameWithLoss, 1500);
-  }
-
   // ── Answer handling ────────────────────────────────────────────────────────
 
   function handleAnswer(selectedIndex: number) {
@@ -522,13 +486,6 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
     } else {
       playWrong();
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      if (!secondChanceUsed) {
-        secondChanceModalTimer.current = setTimeout(() => {
-          secondChanceModalTimer.current = null;
-          setShowSecondChanceModal(true);
-        }, SECOND_CHANCE_POPUP_DELAY_MS);
-        return;
-      }
       setGameOver(true);
       setTimeout(endGameWithLoss, 2000);
     }
@@ -609,6 +566,7 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
       goldEarned: MILLIONAIRE_GOLD_LADDER[14],
       quizType: 'millionaire',
       elapsedSeconds: Math.floor((Date.now() - quizStartRef.current) / 1000),
+      millionairePowerUpsUsed: fiftyFiftyUsed || audienceUsed || skipUsed,
     });
   }
 
@@ -618,7 +576,7 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#FFD700" />
-        <Text style={styles.loadingText}>Preparing your challenge…</Text>
+        <Text style={styles.loadingText}>{t('millionaireQuiz.loadingChallenge')}</Text>
       </View>
     );
   }
@@ -626,7 +584,7 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
   if (error || questions.length === 0) {
     return (
       <View style={styles.centered}>
-        <Text style={styles.errorText}>{error ?? 'No questions available'}</Text>
+        <Text style={styles.errorText}>{error ?? t('quizCommon.noQuestions')}</Text>
       </View>
     );
   }
@@ -637,16 +595,16 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
     return (
       <View style={styles.readyContainer}>
         <Image source={require('../../assets/avatars/gold_bag.png')} style={{ width: 80, height: 80, marginBottom: 20 }} resizeMode="contain" />
-        <Text style={styles.readyTitle}>MILLIONAIRE</Text>
-        <Text style={styles.readySubtitle}>15 questions. 15 seconds each.{'\n'}Answer them all to win the jackpot.</Text>
+        <Text style={styles.readyTitle}>{t('nav.millionaireQuiz').toUpperCase()}</Text>
+        <Text style={styles.readySubtitle}>{t('millionaireQuiz.readySubtitle')}</Text>
         <TouchableOpacity
           style={styles.readyBtn}
           onPress={() => { quizStartRef.current = Date.now(); setReady(true); startTimer(); }}
         >
-          <Text style={styles.readyBtnText}>LET'S GO</Text>
+          <Text style={styles.readyBtnText}>{t('quizCommon.letsGo')}</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.readyBackLink}>
-          <Text style={styles.readyBackLinkText}>Go Back</Text>
+          <Text style={styles.readyBackLinkText}>{t('quizCommon.goBack')}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -679,6 +637,7 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
         ref={ladderScrollRef}
         horizontal
         showsHorizontalScrollIndicator={false}
+        style={styles.ladderScroll}
         contentContainerStyle={styles.ladderStrip}
         onLayout={(e) => setLadderWidth(e.nativeEvent.layout.width)}
       >
@@ -789,7 +748,7 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
                   >
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                       <Image source={require('../../assets/avatars/swap.png')} style={{ width: 14, height: 14, opacity: isSkipEnabled ? 1 : 0.4 }} resizeMode="contain" />
-                      <Text style={[styles.lifelineBtnText, !isSkipEnabled && { color: '#666' }]}>Skip</Text>
+                      <Text style={[styles.lifelineBtnText, !isSkipEnabled && { color: '#666' }]}>{t('millionaireQuiz.lifelineSkip')}</Text>
                     </View>
                   </TouchableOpacity>
                 );
@@ -801,7 +760,7 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
               >
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                   <Image source={require('../../assets/avatars/hand_shake.png')} style={{ width: 14, height: 14 }} resizeMode="contain" />
-                  <Text style={styles.lifelineBtnText}>Audience</Text>
+                  <Text style={styles.lifelineBtnText}>{t('millionaireQuiz.lifelineAudience')}</Text>
                 </View>
               </TouchableOpacity>
             </View>
@@ -842,7 +801,7 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
             </View>
 
             <Text style={[styles.tapHint, { opacity: (answered && !showWin && !showWalkOrContinue) ? 1 : 0 }]}>
-              Tap anywhere to continue →
+              {t('quizCommon.tapToContinue')}
             </Text>
           </Animated.View>
         </TouchableOpacity>
@@ -853,13 +812,11 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Image source={require('../../assets/avatars/flame.png')} style={{ width: 48, height: 48 }} resizeMode="contain" />
-            <Text style={styles.modalTitle}>You're on Fire!</Text>
-            <Text style={styles.modalBody}>
-              You're so close to the next tier. One more correct answer could change everything.
-            </Text>
+            <Text style={styles.modalTitle}>{t('millionaireQuiz.walkTitle')}</Text>
+            <Text style={styles.modalBody}>{t('millionaireQuiz.checkpointBody')}</Text>
             <View style={styles.prizeCompare}>
               <View style={styles.prizeCompareItem}>
-                <Text style={styles.prizeCompareLabel}>Now</Text>
+                <Text style={styles.prizeCompareLabel}>{t('millionaireQuiz.prizeNow')}</Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                   <Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 16, height: 16 }} resizeMode="contain" />
                   <Text style={styles.prizeCompareAmount}>{walkOrContinuePrize.toLocaleString()}</Text>
@@ -867,7 +824,7 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
               </View>
               <Text style={styles.prizeCompareArrow}>→</Text>
               <View style={styles.prizeCompareItem}>
-                <Text style={styles.prizeCompareLabel}>Next</Text>
+                <Text style={styles.prizeCompareLabel}>{t('millionaireQuiz.prizeNext')}</Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                   <Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 16, height: 16 }} resizeMode="contain" />
                   <Text style={[styles.prizeCompareAmount, { color: '#4CAF50' }]}>
@@ -879,11 +836,11 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
             <TouchableOpacity style={styles.primaryBtn} onPress={continueFromCheckpoint}>
               <Animated.View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, transform: [{ scale: breathAnim }] }}>
                 <Image source={require('../../assets/avatars/lightning.png')} style={{ width: 18, height: 18 }} resizeMode="contain" />
-                <Text style={styles.primaryBtnText}>Push Forward!</Text>
+                <Text style={styles.primaryBtnText}>{t('millionaireQuiz.pushForward')}</Text>
               </Animated.View>
             </TouchableOpacity>
             <TouchableOpacity style={styles.dimBtn} onPress={walkAwayFromCheckpoint}>
-              <Text style={styles.dimBtnText}>Take my {walkOrContinuePrize.toLocaleString()} gold</Text>
+              <Text style={styles.dimBtnText}>{t('millionaireQuiz.takeGold', { amount: walkOrContinuePrize.toLocaleString() })}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -894,34 +851,14 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Image source={require('../../assets/avatars/crown.png')} style={{ width: 48, height: 48 }} resizeMode="contain" />
-            <Text style={styles.modalTitle}>JACKPOT!</Text>
-            <Text style={styles.modalBody}>
-              You've conquered all 15 questions!
-            </Text>
+            <Text style={styles.modalTitle}>{t('millionaireQuiz.winTitle')}</Text>
+            <Text style={styles.modalBody}>{t('millionaireQuiz.conquerBody')}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Image source={require('../../assets/avatars/gold_bag.png')} style={{ width: 32, height: 32 }} resizeMode="contain" />
               <Text style={styles.modalGoldLarge}>{MILLIONAIRE_GOLD_LADDER[14].toLocaleString()}</Text>
             </View>
             <TouchableOpacity style={styles.primaryBtn} onPress={handleWinContinue}>
-              <Text style={styles.primaryBtnText}>Claim Your Gold</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal visible={showSecondChanceModal} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Image source={require('../../assets/avatars/raffle_ticket.png')} style={{ width: 44, height: 44 }} resizeMode="contain" />
-            <Text style={styles.modalTitle}>Second Chance?</Text>
-            <Text style={styles.modalBody}>
-              Watch an ad to replace this question and keep going.
-            </Text>
-            <TouchableOpacity style={styles.primaryBtn} onPress={handleSecondChanceAd} disabled={secondChanceLoading}>
-              <Text style={styles.primaryBtnText}>{secondChanceLoading ? 'Loading ad…' : 'Watch ad'}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.dimBtn} onPress={declineSecondChance} disabled={secondChanceLoading}>
-              <Text style={styles.dimBtnText}>No thanks</Text>
+              <Text style={styles.primaryBtnText}>{t('millionaireQuiz.claimGold')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1004,7 +941,9 @@ const styles = StyleSheet.create({
   elapsedTimerText: { color: '#aaa', fontSize: 13, fontWeight: '600', textAlign: 'right', paddingHorizontal: 16, paddingBottom: 4 },
 
   // Ladder strip
+  ladderScroll: { direction: 'ltr' },
   ladderStrip: {
+    direction: 'ltr',
     paddingHorizontal: 8,
     paddingVertical: 8,
     gap: 5,

@@ -1,6 +1,7 @@
 import { Country, MillionaireQuestion, MILLIONAIRE_GOLD_LADDER } from '../types';
 import { getCca3ToCca2Map } from './countryData';
 import { isShapeQuizEligibleCountry } from './quizCountryFilters';
+import { isQuizEligibleCca2 } from './countryExclusions';
 
 // ─── Difficulty Tiers ─────────────────────────────────────────────────────────
 
@@ -52,7 +53,7 @@ export function getSmartDistractors(
 ): Country[] {
   const excludeSet = new Set([correct.cca2, ...exclude.map((c) => c.cca2)]);
 
-  let pool = all.filter((c) => !excludeSet.has(c.cca2));
+  let pool = all.filter((c) => isQuizEligibleCca2(c.cca2) && !excludeSet.has(c.cca2));
 
   if (difficulty >= 4) {
     const sameRegion = pool.filter((c) => c.region === correct.region);
@@ -127,7 +128,7 @@ export function buildBorderYesQuestion(
   if (country.borders.length === 0) return null;
 
   const cca3Map = getCca3ToCca2Map();
-  const neighborCca2s = country.borders.map((b) => cca3Map[b]).filter(Boolean);
+  const neighborCca2s = country.borders.map((b) => cca3Map[b]).filter((cca2): cca2 is string => !!cca2 && isQuizEligibleCca2(cca2));
   if (neighborCca2s.length === 0) return null;
 
   const randomNeighborCca2 = neighborCca2s[Math.floor(Math.random() * neighborCca2s.length)];
@@ -164,7 +165,7 @@ export function buildBorderNoQuestion(
   if (country.borders.length === 0) return null;
 
   const cca3Map = getCca3ToCca2Map();
-  const neighborCca2s = country.borders.map((b) => cca3Map[b]).filter(Boolean);
+  const neighborCca2s = country.borders.map((b) => cca3Map[b]).filter((cca2): cca2 is string => !!cca2 && isQuizEligibleCca2(cca2));
   if (neighborCca2s.length < 3) return null;
 
   const validNeighbors = all.filter((c) => neighborCca2s.includes(c.cca2));
@@ -385,6 +386,7 @@ export function buildSingleMillionaireQuestion(
   usedCca2: Set<string>,
   buckets: Record<number, Country[]>
 ): MillionaireQuestion {
+  all = all.filter((c) => isQuizEligibleCca2(c.cca2));
   const plan = SLOT_PLANS[index];
   const goldReward = MILLIONAIRE_GOLD_LADDER[index];
   const typeChoices = [...plan.types].sort(() => Math.random() - 0.5);
@@ -420,14 +422,6 @@ export function buildSingleMillionaireQuestion(
       }
     }
 
-    if (type === 'capital_reverse') {
-      question = buildCapitalReverseQuestion(subject, all, diff, goldReward);
-      if (question) {
-        usedCca2.add(subject.cca2);
-        break;
-      }
-    }
-
     if (type === 'border_yes') {
       question = buildBorderYesQuestion(subject, all, diff, goldReward);
       if (question) {
@@ -446,14 +440,14 @@ export function buildSingleMillionaireQuestion(
   }
 
   if (!question) {
-    const fallbackPool = all.filter((c) => !usedCca2.has(c.cca2));
+    const fallbackPool = all.filter((c) => isQuizEligibleCca2(c.cca2) && !usedCca2.has(c.cca2));
     const fallback = fallbackPool[Math.floor(Math.random() * fallbackPool.length)] ?? all[index % all.length];
     question = buildFlagQuestion(fallback, all, plan.minDiff, goldReward);
     usedCca2.add(fallback.cca2);
   }
 
-  // 30% chance of flipping to a reverse question from Q3 onwards
-  if (index >= 2 && Math.random() < 0.30) {
+  // 50% chance of flipping to a reverse question from Q3 onwards
+  if (index >= 2 && Math.random() < 0.50) {
     const reversed = buildAnyReverseQuestion(
       question.subjectCountry, all, question.difficulty, goldReward,
     );
@@ -464,6 +458,7 @@ export function buildSingleMillionaireQuestion(
 }
 
 export function buildMillionaireQuestions(all: Country[]): MillionaireQuestion[] {
+  all = all.filter((c) => isQuizEligibleCca2(c.cca2));
   // Pre-compute difficulties
   const withDiff = all.map((c) => ({ country: c, diff: getCountryDifficulty(c) }));
 
@@ -493,7 +488,7 @@ function getCandidatesFromBuckets(
     const candidates: Country[] = [];
     for (let d = Math.max(1, targetDiff - radius); d <= Math.min(10, targetDiff + radius); d++) {
       for (const c of buckets[d]) {
-        if (!used.has(c.cca2)) candidates.push(c);
+        if (isQuizEligibleCca2(c.cca2) && !used.has(c.cca2)) candidates.push(c);
       }
     }
     if (candidates.length >= count) {
@@ -508,6 +503,7 @@ function getCandidatesFromBuckets(
  * 10 questions at difficulty 10, no repeats, randomly choosing types.
  */
 export function buildNightmareQuestions(all: Country[]): MillionaireQuestion[] {
+  all = all.filter((c) => isQuizEligibleCca2(c.cca2));
   const withDiff = all.map((c) => ({ country: c, diff: getCountryDifficulty(c) }));
 
   const buckets: Record<number, Country[]> = {};

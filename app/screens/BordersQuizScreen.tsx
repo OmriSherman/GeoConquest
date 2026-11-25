@@ -24,6 +24,8 @@ import { playDingStreak, playWrong } from '../lib/audio';
 import HeatStreakBadge from '../components/HeatStreakBadge';
 import ConfettiCannon from 'react-native-confetti-cannon';
 import QuitConfirmModal from '../components/QuitConfirmModal';
+import { t } from '../lib/i18n';
+import { isQuizEligibleCca2 } from '../lib/countryExclusions';
 
 const GOLD_PER_CORRECT = 20;
 const AUTO_ADVANCE_DELAY_MS = 2500;
@@ -165,7 +167,7 @@ export default function BordersQuizScreen({ navigation }: Props) {
       setScore(scoreRef.current);
       setGoldEarned(goldRef.current);
       setGoldDelta(totalEarned);
-      setAnimTrigger(t => t + 1);
+      setAnimTrigger(prev => prev + 1);
       addGold(totalEarned);
     } else {
       comboRef.current = 0;
@@ -224,7 +226,7 @@ export default function BordersQuizScreen({ navigation }: Props) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#FFD700" />
-        <Text style={styles.loadingText}>Loading shapes…</Text>
+        <Text style={styles.loadingText}>{t('bordersQuiz.loading')}</Text>
       </View>
     );
   }
@@ -234,22 +236,22 @@ export default function BordersQuizScreen({ navigation }: Props) {
       return (
         <View style={styles.centered}>
           <Text style={{ fontSize: 40, marginBottom: 12 }}>📡</Text>
-          <Text style={[styles.errorText, { color: '#FFD700', fontWeight: 'bold' }]}>You're Offline</Text>
+          <Text style={[styles.errorText, { color: '#FFD700', fontWeight: 'bold' }]}>{t('quizCommon.offline.title')}</Text>
           <Text style={[styles.errorText, { color: '#aaa', fontSize: 14, marginTop: 8 }]}>
-            Upgrade to Conqueror's Pass to play all quizzes without an internet connection.
+            {t('quizCommon.offline.body')}
           </Text>
           <TouchableOpacity
             onPress={() => navigation.getParent()?.navigate('Premium')}
             style={{ marginTop: 20, backgroundColor: '#7B2FBE', paddingHorizontal: 28, paddingVertical: 12, borderRadius: 12 }}
           >
-            <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>Upgrade</Text>
+            <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>{t('quizCommon.offline.upgrade')}</Text>
           </TouchableOpacity>
         </View>
       );
     }
     return (
       <View style={styles.centered}>
-        <Text style={styles.errorText}>{error ?? 'No questions available'}</Text>
+        <Text style={styles.errorText}>{error ?? t('quizCommon.noQuestions')}</Text>
       </View>
     );
   }
@@ -258,8 +260,8 @@ export default function BordersQuizScreen({ navigation }: Props) {
     return (
       <View style={styles.readyContainer}>
         <Image source={require('../../assets/avatars/border.png')} style={{ width: 80, height: 80, marginBottom: 20 }} resizeMode="contain" />
-        <Text style={styles.readyTitle}>BORDERS QUIZ</Text>
-        <Text style={styles.readySubtitle}>Find the country that doesn't border the target.</Text>
+        <Text style={styles.readyTitle}>{t('nav.bordersQuiz').toUpperCase()}</Text>
+        <Text style={styles.readySubtitle}>{t('bordersQuiz.subtitle')}</Text>
         <TouchableOpacity
           style={styles.readyBtn}
           onPress={() => {
@@ -270,10 +272,10 @@ export default function BordersQuizScreen({ navigation }: Props) {
             setReady(true);
           }}
         >
-          <Text style={styles.readyBtnText}>LET'S GO</Text>
+          <Text style={styles.readyBtnText}>{t('quizCommon.letsGo')}</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.readyBackLink}>
-          <Text style={styles.readyBackLinkText}>Go Back</Text>
+          <Text style={styles.readyBackLinkText}>{t('quizCommon.goBack')}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -282,7 +284,7 @@ export default function BordersQuizScreen({ navigation }: Props) {
   const question = questions[currentIndex];
   // Calculate all neighbors for the map
   const cca3Map = getCca3ToCca2Map();
-  const allActualNeighbors = question.country.borders.map(b => cca3Map[b]).filter(Boolean);
+  const allActualNeighbors = question.country.borders.map(b => cca3Map[b]).filter((cca2): cca2 is string => !!cca2 && isQuizEligibleCca2(cca2));
 
   return (
     <TouchableWithoutFeedback onPress={skipToNext}>
@@ -290,12 +292,12 @@ export default function BordersQuizScreen({ navigation }: Props) {
         {paused && (
           <View style={[StyleSheet.absoluteFill, styles.pauseOverlay]}>
             <Image source={require('../../assets/avatars/stop_it.png')} style={styles.pauseStopIt} resizeMode="contain" />
-            <Text style={styles.pauseTitle}>PAUSED</Text>
+            <Text style={styles.pauseTitle}>{t('quizCommon.paused')}</Text>
             <TouchableOpacity style={styles.resumeBtn} onPress={() => setPaused(false)}>
-              <Text style={styles.resumeBtnText}>RESUME</Text>
+              <Text style={styles.resumeBtnText}>{t('quizCommon.resume')}</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => { if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current); allowLeaveRef.current = true; navigation.goBack(); }}>
-              <Text style={styles.quitText}>Quit</Text>
+              <Text style={styles.quitText}>{t('quizCommon.quit')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -329,7 +331,7 @@ export default function BordersQuizScreen({ navigation }: Props) {
 
           <Animated.View style={[styles.quizBody, { opacity: fadeAnim }]}>
             <View style={styles.questionCenter}>
-              <Text style={styles.prompt}>Which country doesn't border {question.country.name}?</Text>
+              <Text style={styles.prompt}>{t('bordersQuiz.doesNotBorder', { country: question.country.name })}</Text>
 
               <View style={styles.shapeContainer}>
                 <BordersMapView
@@ -354,7 +356,7 @@ export default function BordersQuizScreen({ navigation }: Props) {
               </View>
 
               <Text style={[styles.tapHint, { opacity: answered ? 1 : 0 }]}>
-                Tap anywhere to continue →
+                {t('quizCommon.tapToContinue')}
               </Text>
 
               {showConfetti && (

@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import {
   Dimensions,
   Image,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,109 +11,61 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useGame } from '../context/GameContext';
+import { t } from '../lib/i18n';
 import { useAuth } from '../context/AuthContext';
 import { useAlert } from '../context/AlertContext';
+import { ENTITLEMENT_ID, Purchases, restorePurchases } from '../lib/revenueCat';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
-// ─── IAP Configuration ────────────────────────────────────────────────────────
+// ─── Countdown timer ──────────────────────────────────────────────────────────
 
-const SUBSCRIPTION_IDS = Platform.select({
-  ios: ['membership_lifetime', 'geoconquest_conqueror_monthly'],
-  android: ['membership_lifetime', 'geoconquest_conqueror_monthly'],
-  default: [],
-})!;
-
-let IAP: any = null;
-let iapAvailable = false;
-
-async function initIAP(): Promise<boolean> {
-  try {
-    IAP = require('react-native-iap');
-    await IAP.initConnection();
-    if (Platform.OS === 'android') {
-      try {
-        await IAP.flushFailedPurchasesCachedAsPendingAndroid?.();
-      } catch {}
-    }
-    iapAvailable = true;
-    return true;
-  } catch (err) {
-    iapAvailable = false;
-    return false;
-  }
-}
-
-async function requestSubscription(sku: string): Promise<boolean> {
-  if (!iapAvailable || !IAP) return false;
-  try {
-    if (sku === 'membership_lifetime') {
-      await IAP.requestPurchase({
-        type: 'in-app',
-        request: {
-          apple: { sku },
-          google: { skus: [sku] },
-        },
-      });
-      return true;
-    }
-
-    let subscriptionOffers: Array<{ sku: string; offerToken: string }> | undefined;
-
-    if (Platform.OS === 'android') {
-      const subs = await IAP.fetchProducts({ skus: [sku], type: 'subs' });
-      const sub = subs?.find((p: any) => p?.id === sku) ?? subs?.[0];
-      const offerToken =
-        (sub as any)?.subscriptionOfferDetailsAndroid?.[0]?.offerToken;
-
-      if (!offerToken) {
-        throw new Error('Missing subscription offer token. Ensure your base plan/offer is active in Play Console, then try again.');
-      }
-      subscriptionOffers = [{ sku, offerToken }];
-    }
-
-    await IAP.requestPurchase({
-      type: 'subs',
-      request: {
-        apple: { sku },
-        google: { skus: [sku], subscriptionOffers },
-      },
-    });
-    return true;
-  } catch (err: any) {
-    if (err?.code === 'E_USER_CANCELLED') return false;
-    throw err;
-  }
+function useCountdown(totalSeconds: number) {
+  const [remaining, setRemaining] = useState(totalSeconds);
+  useEffect(() => {
+    const id = setInterval(() => setRemaining(s => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const h = Math.floor(remaining / 3600);
+  const m = Math.floor((remaining % 3600) / 60);
+  const s = remaining % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
 const FEATURE_ICON_IMAGES: Record<string, any> = {
   gold_coin: require('../../assets/avatars/gold_coin.png'),
-  ancient_map: require('../../assets/avatars/ancient_map.png'),
   '⚡': require('../../assets/avatars/lightning.png'),
   '👑': require('../../assets/avatars/crown.png'),
   '🏆': require('../../assets/avatars/trophy.png'),
+  mythic: require('../../assets/avatars/mythic_closed.png'),
 };
 
-const FEATURES = [
-  { icon: 'gold_coin', title: 'Daily Triple Rewards', desc: 'Earn 3× gold and 3× tickets from daily login rewards.' },
-  { icon: 'ancient_map', title: 'Unlimited Maps', desc: 'Maps are never required. Play any quiz, any time, without limits.' },
-  { icon: '🎭', title: 'Unique Avatars', desc: 'Exclusive Conqueror avatars not available anywhere else.' },
-  { icon: '⚡', title: 'Unique Quests', desc: 'Access to exclusive quest content and rewards only for Conquerors.' },
-  { icon: '👑', title: 'Conqueror Badge', desc: 'Exclusive crown badge displayed on the global leaderboard.' },
-  { icon: '🏆', title: 'Big Game Bonus', desc: 'Earn 2× gold during special in-game events and competitions.' },
-];
+function getFeatures() {
+  return [
+    { icon: 'gold_coin', title: t('premium.feature1Title'), desc: t('premium.feature1Desc') },
+    { icon: '🏆', title: t('premium.feature2Title'), desc: t('premium.feature2Desc') },
+    { icon: '🎭', title: t('premium.feature4Title'), desc: t('premium.feature4Desc') },
+    { icon: '⚡', title: t('premium.feature5Title'), desc: t('premium.feature5Desc') },
+    { icon: '👑', title: t('premium.feature6Title'), desc: t('premium.feature6Desc') },
+    { icon: 'mythic', title: t('premium.chestBenefitsTitle'), desc: t('premium.chestBenefitsDesc') },
+  ];
+}
 
-const COMPARE_ROWS: Array<{ label: string; free: string | boolean; pro: string | boolean }> = [
-  { label: 'Daily Login Gold Multiplier', free: '1×', pro: '3×' },
-  { label: 'Daily Login Ticket Multiplier', free: '1×', pro: '3×' },
-  { label: 'Leaderboard Badge', free: false, pro: true },
-  { label: 'Unique Avatars', free: false, pro: true },
-  { label: 'Unique Quests', free: false, pro: true },
-  { label: 'Early Feature Access', free: false, pro: true },
-  { label: 'Map Requirement', free: '3 per day', pro: 'Never' },
-];
+function getCompareRows(): Array<{ label: string; free: string | boolean; pro: string | boolean }> {
+  return [
+    { label: t('premium.compare1'), free: '1×', pro: '3×' },
+    { label: t('premium.dailyChestLevelUp'), free: '4 days', pro: '2 days' },
+    { label: t('premium.compare2'), free: '1×', pro: '3×' },
+    { label: t('premium.compare3'), free: false, pro: true },
+    { label: t('premium.compare4'), free: false, pro: true },
+    { label: t('premium.compare5'), free: false, pro: true },
+    { label: t('premium.compare6'), free: '1×', pro: '2×' },
+    { label: t('premium.compare7'), free: false, pro: true },
+    { label: t('premium.compare8'), free: t('premium.flagOnly'), pro: t('premium.allQuizzes') },
+  ];
+}
 
 const TESTIMONIALS = [
   {
@@ -123,7 +74,7 @@ const TESTIMONIALS = [
     stars: 5,
   },
   {
-    text: 'The double tickets stack up fast. I now own 80+ countries and I\'m not stopping.',
+    text: "The double tickets stack up fast. I now own 80+ countries and I'm not stopping.",
     name: 'MapMaster_Pro',
     stars: 5,
   },
@@ -134,24 +85,14 @@ const TESTIMONIALS = [
   },
 ];
 
-const FAQ_ITEMS = [
-  {
-    q: 'How does the Lifetime plan work?',
-    a: 'It\'s a one-time payment of $39.99 — no subscription, no renewals. You get permanent Conqueror access plus 100,000 gold and 30 tickets credited instantly.',
-  },
-  {
-    q: 'Can I cancel my Monthly plan?',
-    a: 'Yes. Cancel with one tap from your App Store / Google Play subscription settings at any time. You keep Conqueror access until the end of your billing period.',
-  },
-  {
-    q: 'Do I keep my items if I cancel?',
-    a: 'Yes! Every country, avatar, and flag you\'ve purchased remains yours permanently, regardless of subscription status.',
-  },
-  {
-    q: 'What payment methods are accepted?',
-    a: 'All payments are processed securely via the App Store or Google Play Billing — no direct card details are ever stored by us.',
-  },
-];
+function getFaqItems() {
+  return [
+    { q: t('premium.faq1q'), a: t('premium.faq1a') },
+    { q: t('premium.faq2q'), a: t('premium.faq2a') },
+    { q: t('premium.faq3q'), a: t('premium.faq3a') },
+    { q: t('premium.faq4q'), a: t('premium.faq4a') },
+  ];
+}
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
@@ -160,119 +101,43 @@ export default function PremiumScreen({ navigation }: { navigation?: any }) {
   const { profile, purchaseConqueror } = useAuth();
   const { showAlert } = useAlert();
   const insets = useSafeAreaInsets();
-  const [plan, setPlan] = useState<'unlimited' | 'monthly'>('monthly');
+  const countdown = useCountdown(3 * 3600 + 47 * 60 + 22);
+
+  const [plan, setPlan] = useState<'unlimited' | 'monthly'>('unlimited');
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [purchasing, setPurchasing] = useState(false);
-  const [iapReady, setIapReady] = useState(false);
 
-  // Initialize IAP and listen for purchase updates
+  // RevenueCat packages keyed by plan
+  const [rcPackages, setRcPackages] = useState<{ unlimited: any | null; monthly: any | null }>({
+    unlimited: null,
+    monthly: null,
+  });
+
   useEffect(() => {
-    let purchaseListener: any;
-    let purchaseErrorListener: any;
-
     (async () => {
-      const ready = await initIAP();
-      setIapReady(ready);
-
-      if (ready && IAP) {
-        // Listen for completed subscriptions
-        purchaseListener = IAP.purchaseUpdatedListener(async (purchase: any) => {
-          // console.log('[IAP] Subscription received:', purchase.productId);
-
-          // Determine plan from product ID
-          const purchasedPlan = purchase.productId.includes('monthly') ? 'monthly' : 'unlimited';
-
-          try {
-            // Activate conqueror on backend
-            await purchaseConqueror(purchasedPlan);
-
-            // Acknowledge the purchase
-            try {
-              await IAP.finishTransaction({ purchase, isConsumable: false });
-            } catch (ackErr) {
-              console.warn('[IAP] Acknowledge error:', ackErr);
-            }
-
-            showAlert({
-              variant: 'premium',
-              title: 'Welcome Conqueror',
-              titleNode: (
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                  <Image
-                    source={require('../../assets/avatars/star2.png')}
-                    style={{ width: 20, height: 20 }}
-                    resizeMode="contain"
-                  />
-                  <Text style={{ color: '#9B59B6', fontSize: 20, fontWeight: 'bold', textAlign: 'center' }}>
-                    Welcome Conqueror
-                  </Text>
-                  <Image
-                    source={require('../../assets/avatars/star2.png')}
-                    style={{ width: 20, height: 20 }}
-                    resizeMode="contain"
-                  />
-                </View>
-              ),
-              contentNode:
-                purchasedPlan === 'unlimited' ? (
-                  <View style={{ gap: 10 }}>
-                    <Text style={{ color: '#ddd', fontSize: 15, textAlign: 'center', lineHeight: 22 }}>
-                      You are now a permanent conqueror - the world is at your feet! Also you got:
-                    </Text>
-
-                    <View style={{ gap: 8, alignSelf: 'center' }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        <Text style={{ color: '#ddd', fontSize: 16, fontWeight: '600' }}>- 100,000</Text>
-                        <Image
-                          source={require('../../assets/avatars/gold_coin.png')}
-                          style={{ width: 18, height: 18 }}
-                          resizeMode="contain"
-                        />
-                      </View>
-
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        <Text style={{ color: '#ddd', fontSize: 16, fontWeight: '600' }}>- 30</Text>
-                        <Image
-                          source={require('../../assets/avatars/raffle_ticket.png')}
-                          style={{ width: 18, height: 18 }}
-                          resizeMode="contain"
-                        />
-                      </View>
-                    </View>
-                  </View>
-                ) : (
-                  <View>
-                    <Text style={{ color: '#ddd', fontSize: 15, textAlign: 'center', lineHeight: 22 }}>
-                      Your monthly Conqueror subscription is active!
-                    </Text>
-                  </View>
-                ),
-              buttons: [{ text: 'Awesome!', style: 'cta', onPress: () => navigation?.goBack?.() }],
-            });
-          } catch (err: any) {
-            showAlert({ title: 'Error', message: err.message ?? 'Failed to activate Conqueror status' });
-          } finally {
-            setPurchasing(false);
-          }
-        });
-
-        purchaseErrorListener = IAP.purchaseErrorListener((err: any) => {
-          if (err?.code !== 'E_USER_CANCELLED') {
-            showAlert({ title: 'Purchase Failed', message: err?.message ?? 'Please try again.' });
-          }
-          setPurchasing(false);
-        });
+      try {
+        const offerings = await Purchases.getOfferings();
+        const pkgs = offerings.current?.availablePackages ?? [];
+        const lifetime = pkgs.find((p: any) => p.product?.identifier?.includes('lifetime'));
+        const monthly = pkgs.find((p: any) =>
+          p.product?.identifier?.includes('monthly') || p.packageType === 'MONTHLY'
+        );
+        setRcPackages({ unlimited: lifetime ?? null, monthly: monthly ?? null });
+      } catch (err) {
+        console.warn('[RevenueCat] Failed to fetch offerings:', err);
       }
     })();
+  }, []);
 
-    return () => {
-      purchaseListener?.remove?.();
-      purchaseErrorListener?.remove?.();
-      if (iapAvailable && IAP) {
-        IAP.endConnection?.();
-      }
-    };
-  }, [purchaseConqueror, navigation, showAlert]);
+  function planFromProductId(productId: string): 'unlimited' | 'yearly' | 'monthly' {
+    if (productId.includes('lifetime')) return 'unlimited';
+    if (productId.includes('year') || productId.includes('annual')) return 'yearly';
+    return 'monthly';
+  }
+
+  // Live prices from RevenueCat, fallback to display strings
+  const lifetimePrice = rcPackages.unlimited?.product?.priceString ?? '$39.99';
+  const monthlyPrice = rcPackages.monthly?.product?.priceString ?? '$4.99';
 
   const countriesOwned = ownedCountries.length;
   const hookStat =
@@ -285,94 +150,97 @@ export default function PremiumScreen({ navigation }: { navigation?: any }) {
   async function handlePurchase() {
     if (purchasing || profile?.is_conquerer) return;
 
+    const pkg = plan === 'unlimited' ? rcPackages.unlimited : rcPackages.monthly;
+    if (!pkg) {
+      showAlert({
+        title: t('premium.plansLoading'),
+        message: t('premium.plansLoadingBody'),
+      });
+      return;
+    }
+
     setPurchasing(true);
     try {
-      if (!iapReady) {
-        // IAP not available — show development message
-        showAlert({
-          title: 'In-App Purchases',
-          message:
-            'In-app subscriptions are only available in production builds.\n\n' +
-            'To test:\n' +
-            '1. Build with EAS: npx eas build\n' +
-            '2. Configure subscriptions in App Store Connect / Google Play Console\n\n' +
-            `Plan: ${plan === 'unlimited' ? 'Lifetime' : 'Monthly'}\n` +
-            `Price: ${plan === 'unlimited' ? '$39.99 once' : '$1.99 first month, then $3.99/mo'}`,
-          messageAlign: 'left',
-          buttons: [{ text: 'OK', onPress: () => setPurchasing(false) }],
-        });
+      const { customerInfo } = await Purchases.purchasePackage(pkg);
+      const entitlement = customerInfo?.entitlements?.active?.[ENTITLEMENT_ID];
+      if (!entitlement) {
+        showAlert({ title: t('premium.purchaseIssue'), message: t('premium.purchaseIssueBody') });
+        setPurchasing(false);
         return;
       }
 
-      const productId = plan === 'unlimited'
-        ? 'membership_lifetime'
-        : 'geoconquest_conqueror_monthly';
+      const purchasedPlan = planFromProductId(entitlement.productIdentifier ?? '');
+      await purchaseConqueror(purchasedPlan);
 
       showAlert({
         variant: 'premium',
-        icon: (
-          <Image
-            source={require('../../assets/avatars/conqueror.png')}
-            style={{ width: 92, height: 92 }}
-            resizeMode="contain"
-          />
-        ),
-        title: 'Confirm Purchase',
-        contentNode: (
-          <View style={styles.purchaseSummary}>
-            <Text style={styles.purchasePlanName}>
-              {plan === 'unlimited' ? 'Lifetime Conqueror' : 'Monthly Conqueror'}
-            </Text>
-            <Text style={styles.purchasePlanSubtitle}>
-              {plan === 'unlimited' ? 'Permanent access, no renewals' : 'Renews monthly through the store'}
-            </Text>
-            <View style={styles.purchaseDivider} />
-            <View style={styles.purchaseSummaryRow}>
-              <Text style={styles.purchaseSummaryLabel}>Price</Text>
-              <Text style={styles.purchaseSummaryValue}>
-                {plan === 'unlimited' ? '$39.99 once' : '$1.99 first month'}
-              </Text>
-            </View>
-            {plan === 'unlimited' && (
-              <View style={styles.purchaseSummaryRow}>
-                <Text style={styles.purchaseSummaryLabel}>Bonus</Text>
-                <Text style={styles.purchaseSummaryValue}>100K Gold + 30 Tickets</Text>
-              </View>
-            )}
-            <Text style={styles.purchaseStoreNote}>Payment is handled securely by Apple/Google.</Text>
+        title: t('premium.welcomeTitle'),
+        titleNode: (
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            <Image source={require('../../assets/avatars/star2.png')} style={{ width: 20, height: 20 }} resizeMode="contain" />
+            <Text style={{ color: '#9B59B6', fontSize: 20, fontWeight: 'bold', textAlign: 'center' }}>{t('premium.welcomeTitle')}</Text>
+            <Image source={require('../../assets/avatars/star2.png')} style={{ width: 20, height: 20 }} resizeMode="contain" />
           </View>
         ),
-        buttons: [
-          { text: 'Cancel', style: 'cancel', onPress: () => setPurchasing(false) },
-          {
-            text: 'Buy',
-            style: 'cta',
-            onPress: async () => {
-              try {
-                const started = await requestSubscription(productId);
-                if (!started) setPurchasing(false);
-                // Purchase listener will handle activation
-              } catch (err: any) {
-                showAlert({ title: 'Purchase Failed', message: err.message ?? 'Please try again.' });
-                setPurchasing(false);
-              }
-            },
-          },
-        ],
+        contentNode: purchasedPlan === 'unlimited' ? (
+          <View style={{ gap: 10 }}>
+            <Text style={{ color: '#ddd', fontSize: 15, textAlign: 'center', lineHeight: 22 }}>
+              {t('premium.permanentConquerorBody')}
+            </Text>
+            <View style={{ gap: 8, alignSelf: 'center' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text style={{ color: '#ddd', fontSize: 16, fontWeight: '600' }}>- 10</Text>
+                <Image source={require('../../assets/avatars/raffle_ticket.png')} style={{ width: 18, height: 18 }} resizeMode="contain" />
+              </View>
+              <Text style={{ color: '#ddd', fontSize: 16, fontWeight: '600' }}>- 3 Mythic Chests</Text>
+            </View>
+          </View>
+        ) : (
+          <Text style={{ color: '#ddd', fontSize: 15, textAlign: 'center', lineHeight: 22 }}>
+            {t('premium.monthlyActiveBody')}
+          </Text>
+        ),
+        buttons: [{ text: t('common.ok'), style: 'cta', onPress: () => navigation?.goBack?.() }],
       });
     } catch (err: any) {
-      showAlert({ title: 'Error', message: err.message ?? 'Something went wrong.' });
+      if (!err?.userCancelled && err?.code !== 'E_USER_CANCELLED') {
+        showAlert({ title: t('shop.purchaseFailed'), message: err?.message ?? t('common.retry') });
+      }
+    } finally {
+      setPurchasing(false);
+    }
+  }
+
+  async function handleRestore() {
+    setPurchasing(true);
+    try {
+      const customerInfo = await restorePurchases();
+      const isActive = !!customerInfo?.entitlements?.active?.[ENTITLEMENT_ID];
+      if (isActive) {
+        const entitlement = customerInfo.entitlements.active[ENTITLEMENT_ID];
+        const restoredPlan = planFromProductId(entitlement.productIdentifier ?? '');
+        await purchaseConqueror(restoredPlan);
+        showAlert({
+          title: t('premium.restoredTitle'),
+          message: t('premium.restoredBody'),
+          buttons: [{ text: t('premium.ok'), style: 'cta', onPress: () => navigation?.goBack?.() }],
+        });
+      } else {
+        showAlert({ title: t('premium.nothingTitle'), message: t('premium.nothingBody') });
+      }
+    } catch (err: any) {
+      showAlert({ title: t('premium.failedTitle'), message: err?.message ?? t('premium.failedBody') });
+    } finally {
       setPurchasing(false);
     }
   }
 
   return (
     <View style={styles.root}>
-      {/* ── Intro offer banner ─────────────────────────────────────────────── */}
+      {/* ── Urgency banner ─────────────────────────────────────────────────── */}
       <View style={[styles.urgencyBar, { paddingTop: insets.top + 6 }]}>
-        <Text style={styles.urgencyText}>Monthly plan — first month just </Text>
-        <Text style={styles.urgencyTimer}>$1.99</Text>
-        <Text style={styles.urgencyText}> · cancel anytime</Text>
+        <Text style={styles.urgencyText}>{t('premium.urgencyBanner')}</Text>
+        <Text style={styles.urgencyTimer}>{countdown}</Text>
       </View>
 
       <ScrollView
@@ -394,15 +262,22 @@ export default function PremiumScreen({ navigation }: { navigation?: any }) {
             style={styles.heroConqueror}
             resizeMode="contain"
           />
-          <Text style={styles.heroTitle}>Become a{'\n'}World Conqueror</Text>
-          <Text style={styles.heroSub}>
-            Master geography. Dominate the leaderboard.{'\n'}Conquer the world without limits.
-          </Text>
+          <Text style={styles.heroTitle}>{t('premium.heroTitle')}</Text>
+          <Text style={styles.heroSub}>{t('premium.heroSub')}</Text>
           <View style={styles.joinPill}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <Image source={require('../../assets/avatars/globe.png')} style={{ width: 16, height: 16 }} resizeMode="contain" />
-              <Text style={styles.joinText}>Join Conquerors Worldwide</Text>
+              <Text style={styles.joinText}>{t('premium.joinExplorers')}</Text>
             </View>
+          </View>
+          <View style={styles.heroOffer}>
+            <Image source={require('../../assets/avatars/mythic_closed.png')} style={styles.heroOfferChest} resizeMode="contain" />
+            <View style={styles.heroOfferCopy}>
+              <Text style={styles.heroOfferKicker}>{plan === 'unlimited' ? 'THE COMPLETE CONQUEROR PATH' : 'KEEP YOUR MOMENTUM'}</Text>
+              <Text style={styles.heroOfferTitle}>{plan === 'unlimited' ? 'Own the advantage for life' : 'Power up every month'}</Text>
+              <Text style={styles.heroOfferSub}>{plan === 'unlimited' ? '10 tickets + 3 Mythic Chests included.' : '1 Mythic Chest every month, plus every core boost.'}</Text>
+            </View>
+            <Ionicons name="sparkles" size={18} color="#f6d365" />
           </View>
         </View>
 
@@ -411,16 +286,16 @@ export default function PremiumScreen({ navigation }: { navigation?: any }) {
           <Text style={styles.hookText}>
             {hookStat}{' '}
             <Text style={styles.hookHighlight}>
-              Conqueror-tier explorers own 3× more territory
+              {t('premium.hookHighlight')}
             </Text>
-            {' '}and climb the leaderboard 5× faster than free players.
+            {' '}{t('premium.hookSuffix')}
           </Text>
         </View>
 
         {/* ── Features ───────────────────────────────────────────────────── */}
-        <Text style={styles.sectionTitle}>Everything in Conqueror</Text>
+        <Text style={styles.sectionTitle}>{t('premium.sectionEverything')}</Text>
         <View style={styles.featureGrid}>
-          {FEATURES.map((f, i) => (
+          {getFeatures().map((f, i) => (
             <View key={i} style={styles.featureCard}>
               {FEATURE_ICON_IMAGES[f.icon]
                 ? <Image source={FEATURE_ICON_IMAGES[f.icon]} style={{ width: 26, height: 26, marginBottom: 8 }} resizeMode="contain" />
@@ -433,14 +308,14 @@ export default function PremiumScreen({ navigation }: { navigation?: any }) {
         </View>
 
         {/* ── Comparison ─────────────────────────────────────────────────── */}
-        <Text style={styles.sectionTitle}>Free vs Conqueror</Text>
+        <Text style={styles.sectionTitle}>{t('premium.sectionFreeVsPro')}</Text>
         <View style={styles.table}>
           <View style={[styles.tableRow, styles.tableHeaderRow]}>
-            <Text style={[styles.tableCell, styles.tableLabelCol, styles.tableHeaderText]}>Feature</Text>
-            <Text style={[styles.tableCellCenter, styles.tableHeaderText]}>Free</Text>
+            <Text style={[styles.tableCell, styles.tableLabelCol, styles.tableHeaderText]}>{t('premium.featureHeader')}</Text>
+            <Text style={[styles.tableCellCenter, styles.tableHeaderText]}>{t('premium.freeHeader')}</Text>
             <Text style={[styles.tableCellCenter, styles.tableHeaderTextPro]}>Conqueror</Text>
           </View>
-          {COMPARE_ROWS.map((row, i) => (
+          {getCompareRows().map((row, i) => (
             <View key={i} style={[styles.tableRow, i % 2 === 1 && styles.tableRowAlt]}>
               <Text style={[styles.tableCell, styles.tableLabelCol]}>{row.label}</Text>
               <View style={styles.tableCellCenterView}>
@@ -462,86 +337,82 @@ export default function PremiumScreen({ navigation }: { navigation?: any }) {
         </View>
 
         {/* ── Pricing ────────────────────────────────────────────────────── */}
-        <Text style={styles.sectionTitle}>Choose Your Plan</Text>
+        <Text style={styles.sectionTitle}>{t('premium.sectionChoosePlan')}</Text>
         <View style={styles.pricingRow}>
-          {/* Monthly — shown first, MOST POPULAR */}
-          <TouchableOpacity
-            style={[styles.priceCard, plan === 'monthly' && styles.priceCardSelected]}
-            onPress={() => setPlan('monthly')}
-            activeOpacity={0.85}
-          >
-            <View style={styles.popularBadge}>
-              <Text style={styles.popularText}>BEST VALUE</Text>
-            </View>
-            <Text style={styles.planName}>Monthly</Text>
-            <Text style={styles.planPrice}>
-              $1.99<Text style={styles.planPer}>/mo</Text>
-            </Text>
-            <Text style={styles.planBreakdown}>First month intro price</Text>
-            <Text style={styles.planOldPrice}>Then $3.99/mo · cancel anytime</Text>
-          </TouchableOpacity>
-
           {/* Lifetime */}
           <TouchableOpacity
             style={[styles.priceCard, plan === 'unlimited' && styles.priceCardSelected]}
             onPress={() => setPlan('unlimited')}
             activeOpacity={0.85}
           >
-            <Text style={styles.planName}>Lifetime</Text>
+            <View style={styles.popularBadge}>
+              <Text style={styles.popularText}>{t('premium.mostPopular')}</Text>
+            </View>
+            {plan === 'unlimited' && <View style={styles.selectedMark}><Ionicons name="checkmark" size={12} color="#20112f" /></View>}
+            <Text style={styles.planName}>{t('premium.lifetime')}</Text>
             <Text style={styles.planPrice}>
-              $39.99<Text style={styles.planPer}> once</Text>
+              {lifetimePrice}<Text style={styles.planPer}> {t('premium.once')}</Text>
             </Text>
-            <Text style={styles.planBreakdown}>One-time · no renewals</Text>
+            <Text style={styles.planBreakdown}>{t('premium.lifetimeBreakdown')} · +3 Mythic Chests</Text>
             <View style={styles.savingBadge}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <Text style={styles.savingText}>+100K</Text>
-                <Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 14, height: 14 }} resizeMode="contain" />
-                <Text style={styles.savingText}>+30</Text>
-                <Image
-                  source={require('../../assets/avatars/raffle_ticket.png')}
-                  style={{ width: 14, height: 14 }}
-                  resizeMode="contain"
-                />
+                <Text style={styles.savingText}>+10</Text>
+                <Image source={require('../../assets/avatars/raffle_ticket.png')} style={{ width: 14, height: 14 }} resizeMode="contain" />
+                <Text style={styles.savingText}>+3 Mythic</Text>
               </View>
             </View>
           </TouchableOpacity>
+
+          {/* Monthly */}
+          <TouchableOpacity
+            style={[styles.priceCard, plan === 'monthly' && styles.priceCardSelected, styles.priceCardMonthly]}
+            onPress={() => setPlan('monthly')}
+            activeOpacity={0.85}
+          >
+            {plan === 'monthly' && <View style={styles.selectedMark}><Ionicons name="checkmark" size={12} color="#20112f" /></View>}
+            <Text style={styles.planName}>{t('premium.monthly')}</Text>
+            <Text style={styles.planPrice}>
+              {monthlyPrice}<Text style={styles.planPer}>{t('premium.monthlyPer')}</Text>
+            </Text>
+            <Text style={styles.planBreakdown}>{t('premium.monthlyIntroOffer')} · {t('premium.cancelAnytime')} · 1 Mythic Chest monthly</Text>
+          </TouchableOpacity>
         </View>
 
-        <Text style={styles.trialNote}>Processed securely via App Store / Google Play</Text>
+        <Text style={styles.trialNote}>{t('premium.securePayment')}</Text>
 
         {/* ── Trust signals ──────────────────────────────────────────────── */}
         <View style={styles.trustRow}>
           {[
-            { icon: 'shield-checkmark' as const, label: 'Secure Payment' },
-            { icon: 'infinite' as const, label: 'Lifetime Access' },
-            { icon: 'flash' as const, label: 'Instant Access' },
-          ].map((t, i) => (
+            { icon: 'shield-checkmark' as const, label: t('premium.trustSecure') },
+            { icon: 'infinite' as const, label: t('premium.trustLifetime') },
+            { icon: 'flash' as const, label: t('premium.trustInstant') },
+          ].map((item, i) => (
             <View key={i} style={styles.trustItem}>
-              <Ionicons name={t.icon} size={18} color="#9B59B6" />
-              <Text style={styles.trustText}>{t.label}</Text>
+              <Ionicons name={item.icon} size={18} color="#9B59B6" />
+              <Text style={styles.trustText}>{item.label}</Text>
             </View>
           ))}
         </View>
 
         {/* ── Testimonials ───────────────────────────────────────────────── */}
-        <Text style={styles.sectionTitle}>What Conquerors Say</Text>
+        <Text style={styles.sectionTitle}>{t('premium.sectionTestimonials')}</Text>
         <View style={styles.starsRow}>
           <Text style={styles.starsGold}>★★★★★</Text>
-          <Text style={styles.ratingLabel}>  Rated 5 stars by our Conquerors</Text>
+          <Text style={styles.ratingLabel}>  {t('premium.ratingLabel')}</Text>
         </View>
-        {TESTIMONIALS.map((t, i) => (
+        {TESTIMONIALS.map((item, i) => (
           <View key={i} style={styles.testimonialCard}>
-            <Text style={styles.testimonialQuote}>"{t.text}"</Text>
+            <Text style={styles.testimonialQuote}>"{item.text}"</Text>
             <View style={styles.testimonialFooter}>
-              <Text style={styles.testimonialName}>— {t.name}</Text>
-              <Text style={styles.testimonialStars}>{'★'.repeat(t.stars)}</Text>
+              <Text style={styles.testimonialName}>— {item.name}</Text>
+              <Text style={styles.testimonialStars}>{'★'.repeat(item.stars)}</Text>
             </View>
           </View>
         ))}
 
         {/* ── FAQ ────────────────────────────────────────────────────────── */}
-        <Text style={styles.sectionTitle}>FAQ</Text>
-        {FAQ_ITEMS.map((item, i) => (
+        <Text style={styles.sectionTitle}>{t('premium.faq')}</Text>
+        {getFaqItems().map((item, i) => (
           <TouchableOpacity
             key={i}
             style={styles.faqItem}
@@ -556,11 +427,16 @@ export default function PremiumScreen({ navigation }: { navigation?: any }) {
           </TouchableOpacity>
         ))}
 
+        {/* ── Restore ────────────────────────────────────────────────────── */}
+        <TouchableOpacity onPress={handleRestore} disabled={purchasing} style={styles.restoreButton}>
+          <Text style={styles.restoreText}>{t('premium.restore')}</Text>
+        </TouchableOpacity>
+
         {/* ── Final block ────────────────────────────────────────────────── */}
         <View style={styles.finalBlock}>
-          <Text style={styles.finalTitle}>Ready to conquer the world?</Text>
+          <Text style={styles.finalTitle}>{t('premium.finalTitle')}</Text>
           <Text style={styles.finalSub}>
-            Join 1,200 Conquerors and claim your spot on the global leaderboard.
+            {t('premium.finalSub')}
           </Text>
         </View>
       </ScrollView>
@@ -579,17 +455,15 @@ export default function PremiumScreen({ navigation }: { navigation?: any }) {
               : purchasing
               ? 'Processing...'
               : plan === 'unlimited'
-              ? 'Get Lifetime Access'
-              : 'Start Monthly'}
+              ? t('premium.getLifetime')
+              : t('premium.getMonthly')}
           </Text>
           <Text style={styles.ctaPlanNote}>
             {profile?.is_conquerer
               ? 'Enjoy your premium status'
-              : !iapReady
-              ? 'Build with EAS to enable purchases'
               : plan === 'unlimited'
-              ? '$39.99 · Lifetime · +100K Gold + 30 Tickets'
-              : '$1.99 first month, then $3.99/mo'}
+              ? `${lifetimePrice} · ${t('premium.lifetime')} · +10 Tickets + 3 Mythic Chests`
+              : `${monthlyPrice}${t('premium.monthlyPer')} · ${t('premium.cancelAnytime')}`}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -598,7 +472,7 @@ export default function PremiumScreen({ navigation }: { navigation?: any }) {
           activeOpacity={0.7}
         >
           <Text style={styles.ctaSwitchText}>
-            {plan === 'monthly' ? 'Or go Lifetime — $39.99 once, no renewals' : 'Switch to Monthly — $1.99 first month'}
+            {plan === 'unlimited' ? `Switch to ${t('premium.monthly')} (${monthlyPrice}${t('premium.monthlyPer')})` : `Switch to ${t('premium.lifetime')} — ${lifetimePrice} ${t('premium.once')}`}
           </Text>
         </TouchableOpacity>
       </View>
@@ -611,7 +485,6 @@ export default function PremiumScreen({ navigation }: { navigation?: any }) {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#0a0a1a' },
 
-  // Urgency
   urgencyBar: {
     backgroundColor: '#120820',
     borderBottomWidth: 1,
@@ -619,24 +492,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
     paddingBottom: 8,
   },
   urgencyText: { color: '#9B59B6', fontSize: 13, fontWeight: '600' },
   urgencyTimer: { color: '#9B59B6', fontSize: 13, fontWeight: 'bold' },
 
-  // Scroll
   scroll: { flex: 1 },
-  scrollContent: { paddingHorizontal: 12, paddingTop: 8 },
+  scrollContent: { paddingHorizontal: 16, paddingTop: 8 },
 
-  // Close
   closeBtn: {
     alignSelf: 'flex-end',
     padding: 10,
     marginBottom: -4,
   },
 
-  // Hero
   hero: {
     alignItems: 'center',
     paddingVertical: 12,
@@ -667,8 +537,13 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   joinText: { color: '#ccc', fontSize: 13, fontWeight: '600' },
+  heroOffer: { width: '100%', flexDirection: 'row', alignItems: 'center', marginTop: 18, padding: 12, borderRadius: 16, borderWidth: 1, borderColor: '#f6d36566', backgroundColor: '#1b102b' },
+  heroOfferChest: { width: 52, height: 48, marginRight: 8 },
+  heroOfferCopy: { flex: 1 },
+  heroOfferKicker: { color: '#f6d365', fontSize: 8, fontWeight: '900', letterSpacing: 1, marginBottom: 3 },
+  heroOfferTitle: { color: '#fff', fontSize: 14, fontWeight: '900' },
+  heroOfferSub: { color: '#b9a8c6', fontSize: 10, marginTop: 3, lineHeight: 14 },
 
-  // Hook
   hookCard: {
     backgroundColor: '#120820',
     borderRadius: 14,
@@ -682,7 +557,6 @@ const styles = StyleSheet.create({
   hookText: { color: '#bbb', fontSize: 14, lineHeight: 21 },
   hookHighlight: { color: '#9B59B6', fontWeight: '700' },
 
-  // Section title
   sectionTitle: {
     color: '#fff',
     fontSize: 18,
@@ -690,7 +564,6 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
 
-  // Features grid
   featureGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -709,7 +582,6 @@ const styles = StyleSheet.create({
   featureTitle: { color: '#9B59B6', fontSize: 13, fontWeight: 'bold', marginBottom: 4 },
   featureDesc: { color: '#888', fontSize: 12, lineHeight: 17 },
 
-  // Comparison table
   table: {
     backgroundColor: '#0e0e1f',
     borderRadius: 14,
@@ -742,7 +614,6 @@ const styles = StyleSheet.create({
   checkPro: { color: '#9B59B6', fontSize: 14, fontWeight: 'bold' },
   checkNo: { color: '#444', fontSize: 14 },
 
-  // Pricing
   pricingRow: {
     flexDirection: 'row',
     gap: 10,
@@ -769,6 +640,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 6,
   },
+  selectedMark: { position: 'absolute', right: 8, top: 8, width: 20, height: 20, borderRadius: 10, backgroundColor: '#f6d365', alignItems: 'center', justifyContent: 'center' },
   priceCardMonthly: {},
   popularBadge: {
     position: 'absolute',
@@ -793,7 +665,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   savingText: { color: '#6BCB77', fontSize: 10, fontWeight: 'bold' },
-  planOldPrice: { color: '#888', fontSize: 11, marginTop: 4 },
 
   trialNote: {
     color: '#666',
@@ -801,23 +672,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 20,
   },
-  purchaseSummary: {
-    backgroundColor: '#160d24',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#432160',
-    padding: 14,
-    gap: 8,
-  },
-  purchasePlanName: { color: '#fff', fontSize: 17, fontWeight: '800', textAlign: 'center' },
-  purchasePlanSubtitle: { color: '#9f8ab8', fontSize: 12, textAlign: 'center' },
-  purchaseDivider: { height: 1, backgroundColor: '#432160', marginVertical: 4 },
-  purchaseSummaryRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 14 },
-  purchaseSummaryLabel: { color: '#9f8ab8', fontSize: 13, fontWeight: '600' },
-  purchaseSummaryValue: { color: '#c084fc', fontSize: 14, fontWeight: '800' },
-  purchaseStoreNote: { color: '#777', fontSize: 11, textAlign: 'center', marginTop: 4 },
 
-  // Trust
   trustRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
@@ -826,7 +681,6 @@ const styles = StyleSheet.create({
   trustItem: { alignItems: 'center', gap: 5 },
   trustText: { color: '#666', fontSize: 11 },
 
-  // Testimonials
   starsRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -847,7 +701,6 @@ const styles = StyleSheet.create({
   testimonialName: { color: '#9B59B6', fontSize: 12, fontWeight: '600' },
   testimonialStars: { color: '#9B59B6', fontSize: 13 },
 
-  // FAQ
   faqItem: {
     backgroundColor: '#0e0e1f',
     borderRadius: 12,
@@ -860,7 +713,9 @@ const styles = StyleSheet.create({
   faqQ: { color: '#ddd', fontSize: 14, fontWeight: '600', flex: 1, marginRight: 8 },
   faqA: { color: '#888', fontSize: 13, lineHeight: 19, marginTop: 10 },
 
-  // Final block
+  restoreButton: { alignItems: 'center', paddingVertical: 12 },
+  restoreText: { color: '#555', fontSize: 12, textDecorationLine: 'underline' },
+
   finalBlock: {
     alignItems: 'center',
     paddingVertical: 32,
@@ -870,12 +725,11 @@ const styles = StyleSheet.create({
   finalTitle: { color: '#9B59B6', fontSize: 20, fontWeight: 'bold', textAlign: 'center', marginBottom: 10 },
   finalSub: { color: '#888', fontSize: 13, textAlign: 'center', lineHeight: 20 },
 
-  // Sticky CTA
   stickyBar: {
     backgroundColor: '#0e0e1f',
     borderTopWidth: 1,
     borderTopColor: '#2a2a4e',
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
     paddingTop: 12,
   },
   ctaPrimary: {

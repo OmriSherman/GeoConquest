@@ -30,6 +30,7 @@ import { playDing, playWrong, playTick, playTextToSpeech, playDiceRoll, playMill
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Speech from 'expo-speech';
 import { filterQuizCountries } from '../lib/quizCountryFilters';
+import { t } from '../lib/i18n';
 
 const NIGHTMARE_LOSS_KEY = 'nightmare_loss_count';
 
@@ -42,15 +43,9 @@ const REPEAT_PRIZE_GOLD = 2000;
 
 type Curse = 'none' | 'blind' | 'shuffle' | 'rush' | 'phantom';
 const ALL_CURSES: Curse[] = ['blind', 'shuffle', 'rush', 'phantom'];
-const CURSE_LABEL: Record<Curse, string> = { none: '', blind: 'BLIND', shuffle: 'SHUFFLE', rush: 'RUSH', phantom: 'PHANTOM' };
 const CURSE_COLOR: Record<Curse, string> = { none: '', blind: '#cc3300', shuffle: '#cc8800', rush: '#4466cc', phantom: '#aa00cc' };
-const CURSE_DESC: Record<Curse, string> = {
-  none: '',
-  blind: 'Out of darkness...',
-  shuffle: 'Careful where you click.',
-  rush: '5 seconds. Clock starts now.',
-  phantom: 'Trust the Phantom.',
-};
+const getCurseLabel = (curse: Curse) => curse === 'none' ? '' : t(`nightmareQuiz.${curse}` as any);
+const getCurseReveal = (curse: Curse) => curse === 'none' ? '' : t(`nightmareQuiz.${curse}Reveal` as any);
 
 type Props = {
   navigation: StackNavigationProp<QuizStackParamList, 'NightmareQuiz'>;
@@ -84,6 +79,7 @@ export default function NightmareQuizScreen({ navigation }: Props) {
 
   // Game-over / win state
   const [showWin, setShowWin] = useState(false);
+  const [winPrize, setWinPrize] = useState(PRIZE_GOLD);
   const [confettiActive, setConfettiActive] = useState(false);
   const [ready, setReady] = useState(false);
   const [paused, setPaused] = useState(false);
@@ -417,6 +413,7 @@ export default function NightmareQuizScreen({ navigation }: Props) {
       // Final question — win!
       if (idx === TOTAL_QUESTIONS - 1) {
         const prize = wasAlreadyCompletedRef.current ? REPEAT_PRIZE_GOLD : PRIZE_GOLD;
+        setWinPrize(prize);
         await addGold(prize);
         setConfettiActive(true);
         setShowWin(true);
@@ -464,6 +461,7 @@ export default function NightmareQuizScreen({ navigation }: Props) {
       goldEarned: wasAlreadyCompletedRef.current ? REPEAT_PRIZE_GOLD : PRIZE_GOLD,
       quizType: 'nightmare',
       elapsedSeconds: Math.floor((Date.now() - quizStartRef.current) / 1000),
+      xpOverride: wasAlreadyCompletedRef.current ? 0 : undefined,
     });
   }
 
@@ -473,7 +471,7 @@ export default function NightmareQuizScreen({ navigation }: Props) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#FFD700" />
-        <Text style={styles.loadingText}>Awakening the Nightmare…</Text>
+        <Text style={styles.loadingText}>{t('nightmareQuiz.loadingChallenge')}</Text>
       </View>
     );
   }
@@ -481,7 +479,7 @@ export default function NightmareQuizScreen({ navigation }: Props) {
   if (error || questions.length === 0) {
     return (
       <View style={styles.centered}>
-        <Text style={styles.errorText}>{error ?? 'No questions available'}</Text>
+        <Text style={styles.errorText}>{error ?? t('quizCommon.noQuestions')}</Text>
       </View>
     );
   }
@@ -492,8 +490,8 @@ export default function NightmareQuizScreen({ navigation }: Props) {
     return (
       <View style={styles.readyContainer}>
         <Image source={require('../../assets/avatars/demon_hand.png')} style={{ width: 80, height: 80, marginBottom: 20, transform: [{ rotate: '180deg' }] }} resizeMode="contain" />
-        <Text style={styles.readyTitle}>NIGHTMARE</Text>
-        <Text style={styles.readySubtitle}>10 questions. 15 seconds each. One wrong answer and it will cost you.</Text>
+        <Text style={styles.readyTitle}>{t('nav.nightmareQuiz').toUpperCase()}</Text>
+        <Text style={styles.readySubtitle}>{t('nightmareQuiz.readySubtitle')}</Text>
         <TouchableOpacity
           style={styles.readyBtn}
           onPress={() => {
@@ -505,10 +503,10 @@ export default function NightmareQuizScreen({ navigation }: Props) {
             applyNewCurse(questionsRef.current[0]); // calls startTimer after reveal
           }}
         >
-          <Text style={styles.readyBtnText}>LET'S GO</Text>
+          <Text style={styles.readyBtnText}>{t('quizCommon.letsGo')}</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.readyBackLink}>
-          <Text style={styles.readyBackLinkText}>Go Back</Text>
+          <Text style={styles.readyBackLinkText}>{t('quizCommon.goBack')}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -546,11 +544,11 @@ export default function NightmareQuizScreen({ navigation }: Props) {
               resizeMode="contain"
             />
           </View>
-          <Text style={styles.curseRevealLabel}>CURSE DRAWN</Text>
+          <Text style={styles.curseRevealLabel}>{t('nightmareQuiz.curseDrawn')}</Text>
           <Text style={[styles.curseRevealName, { color: CURSE_COLOR[currentCurse] }]}>
-            {CURSE_LABEL[currentCurse]}
+            {getCurseLabel(currentCurse)}
           </Text>
-          <Text style={styles.curseRevealDesc}>{CURSE_DESC[currentCurse]}</Text>
+          <Text style={styles.curseRevealDesc}>{getCurseReveal(currentCurse)}</Text>
         </View>
       )}
 
@@ -558,12 +556,12 @@ export default function NightmareQuizScreen({ navigation }: Props) {
       {paused && (
         <View style={[StyleSheet.absoluteFill, styles.pauseOverlay]}>
           <Image source={require('../../assets/avatars/stop_it.png')} style={styles.pauseStopIt} resizeMode="contain" />
-          <Text style={styles.pauseTitle}>PAUSED</Text>
+          <Text style={styles.pauseTitle}>{t('quizCommon.paused')}</Text>
           <TouchableOpacity style={styles.resumeBtn} onPress={resumeGame}>
-            <Text style={styles.resumeBtnText}>RESUME</Text>
+            <Text style={styles.resumeBtnText}>{t('quizCommon.resume')}</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => { stopTimer(); allowLeaveRef.current = true; navigation.goBack(); }}>
-            <Text style={styles.quitText}>Quit</Text>
+            <Text style={styles.quitText}>{t('quizCommon.quit')}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -575,7 +573,7 @@ export default function NightmareQuizScreen({ navigation }: Props) {
         </Text>
         {currentCurse !== 'none' && !answered && (
           <View style={[styles.curseBadge, { borderColor: CURSE_COLOR[currentCurse] }]}>
-            <Text style={[styles.curseBadgeText, { color: CURSE_COLOR[currentCurse] }]}>{CURSE_LABEL[currentCurse]}</Text>
+            <Text style={[styles.curseBadgeText, { color: CURSE_COLOR[currentCurse] }]}>{getCurseLabel(currentCurse)}</Text>
           </View>
         )}
         <Text style={styles.elapsedTimerText}>⏱ {String(Math.floor(elapsedSec / 60)).padStart(2, '0')}:{String(elapsedSec % 60).padStart(2, '0')}</Text>
@@ -738,7 +736,7 @@ export default function NightmareQuizScreen({ navigation }: Props) {
       {/* Fixed bottom tap hint — outside ScrollView so it never shifts layout */}
       {answered && !showWin && (
         <View style={styles.tapHintFixed} pointerEvents="none">
-          <Text style={styles.tapHint}>Tap anywhere to continue →</Text>
+          <Text style={styles.tapHint}>{t('quizCommon.tapToContinue')}</Text>
         </View>
       )}
 
@@ -758,16 +756,14 @@ export default function NightmareQuizScreen({ navigation }: Props) {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Image source={require('../../assets/avatars/evil_vanquished.png')} style={styles.modalImage} resizeMode="contain" />
-            <Text style={styles.modalTitle}>The beast mark is yours</Text>
-            <Text style={styles.modalBody}>
-              You are the new king of the underworld
-            </Text>
+            <Text style={styles.modalTitle}>{t('nightmareQuiz.winTitle')}</Text>
+            <Text style={styles.modalBody}>{t('nightmareQuiz.winKing')}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Image source={require('../../assets/avatars/gold_bag.png')} style={{ width: 28, height: 28 }} resizeMode="contain" />
-              <Text style={styles.modalGoldLarge}>{PRIZE_GOLD.toLocaleString()}</Text>
+              <Text style={styles.modalGoldLarge}>{winPrize.toLocaleString()}</Text>
             </View>
             <TouchableOpacity style={styles.primaryBtnWin} onPress={handleWinContinue}>
-              <Text style={styles.primaryBtnWinText}>Take What Is Owed</Text>
+              <Text style={styles.primaryBtnWinText}>{t('nightmareQuiz.takeOwed')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -775,8 +771,8 @@ export default function NightmareQuizScreen({ navigation }: Props) {
 
       <QuitConfirmModal
         visible={showQuitModal}
-        title="Leave Nightmare?"
-        message="Your progress will be lost."
+        title={t('nightmareQuiz.leaveTitle')}
+        message={t('quizCommon.progressLost')}
         onStay={() => { setShowQuitModal(false); onConfirmQuitRef.current = null; }}
         onQuit={() => { setShowQuitModal(false); onConfirmQuitRef.current?.(); onConfirmQuitRef.current = null; }}
       />

@@ -32,12 +32,17 @@ import GoldShopScreen from './GoldShopScreen';
 import AvatarDisplay from '../components/AvatarDisplay';
 import ActivityTicker from '../components/ActivityTicker';
 import XpRingDisplay from '../components/XpRingDisplay';
+import { XpAmount } from '../components/XpIcon';
 import { getLevelInfo } from '../lib/xpSystem';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import { STORE_URL } from '../lib/storeLinks';
+import { t, setLocale, getLocale, LOCALE_LABELS, SUPPORTED } from '../lib/i18n';
+import { DEV_MODE } from '../lib/devMode';
+let RevenueCatUI: any = null;
+try { RevenueCatUI = require('react-native-purchases-ui').default; } catch {}
 
-const APP_VERSION = '1.2.3';
-const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.geoconquest.app';
+const APP_VERSION = '1.2.4';
 
 const WORLD_LAND_AREA = 150_000_000; // km²
 const TOTAL_QUESTS = ACHIEVEMENTS_DATA.length;
@@ -52,11 +57,11 @@ export default function HomeScreen({ navigation }: any) {
   async function handleDeleteAccount() {
     setShowUserMenu(false);
     showAlert({
-      title: 'Delete Account',
-      message: 'This will permanently delete your account and all your data. This cannot be undone.',
+      title: t('home.deleteAccount'),
+      message: t('home.deleteBody'),
       buttons: [
         {
-          text: 'Delete Forever',
+          text: t('home.deleteForever'),
           style: 'destructive',
           onPress: async () => {
             try {
@@ -64,11 +69,11 @@ export default function HomeScreen({ navigation }: any) {
               if (error) throw error;
               await signOut();
             } catch (err: any) {
-              showAlert({ title: 'Error', message: err.message ?? 'Failed to delete account.', buttons: [{ text: 'OK' }] });
+              showAlert({ title: t('common.error'), message: err.message ?? 'Failed to delete account.', buttons: [{ text: t('common.ok') }] });
             }
           },
         },
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
       ],
     });
   }
@@ -91,6 +96,7 @@ export default function HomeScreen({ navigation }: any) {
   const [allCountries, setAllCountries] = useState<Country[]>([]);
   const [topPlayers, setTopPlayers] = useState<LeaderboardEntry[]>([]);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showLanguageMenu, setShowLanguageMenu] = useState(false);
   const [showGoldShop, setShowGoldShop] = useState(false);
   const [showMapNames, setShowMapNames] = useState(false);
   const [mapResetKey, setMapResetKey] = useState(0);
@@ -131,17 +137,17 @@ export default function HomeScreen({ navigation }: any) {
             resizeMode="contain"
           />
         ),
-        title: 'Welcome, Explorer!',
+        title: t('home.welcomeTitle'),
         contentNode: (
           <View style={{ gap: 12, alignSelf: 'stretch' }}>
             <Text style={{ color: '#FFD700', fontSize: 14, fontWeight: '700', textAlign: 'center', marginBottom: 2 }}>
-              Time to build your empire.
+              {t('home.welcomeSubtitle')}
             </Text>
             {[
-              { img: require('../../assets/avatars/gold_bag.png'),  text: 'Earn gold by taking quizzes. The better you score, the more you earn.' },
-              { img: require('../../assets/avatars/cart.png'),       text: 'Spend gold in the Shop to buy countries, avatars, and gameplay upgrades.' },
-              { img: require('../../assets/avatars/war_medal.png'), text: 'Complete quests to unlock exclusive rewards and rare avatars.' },
-              { img: require('../../assets/avatars/trophy.png'),    text: 'Compete in daily challenges against explorers from around the world.' },
+              { img: require('../../assets/avatars/gold_bag.png'),  text: t('home.welcomeStep1') },
+              { img: require('../../assets/avatars/cart.png'),       text: t('home.welcomeStep2') },
+              { img: require('../../assets/avatars/war_medal.png'), text: t('home.welcomeStep3') },
+              { img: require('../../assets/avatars/trophy.png'),    text: t('home.welcomeStep4') },
             ].map(({ img, text }, i) => (
               <View key={i} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
                 <Image source={img} style={{ width: 20, height: 20, marginTop: 1 }} resizeMode="contain" />
@@ -150,7 +156,7 @@ export default function HomeScreen({ navigation }: any) {
             ))}
           </View>
         ),
-        buttons: [{ text: "Let's Conquer!", style: 'cta' }],
+        buttons: [{ text: t('home.letsConquer'), style: 'cta' }],
       });
     }
     maybeShowWelcome();
@@ -183,11 +189,11 @@ export default function HomeScreen({ navigation }: any) {
               resizeMode="contain"
             />
           ),
-          title: `v${latest} is Available!`,
-          message: `You're on v${APP_VERSION}. Update to get the latest features and fixes.`,
+          title: t('home.updateTitle', { version: latest }),
+          message: t('home.updateBody', { current: APP_VERSION }),
           buttons: [
-            { text: 'Update Now', style: 'cta', onPress: () => Linking.openURL(PLAY_STORE_URL) },
-            { text: 'Later', style: 'cancel' },
+            { text: t('home.updateNow'), style: 'cta', onPress: () => Linking.openURL(STORE_URL) },
+            { text: t('home.later'), style: 'cancel' },
           ],
         });
       } catch {
@@ -283,7 +289,7 @@ export default function HomeScreen({ navigation }: any) {
         {/* World Map */}
         <ViewShot ref={mapCaptureRef} style={styles.mapSection}>
           <View style={styles.mapHeader}>
-            <Text style={styles.sectionTitle}>Your Empire</Text>
+            <Text style={styles.sectionTitle}>{t('home.empire')}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <TouchableOpacity onPress={handleShareMap}>
                 <Ionicons name="share-outline" size={22} color="#aaa" style={styles.mapToggleIcon} />
@@ -305,11 +311,11 @@ export default function HomeScreen({ navigation }: any) {
 
         {/* Progress bar */}
         <View style={styles.progressSection}>
-          <Text style={styles.progressLabel}>World Domination Progress</Text>
+          <Text style={styles.progressLabel}>{t('home.worldProgress')}</Text>
           <View style={styles.progressBar}>
             <View style={[styles.progressFill, { width: `${progressPct}%` as any }]} />
           </View>
-          <Text style={styles.progressText}>{progressPct}% of Earth's land area</Text>
+          <Text style={styles.progressText}>{t('home.earthArea', { pct: progressPct })}</Text>
         </View>
 
         {/* Stats row */}
@@ -318,7 +324,7 @@ export default function HomeScreen({ navigation }: any) {
             <Text style={styles.statValueSmall} numberOfLines={1} adjustsFontSizeToFit>
               {ownedCountries.length} / {allCountries.length}
             </Text>
-            <Text style={styles.statLabel}>Countries ▸</Text>
+            <Text style={styles.statLabel}>{t('home.countries')}</Text>
           </TouchableOpacity>
           <View style={styles.statCard}>
             <Text style={styles.statValueSmall} numberOfLines={1} adjustsFontSizeToFit>
@@ -334,25 +340,25 @@ export default function HomeScreen({ navigation }: any) {
             <Text style={styles.statValueSmall} numberOfLines={1} adjustsFontSizeToFit>
               {claimedCount} / {TOTAL_QUESTS}
             </Text>
-            <Text style={styles.statLabel}>Quests Done</Text>
+            <Text style={styles.statLabel}>{t('home.questsDone')}</Text>
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statValueSmall} numberOfLines={1} adjustsFontSizeToFit>
               {ownedAvatarCount} / {TOTAL_AVATARS}
             </Text>
-            <Text style={styles.statLabel}>Avatars Owned</Text>
+            <Text style={styles.statLabel}>{t('home.avatarsOwned')}</Text>
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statValueSmall} numberOfLines={1} adjustsFontSizeToFit>
               {profile?.quiz_count ?? 0}
             </Text>
-            <Text style={styles.statLabel}>Quizzes Done</Text>
+            <Text style={styles.statLabel}>{t('home.quizzesDone')}</Text>
           </View>
         </View>
 
         {/* Invite Friends */}
         <TouchableOpacity style={styles.inviteButton} onPress={shareReferralLink}>
-          <Text style={styles.inviteText}>Invite a Friend — Both get 1,500 gold</Text>
+          <Text style={styles.inviteText}>{t('home.invite')}</Text>
         </TouchableOpacity>
 
         {/* Activity Ticker */}
@@ -362,10 +368,10 @@ export default function HomeScreen({ navigation }: any) {
         <View style={styles.leaderboardSection}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <Image source={require('../../assets/avatars/trophy.png')} style={{ width: 18, height: 18 }} resizeMode="contain" />
-            <Text style={styles.sectionTitle}>Top Explorers</Text>
+            <Text style={styles.sectionTitle}>{t('home.topExplorers')}</Text>
           </View>
           {topPlayers.length === 0 ? (
-            <Text style={styles.emptyText}>Loading rankings...</Text>
+            <Text style={styles.emptyText}>{t('home.loadingRankings')}</Text>
           ) : (
             topPlayers.map((entry, index) => {
               const isMe = entry.id === user?.id;
@@ -379,11 +385,9 @@ export default function HomeScreen({ navigation }: any) {
                   <Image source={rankImage} style={[styles.leaderRank, { width: 22, height: 22 }]} resizeMode="contain" />
                   <AvatarDisplay avatarId={entry.avatar_emoji} avatarFlag={entry.avatar_flag} size={30} />
                   <Text style={[styles.leaderName, isMe && styles.leaderNameMe]} numberOfLines={1}>
-                    {entry.username}{isMe ? ' (You)' : ''}
+                    {entry.username}{isMe ? t('home.you') : ''}
                   </Text>
-                  <Text style={[styles.leaderPct, styles.leaderPctTop]}>
-                    {entry.xp.toLocaleString()} XP
-                  </Text>
+                  <XpAmount amount={entry.xp.toLocaleString()} iconSize={13} textStyle={[styles.leaderPct, styles.leaderPctTop]} />
                 </View>
               );
             })
@@ -413,17 +417,17 @@ export default function HomeScreen({ navigation }: any) {
                 const pct = Math.min((xpIntoLevel / xpForNextLevel) * 100, 100);
                 return (
                   <View style={styles.menuXpSection}>
-                    <Text style={styles.menuLevel}>Level {level}</Text>
+                    <Text style={styles.menuLevel}>{t('home.level', { n: level })}</Text>
                     <View style={styles.menuXpBar}>
                       <View style={[styles.menuXpFill, { width: `${pct}%` as any, backgroundColor: profile?.is_conquerer ? '#a78bfa' : '#FFD700' }]} />
                     </View>
-                    <Text style={styles.menuXpText}>{xpIntoLevel} / {xpForNextLevel} XP</Text>
+                    <XpAmount amount={`${xpIntoLevel} / ${xpForNextLevel}`} iconSize={13} textStyle={styles.menuXpText} />
                   </View>
                 );
               })()}
             </View>
             <View style={styles.menuDivider} />
-            {!profile?.is_conquerer && (
+            {!profile?.is_conquerer ? (
               <>
                 <TouchableOpacity
                   style={styles.menuItem}
@@ -432,24 +436,74 @@ export default function HomeScreen({ navigation }: any) {
                   <View style={{ width: 72, alignItems: 'center' }}>
                     <Image source={require('../../assets/avatars/conqueror.png')} style={{ width: 72, height: 72, marginVertical: -27 }} resizeMode="contain" />
                   </View>
-                  <Text style={[styles.menuItemText, { color: '#9B59B6' }]}>Become a Conqueror</Text>
+                  <Text style={[styles.menuItemText, { color: '#9B59B6' }]}>{t('home.becomeConqueror')}</Text>
+                </TouchableOpacity>
+                <View style={styles.menuDivider} />
+              </>
+            ) : (
+              <>
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => {
+                    setShowUserMenu(false);
+                    if (DEV_MODE) navigation.getParent()?.navigate('Premium');
+                    else RevenueCatUI?.presentCustomerCenter?.();
+                  }}
+                >
+                  <View style={{ width: 72, alignItems: 'center' }}>
+                    <Image source={require('../../assets/avatars/settings_wheel.png')} style={{ width: 32, height: 32 }} resizeMode="contain" />
+                  </View>
+                  <Text style={[styles.menuItemText, { color: '#9B59B6' }]}>{t('home.manageSubscription')}</Text>
                 </TouchableOpacity>
                 <View style={styles.menuDivider} />
               </>
             )}
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowUserMenu(false); setShowLanguageMenu(true); }}>
+              <View style={{ width: 72, alignItems: 'center' }}>
+                <Image source={require('../../assets/avatars/language_translation.png')} style={{ width: 34, height: 34 }} resizeMode="contain" />
+              </View>
+              <Text style={styles.menuItemText}>{t('menu.language')}</Text>
+              <Text style={styles.menuLanguageValue}>{LOCALE_LABELS[getLocale()]}</Text>
+            </TouchableOpacity>
+            <View style={styles.menuDivider} />
             <TouchableOpacity style={styles.menuItem} onPress={() => { setShowUserMenu(false); signOut(); }}>
               <View style={{ width: 72, alignItems: 'center' }}>
                 <Image source={require('../../assets/avatars/eyes.png')} style={{ width: 58, height: 58, marginVertical: -20 }} resizeMode="contain" />
               </View>
-              <Text style={styles.menuItemText}>Sign Out</Text>
+              <Text style={styles.menuItemText}>{t('menu.signOut')}</Text>
             </TouchableOpacity>
             <View style={styles.menuDivider} />
             <TouchableOpacity style={styles.menuItem} onPress={handleDeleteAccount}>
               <View style={{ width: 72, alignItems: 'center' }}>
                 <Image source={require('../../assets/avatars/skull.png')} style={{ width: 52, height: 52, marginVertical: -14 }} resizeMode="contain" />
               </View>
-              <Text style={[styles.menuItemText, { color: '#ff4444' }]}>Delete Account</Text>
+              <Text style={[styles.menuItemText, { color: '#ff4444' }]}>{t('menu.deleteAccount')}</Text>
             </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Language Picker Modal */}
+      <Modal visible={showLanguageMenu} transparent animationType="fade" onRequestClose={() => setShowLanguageMenu(false)}>
+        <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => setShowLanguageMenu(false)}>
+          <View style={styles.menuContent}>
+            <Text style={styles.languageTitle}>{t('menu.language')}</Text>
+            <View style={styles.menuDivider} />
+            {SUPPORTED.map((loc) => {
+              const active = getLocale() === loc;
+              return (
+                <TouchableOpacity
+                  key={loc}
+                  style={styles.languageRow}
+                  onPress={() => { setShowLanguageMenu(false); if (!active) setLocale(loc); }}
+                >
+                  <Text style={[styles.languageRowText, active && { color: '#4da6ff', fontWeight: '700' }]}>
+                    {LOCALE_LABELS[loc]}
+                  </Text>
+                  {active && <Ionicons name="checkmark" size={20} color="#4da6ff" />}
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </TouchableOpacity>
       </Modal>
@@ -458,7 +512,7 @@ export default function HomeScreen({ navigation }: any) {
       <Modal visible={showGoldShop} animationType="slide" onRequestClose={() => setShowGoldShop(false)}>
         <View style={styles.goldShopModal}>
           <TouchableOpacity style={styles.closeGoldShop} onPress={() => setShowGoldShop(false)}>
-            <Text style={styles.closeGoldShopText}>✕ Close</Text>
+            <Text style={styles.closeGoldShopText}>{t('home.closeGoldShop')}</Text>
           </TouchableOpacity>
           <GoldShopScreen />
         </View>
@@ -471,14 +525,14 @@ export default function HomeScreen({ navigation }: any) {
             <View style={styles.ownedListHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <Image source={require('../../assets/avatars/globe.png')} style={{ width: 20, height: 20 }} resizeMode="contain" />
-                <Text style={styles.ownedListTitle}>Owned Countries ({ownedCountries.length})</Text>
+                <Text style={styles.ownedListTitle}>{t('home.ownedCountries', { n: ownedCountries.length })}</Text>
               </View>
               <TouchableOpacity onPress={() => setShowOwnedList(false)}>
                 <Text style={styles.ownedListClose}>✕</Text>
               </TouchableOpacity>
             </View>
             {ownedCountries.length === 0 ? (
-              <Text style={styles.emptyText}>No countries owned yet. Earn gold and visit the Shop!</Text>
+              <Text style={styles.emptyText}>{t('home.noCountries')}</Text>
             ) : (
               <FlatList
                 data={allCountries.filter(c => ownedCountries.includes(c.cca2)).sort((a, b) => a.name.localeCompare(b.name))}
@@ -616,6 +670,10 @@ const styles = StyleSheet.create({
   menuItem: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 },
   menuItemIcon: { fontSize: 18 },
   menuItemText: { color: '#ff6b6b', fontSize: 15, fontWeight: '500' },
+  menuLanguageValue: { color: '#888', fontSize: 13, marginLeft: 'auto' },
+  languageTitle: { color: '#fff', fontSize: 16, fontWeight: 'bold', textAlign: 'center' },
+  languageRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 4 },
+  languageRowText: { color: '#ddd', fontSize: 16 },
 
   // Gold shop modal
   goldShopModal: { flex: 1, backgroundColor: '#0a0a1a' },

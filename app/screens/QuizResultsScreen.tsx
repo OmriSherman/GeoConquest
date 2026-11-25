@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Dimensions, Easing, Image, Modal, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, Dimensions, Easing, Image, Modal, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 import { View as FallbackView } from 'react-native';
@@ -26,10 +26,17 @@ import { useGame } from '../context/GameContext';
 import { ACHIEVEMENTS_DATA } from '../lib/achievementsData';
 import { calcQuizXP, getLevelInfo } from '../lib/xpSystem';
 import TopFallConfetti from '../components/TopFallConfetti';
-import AvatarDisplay from '../components/AvatarDisplay';
+import AvatarDisplayComponent from '../components/AvatarDisplay';
 import AnalogCountdownClock from '../components/AnalogCountdownClock';
+import { XpAmount } from '../components/XpIcon';
 import { showRewardedAd } from '../lib/rewardedAds';
 import { supabase } from '../lib/supabase';
+import { STORE_NAME, STORE_URL } from '../lib/storeLinks';
+import { t } from '../lib/i18n';
+import { DEV_MODE } from '../lib/devMode';
+import { consumePotionPreview, PotionEffect } from '../lib/potionPreview';
+import { REWARD_IMAGES } from '../lib/dailyChest';
+import { MYTHIC_REWARD_IMAGES } from '../lib/mythicChest';
 
 type Props = {
   navigation: StackNavigationProp<QuizStackParamList, 'QuizResults'>;
@@ -41,6 +48,7 @@ const RESULT_ICON_IMAGES: Record<string, any> = {
   png_evil_vanquished: require('../../assets/avatars/evil_vanquished.png'),
   png_crossed_swords: require('../../assets/avatars/crossed_swords.png'),
 };
+const AvatarDisplay = React.memo(AvatarDisplayComponent);
 const FALLBACK_ICON_IMAGES: Record<string, any> = {
   lightning:      require('../../assets/avatars/lightning.png'),
   skull:          require('../../assets/avatars/skull.png'),
@@ -57,8 +65,6 @@ const SHARE_QUIZ_ICON_IMAGES: Record<string, any> = {
   nightmare: require('../../assets/avatars/skull.png'),
   gauntlet: require('../../assets/avatars/crucible.png'),
 };
-const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.geoconquest.app';
-
 let ViewShot: any = FallbackView;
 let captureRef: ((ref: any, opts?: any) => Promise<string>) | null = null;
 try {
@@ -85,18 +91,20 @@ function achIconNode(key: string | undefined, fallbackKey: string) {
 }
 
 export default function QuizResultsScreen({ navigation, route }: Props) {
-  const { score, total, goldEarned, quizType, elapsedSeconds, tierAccent, tierLabel, tierBg } = route.params;
+  const { score, total, goldEarned, quizType, elapsedSeconds, tierAccent, tierLabel, tierBg, rewardMultiplier = 1, millionairePowerUpsUsed, xpOverride } = route.params;
   const percentage = Math.round((score / total) * 100);
   const { showToast } = useToast();
-  const { user, addXP, addGold, profile, incrementQuizCount, nextQuizBoostActive, setNextQuizBoostActive, consumeNextQuizBoost, refundMap, maps, deductMap, mapsNextRefillAt, mapsAdsUsedToday, grantAdMap, unlockedItems } = useAuth();
+  const { user, addXP, addGold, profile, refreshProfile, incrementQuizCount, nextQuizBoostActive, setNextQuizBoostActive, consumeNextQuizBoost, refundMap, maps, deductMap, mapsNextRefillAt, mapsAdsUsedToday, grantAdMap, unlockedItems, devInfiniteMapsEnabled } = useAuth();
   const { showAlert } = useAlert();
   const { triggerQuestToast } = useGame();
 
   const tickets = profile?.tickets ?? 0;
   const isConqueror = profile?.is_conquerer ?? false;
-  const skipMapCheck = isConqueror || unlockedItems.has('upgrade_infinite_maps');
+  const skipMapCheck = isConqueror || devInfiniteMapsEnabled || (!DEV_MODE && unlockedItems.has('upgrade_infinite_maps'));
 
   const [xpEarned, setXpEarned] = useState(0);
+  const [potionsUsed, setPotionsUsed] = useState<PotionEffect[]>([]);
+  const [potionSyncError, setPotionSyncError] = useState<string | null>(null);
   const [xpTier, setXpTier] = useState<1 | 1.5 | 2>(1);
   const [boostApplied, setBoostApplied] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
@@ -122,6 +130,7 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
   const shareCaptureRef = useRef<any>(null);
   const eternityGlowAnim = useRef(new Animated.Value(0)).current;
   const animationFrameRef = useRef<number | null>(null);
+  const animationResolveRef = useRef<(() => void) | null>(null);
   const isUnmountedRef = useRef(false);
   const animatedLevelRef = useRef(getLevelInfo(initialXpTotal).level);
   const displayGoldRef = useRef(initialGoldTotal);
@@ -134,18 +143,18 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
   const coinBurstTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const QUIZ_LABELS: Record<string, string> = {
-    flag: 'Flag Quiz',
-    shape: 'Shape Quiz',
-    capitals: 'Capitals Quiz',
-    borders: 'Borders Quiz',
-    trail: 'Trail Quiz',
-    millionaire: 'Millionaire Quiz',
-    nightmare: 'Nightmare Mode',
-    gauntlet: 'The Gauntlet',
+    flag: t('nav.flagQuiz'),
+    shape: t('nav.shapeQuiz'),
+    capitals: t('nav.capitalsQuiz'),
+    borders: t('nav.bordersQuiz'),
+    trail: t('nav.trailQuiz'),
+    millionaire: t('nav.millionaireQuiz'),
+    nightmare: t('nav.nightmareMode'),
+    gauntlet: t('quiz.gauntlet'),
   };
 
   function buildShareMessage() {
-    return `This is how much I scored in the quiz, think you can do better?\nGeoConquest - find us on Google Play\n${PLAY_STORE_URL}`;
+    return `This is how much I scored in the quiz, think you can do better?\nGeoConquest - find us on ${STORE_NAME}\n${STORE_URL}`;
   }
 
   async function handleShare() {
@@ -214,6 +223,8 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
       cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = null;
     }
+    animationResolveRef.current?.();
+    animationResolveRef.current = null;
   }
 
   function animateCounterValue(
@@ -222,12 +233,14 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
     durationMs: number,
     onUpdate: (value: number) => void,
   ): Promise<void> {
-    if (from === to) return Promise.resolve();
+    if (from === to || isUnmountedRef.current) return Promise.resolve();
 
     stopActiveAnimation();
 
     return new Promise((resolve) => {
+      animationResolveRef.current = resolve;
       const startAt = Date.now();
+      let lastValue = from;
       const frame = () => {
         if (isUnmountedRef.current) {
           resolve();
@@ -239,10 +252,15 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
         const eased = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
         const next = Math.round(from + (to - from) * eased);
 
-        onUpdate(next);
+        // Follow the display clock; unchanged rounded values need no render.
+        if (next !== lastValue || t >= 1) {
+          lastValue = next;
+          onUpdate(next);
+        }
 
         if (t >= 1) {
           animationFrameRef.current = null;
+          animationResolveRef.current = null;
           resolve();
           return;
         }
@@ -255,7 +273,7 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
   }
 
   async function animateGoldDelta(delta: number) {
-    if (delta === 0) return;
+    if (delta === 0 || isUnmountedRef.current) return;
 
     const start = displayGoldRef.current;
     const target = Math.max(0, start + delta);
@@ -284,7 +302,8 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
   ) {
     if (delta <= 0) return;
     const xpAnimationDurationMs = 1700;
-    const xpTickSound = playXpGain(xpAnimationDurationMs, 10);
+    if (isUnmountedRef.current) return;
+    const xpTickSound = playXpGain(xpAnimationDurationMs, 10, () => isUnmountedRef.current);
 
     const start = displayXpRef.current;
     const target = Math.max(0, start + delta);
@@ -337,7 +356,10 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
     else await playBoo();
   }
 
+  const completionStarted = useRef(false);
   useEffect(() => {
+    if (completionStarted.current) return;
+    completionStarted.current = true;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     const millionairePerfectWin = quizType === 'millionaire' && score === total;
     if (millionairePerfectWin) {
@@ -352,8 +374,8 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
       if (!claimed) return;
       showAlert({
         variant: 'unique',
-        title: 'Referral Reward!',
-        message: `You and your friend both received ${goldAwarded.toLocaleString()} gold.`,
+        title: t('results.referralReward'),
+        message: t('results.referralRewardBody', { gold: goldAwarded.toLocaleString() }),
         icon: <Image source={require('../../assets/avatars/gold_bag.png')} style={{ width: 54, height: 54 }} resizeMode="contain" />,
       });
     });
@@ -365,12 +387,13 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
       durationSeconds: elapsedSeconds ?? 0,
       goldEarned,
       userId: user?.id,
+      millionairePowerUpsUsed,
     }).then(async ({ newlyCompletedSpeedDemon, newlyCompletedNightmare, newlyCompletedCapitalsMastery }) => {
       if (newlyCompletedSpeedDemon) {
         const ach = ACHIEVEMENTS_DATA.find((a) => a.id === 'flag_mastery_30s');
         showToast({
-          title: 'Quest Complete!',
-          message: ach ? `${ach.title} — claim your reward in Quests!` : 'Flag Quiz Speed Demon!',
+          title: t('questToast.complete'),
+          message: ach ? t('results.claimQuestBody', { quest: ach.title }) : 'Flag Quiz Speed Demon!',
           icon: achIconNode(ach?.icon, 'lightning'),
           duration: 3500,
         });
@@ -379,8 +402,8 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
       if (newlyCompletedNightmare) {
         const ach = ACHIEVEMENTS_DATA.find((a) => a.id === 'nightmare_complete');
         showToast({
-          title: 'Quest Unlocked!',
-          message: ach ? `${ach.title} — claim your reward in Quests!` : 'Nightmare Survived!',
+          title: t('results.questUnlocked'),
+          message: ach ? t('results.claimQuestBody', { quest: ach.title }) : 'Nightmare Survived!',
           icon: achIconNode(ach?.icon, 'skull'),
           duration: 3500,
         });
@@ -389,8 +412,8 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
       if (newlyCompletedCapitalsMastery) {
         const ach = ACHIEVEMENTS_DATA.find((a) => a.id === 'ground_invasion');
         showToast({
-          title: 'Quest Complete!',
-          message: ach ? `${ach.title} — claim your reward in Quests!` : 'Ground Invasion!',
+          title: t('questToast.complete'),
+          message: ach ? t('results.claimQuestBody', { quest: ach.title }) : 'Ground Invasion!',
           icon: achIconNode(ach?.icon, 'crossed_swords'),
           duration: 3500,
         });
@@ -402,31 +425,61 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
 
       if (percentage === 100 && quizType !== 'millionaire' && !isConqueror) {
         try {
-          await refundMap();
-          showToast({ title: 'Map Returned!', message: 'Perfect score — your map was refunded.' });
+          if (await refundMap()) {
+            showToast({ title: t('results.mapReturned'), message: t('results.mapReturnedBody') });
+          }
         } catch { /* silent — refund is a bonus */ }
       }
 
-      const xp = calcQuizXP(quizType, score, total, newlyCompletedNightmare);
+      const xp = xpOverride !== undefined ? xpOverride : Math.round(calcQuizXP(quizType, score, total, newlyCompletedNightmare) * rewardMultiplier);
       const isBoostEligibleQuiz = ['flag', 'shape', 'capitals', 'borders', 'trail'].includes(quizType);
       const shouldApplyBoost = isBoostEligibleQuiz && nextQuizBoostActive;
-      const effectiveXp = shouldApplyBoost ? xp * 2 : xp;
+      const conquerorMultiplier = isConqueror ? 2 : 1;
+      const baseEffectiveXp = (shouldApplyBoost ? xp * 2 : xp) * conquerorMultiplier;
+      let effectiveXp = baseEffectiveXp;
+      let potionGoldBonus = 0;
 
       const quizResultUserId = user?.id ?? profile?.id;
-      if (quizResultUserId) {
-        supabase
-          .from('quiz_results')
-          .insert({
-            user_id: quizResultUserId,
-            quiz_type: quizType,
-            score,
-            gold_earned: goldEarned,
-            total_questions: total,
-            xp_earned: effectiveXp,
-          })
-          .then(({ error }) => {
-            if (error) console.warn('[QuizResults] Failed to save quiz result:', error.message);
-          });
+      if (quizResultUserId && DEV_MODE) {
+        const used = await consumePotionPreview(quizResultUserId, route.key, xp, goldEarned);
+        setPotionsUsed(used);
+        effectiveXp += used.filter(p => p.kind === 'xp_potion').reduce((sum, p) => sum + (p.bonus ?? 0), 0);
+        potionGoldBonus = used.filter(p => p.kind === 'gold_potion').reduce((sum, p) => sum + (p.bonus ?? 0), 0);
+      } else if (quizResultUserId) {
+        const payload = {
+          user_id: quizResultUserId, quiz_type: quizType, score,
+          gold_earned: goldEarned, total_questions: total,
+          xp_earned: baseEffectiveXp, potion_base_xp: xp,
+          client_result_key: route.key,
+        };
+        // Same key on retry: the database grants potion bonuses only once.
+        let saved = await supabase.from('quiz_results').insert(payload)
+          .select('potion_xp_bonus,potion_gold_bonus,potions_used').maybeSingle();
+        const firstError = saved.error;
+        if (saved.error) {
+          saved = await supabase.from('quiz_results').insert(payload)
+            .select('potion_xp_bonus,potion_gold_bonus,potions_used').maybeSingle();
+        }
+        if (!saved.data) {
+          saved = await supabase.from('quiz_results').select('potion_xp_bonus,potion_gold_bonus,potions_used')
+            .eq('user_id', quizResultUserId).eq('client_result_key', route.key).maybeSingle();
+        }
+        if (saved.data) {
+          setPotionsUsed((saved.data.potions_used ?? []) as PotionEffect[]);
+          const potionXp = Number(saved.data.potion_xp_bonus ?? 0);
+          potionGoldBonus = Number(saved.data.potion_gold_bonus ?? 0);
+          effectiveXp += potionXp;
+          if (potionXp > 0 || potionGoldBonus > 0) {
+            showToast({ title: t('results.potionBoostApplied'), message: `+${potionXp} XP · +${potionGoldBonus} gold` });
+          }
+        } else {
+          const failure = firstError ?? saved.error;
+          const missingSchema = failure?.code === '42703' || failure?.code === 'PGRST204' || failure?.code === '23514';
+          const message = missingSchema ? t('results.syncMissingSchema') : t('results.syncFailed');
+          setPotionSyncError(message);
+          showToast({ title: t('results.syncUnavailable'), message });
+          console.warn('[QuizResults] Save failed:', failure?.code, failure?.message, failure?.details);
+        }
       }
 
       let levelUpGoldBonus = 0;
@@ -448,7 +501,7 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
         }
 
         setXpEarned(effectiveXp);
-        await addXP(xp);
+        await addXP(baseEffectiveXp); // Potion XP was credited atomically with the result.
         const accuracy = score / total;
         setXpTier(accuracy === 1 ? 2 : accuracy > 0.85 ? 1.5 : 1);
       }
@@ -459,16 +512,23 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
           await addGold(goldEarned);
           boostGoldBonus = goldEarned;
         }
-        if (xp > 0) await addXP(xp);
+        // XP already doubled via effectiveXp above — no extra addXP needed here
         await consumeNextQuizBoost();
         setBoostApplied(true);
         showToast({
-          title: 'x2 Boost Used',
-          message: 'Gold and XP were doubled for this quiz.',
+          title: t('results.boostUsed'),
+          message: t('results.boostUsedBody'),
         });
       }
 
-      const quizGoldDelta = goldEarned + boostGoldBonus;
+      // Conqueror 2× gold bonus (additive on top of base; boost gold is separate)
+      let conquerorGoldBonus = 0;
+      if (isConqueror && goldEarned > 0 && quizType !== 'millionaire') {
+        await addGold(goldEarned);
+        conquerorGoldBonus = goldEarned;
+      }
+
+      const quizGoldDelta = goldEarned + boostGoldBonus + conquerorGoldBonus + potionGoldBonus;
       const totalGoldDelta = quizGoldDelta + levelUpGoldBonus;
 
       if (quizType === 'millionaire' && goldEarned > 0) {
@@ -476,17 +536,24 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
       }
 
       setDisplayGoldGain(quizGoldDelta > 0 ? quizGoldDelta : 0);
+      if (!DEV_MODE && (potionGoldBonus > 0 || effectiveXp > baseEffectiveXp)) {
+        await refreshProfile().catch(() => {});
+      }
 
+      if (isUnmountedRef.current) return;
       await playResultSound(millionairePerfectWin);
+      if (isUnmountedRef.current) return;
       await animateXpDelta(effectiveXp, levelUpGoldBonus, () => {
         setDisplayGoldGain((prev) => prev + levelUpGoldBonus);
       });
+      if (isUnmountedRef.current) return;
 
       if (effectiveXp > 0) {
         playPurchase();
       }
 
       await animateGoldDelta(totalGoldDelta);
+      if (isUnmountedRef.current) return;
 
       if (totalGoldDelta > 0) {
         playPurchase();
@@ -496,26 +563,26 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
     const isBoostOfferQuiz = ['flag', 'shape', 'capitals', 'borders', 'trail'].includes(quizType);
     if (isBoostOfferQuiz && !nextQuizBoostActive && Math.random() < 0.07) {
       showAlert({
-        title: 'Double Rewards Next Quiz?',
-        message: 'Watch one ad now to get x2 Gold + x2 XP on your next quiz.',
+        title: t('results.doubleRewardsTitle'),
+        message: t('results.doubleRewardsBody'),
         buttons: [
           {
-            text: 'Watch Ad',
+            text: t('results.watchAdBtn'),
             style: 'cta',
             onPress: async () => {
               const adResult = await showRewardedAd();
               if (!adResult.rewarded) {
-                showAlert({ title: 'Ad Unavailable', message: `Could not load an ad right now. Try again later.\n\n[${adResult.reason ?? 'unknown'}${adResult.errorCode ? ` · ${adResult.errorCode}` : ''}${adResult.errorMessage ? `\n${adResult.errorMessage}` : ''}]` });
+                showAlert({ title: t('results.adUnavailableTitle'), message: `Could not load an ad right now. Try again later.\n\n[${adResult.reason ?? 'unknown'}${adResult.errorCode ? ` · ${adResult.errorCode}` : ''}${adResult.errorMessage ? `\n${adResult.errorMessage}` : ''}]` });
                 return;
               }
               await setNextQuizBoostActive(true);
               showToast({
-                title: 'Boost Ready',
-                message: 'Your next quiz rewards will be doubled.',
+                title: t('results.boostReady'),
+                message: t('results.boostReadyMsg'),
               });
             },
           },
-          { text: 'Not now', style: 'cancel' },
+          { text: t('results.notNow'), style: 'cancel' },
         ],
       });
     }
@@ -557,6 +624,7 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
     else if (quizType === 'trail') navigation.replace('TrailQuiz' as any);
     else if (quizType === 'nightmare') navigation.replace('NightmareQuiz' as any);
     else if (quizType === 'gauntlet') navigation.replace('Gauntlet' as any);
+    else if (quizType === 'draw') navigation.replace('BorderDrawQuiz' as any);
   }
 
   async function handleWatchAdForMap() {
@@ -564,7 +632,7 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
     try {
       const adResult = await showRewardedAd();
       if (!adResult.rewarded) {
-        showAlert({ title: 'Ad Unavailable', message: `Could not load a rewarded ad right now. Please try again.\n\n[${adResult.reason ?? 'unknown'}${adResult.errorCode ? ` · ${adResult.errorCode}` : ''}${adResult.errorMessage ? `\n${adResult.errorMessage}` : ''}]` });
+        showAlert({ title: t('results.adUnavailableTitle'), message: `Could not load a rewarded ad right now. Please try again.\n\n[${adResult.reason ?? 'unknown'}${adResult.errorCode ? ` · ${adResult.errorCode}` : ''}${adResult.errorMessage ? `\n${adResult.errorMessage}` : ''}]` });
         return;
       }
       await grantAdMap();
@@ -574,7 +642,7 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
         startQuiz();
       }
     } catch (err: any) {
-      showAlert({ title: 'Error', message: err.message });
+      showAlert({ title: t('common.error'), message: err.message });
     } finally {
       setMapsActionLoading(false);
     }
@@ -628,7 +696,7 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
   const showGoldTransfer = displayGoldGain !== 0;
 
   return (
-    <View style={[styles.container, isNightmare && styles.containerNightmare, isGauntlet && tierBg && { backgroundColor: tierBg }]}>
+    <ScrollView style={{ flex: 1, backgroundColor: isNightmare ? '#0d0000' : isGauntlet && tierBg ? tierBg : '#0a0a1a' }} contentContainerStyle={[styles.container, { flex: undefined, flexGrow: 1 }, isNightmare && styles.containerNightmare, isGauntlet && tierBg && { backgroundColor: tierBg }]}>
       {tierLabel === 'ETERNITY' && (
         <>
           <Animated.View pointerEvents="none" style={{ position: 'absolute', left: -SCREEN_W * 0.1, top: -SCREEN_H * 0.1, width: SCREEN_W * 1.2, height: SCREEN_H * 1.2, borderRadius: SCREEN_W * 0.6, backgroundColor: '#fbbf24', opacity: eternityGlowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.04, 0.10] }) }} />
@@ -663,63 +731,31 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
 
       <ViewShot ref={cardCaptureRef} style={[styles.card, isNightmare && styles.cardNightmare, isGauntlet && tierAccent && { backgroundColor: tierAccent + '12', borderColor: tierAccent + '44' }]}>
         {isGauntlet
-          ? <Row label="Score" value={`${score}`} highlight />
-          : <Row label="Score" value={`${percentage}%`} />
+          ? <Row label={t('results.score')} value={`${score}`} highlight />
+          : <Row label={t('results.score')} value={`${percentage}%`} />
         }
 
         {elapsedSeconds != null && (
           <Row
-            label="Total Time"
+            label={t('results.totalTime')}
             value={`⏱ ${String(Math.floor(elapsedSeconds / 60)).padStart(2, '0')}:${String(elapsedSeconds % 60).padStart(2, '0')}`}
           />
         )}
 
-        {xpEarned > 0 && !(isNightmare && percentage < 100) && <Row label="XP Earned" value={`+${xpEarned} XP`} xpTier={xpTier} />}
-        {boostApplied && <Row label="Boost" value="x2 Applied" highlight />}
-
-        {!(isNightmare && percentage < 100) && <View style={styles.xpProgressSection}>
-          <View style={styles.xpProgressHeader}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              {profile?.avatar_emoji ? (
-                <AvatarDisplay
-                  avatarId={profile.avatar_emoji}
-                  avatarFlag={profile.avatar_flag ?? undefined}
-                  size={28}
-                  isConqueror={profile.is_conquerer ?? false}
-                />
-              ) : null}
-              <Text style={styles.rowLabel}>Level {animatedLevelInfo.level}</Text>
-            </View>
-            <Text style={styles.rowValueSmall}>
-              {animatedLevelInfo.xpIntoLevel} / {animatedLevelInfo.xpForNextLevel || 0} XP
-            </Text>
-          </View>
-
-          <View style={styles.xpProgressTrack}>
-            <View style={[styles.xpProgressFill, { width: `${xpProgressPct}%` as any, backgroundColor: xpProgressFillColor }]} />
-          </View>
-
-          <Animated.View style={[styles.levelBonusChip, { opacity: levelBonusOpacity, transform: [{ scale: levelBonusScale }] }]}>
-            <Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 14, height: 14 }} resizeMode="contain" />
-            <Text style={styles.levelBonusChipText}>Level-Up Bonus +{levelBonusGold.toLocaleString()}</Text>
-          </Animated.View>
-
-          {showCoinBurst && <CoinBurst key={coinBurstNonce} />}
-        </View>}
 
         {isNightmare ? (
           <View style={styles.nightmareGoldPanel}>
             <View style={styles.nightmareGoldHeaderRow}>
               <Image source={require('../../assets/avatars/demon.png')} style={{ width: 16, height: 16 }} resizeMode="contain" />
               <Text style={[styles.nightmareGoldTag, goldEarned < 0 ? styles.nightmareGoldTagPenalty : styles.nightmareGoldTagReward]}>
-                {goldEarned < 0 ? 'PENALTY' : 'REWARD'}
+                {goldEarned < 0 ? t('results.penalty') : t('results.reward')}
               </Text>
             </View>
             <Text style={[styles.nightmareGoldAmount, goldEarned < 0 ? styles.nightmareGoldAmountPenalty : styles.nightmareGoldAmountReward]}>
               {goldEarned > 0 ? '+' : ''}{goldEarned.toLocaleString()}
             </Text>
             <View style={styles.nightmareGoldBalanceRow}>
-              <Text style={styles.nightmareGoldBalanceLabel}>Balance</Text>
+              <Text style={styles.nightmareGoldBalanceLabel}>{t('results.balance')}</Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                 <Text style={styles.nightmareGoldBalanceValue}>{displayGoldTotal.toLocaleString()}</Text>
                 <Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 13, height: 13 }} resizeMode="contain" />
@@ -728,7 +764,7 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
           </View>
         ) : (
           <Row
-            label="Gold"
+            label={t('results.gold')}
             valueNode={
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
                 {showGoldTransfer && displayGoldGain < 0 ? (
@@ -759,6 +795,53 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
             }
           />
         )}
+        {xpEarned > 0 && !(isNightmare && percentage < 100) && (
+          <Row
+            label={t('results.xpEarned')}
+            valueNode={<XpAmount amount={xpEarned} prefix="+" iconSize={16} textStyle={[styles.rowValue, xpTier === 2 ? styles.rowValueXp2 : xpTier === 1.5 ? styles.rowValueXp15 : styles.rowValueXp1]} />}
+          />
+        )}
+        {boostApplied && <Row label={t('results.boost')} value={t('results.x2Applied')} highlight />}
+
+        {!(isNightmare && percentage < 100) && <View style={styles.xpProgressSection}>
+          <View style={styles.xpProgressHeader}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              {profile?.avatar_emoji ? (
+                <AvatarDisplay
+                  avatarId={profile.avatar_emoji}
+                  avatarFlag={profile.avatar_flag ?? undefined}
+                  size={28}
+                  isConqueror={profile.is_conquerer ?? false}
+                />
+              ) : null}
+              <Text style={styles.rowLabel}>{t('results.level', { n: animatedLevelInfo.level })}</Text>
+            </View>
+            <XpAmount
+              amount={`${animatedLevelInfo.xpIntoLevel} / ${animatedLevelInfo.xpForNextLevel || 0}`}
+              iconSize={13}
+              textStyle={styles.rowValueSmall}
+            />
+          </View>
+
+          <View style={styles.xpProgressTrack}>
+            <View style={[styles.xpProgressFill, { width: `${xpProgressPct}%` as any, backgroundColor: xpProgressFillColor }]} />
+          </View>
+
+          <Animated.View style={[styles.levelBonusChip, { opacity: levelBonusOpacity, transform: [{ scale: levelBonusScale }] }]}>
+            <Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 14, height: 14 }} resizeMode="contain" />
+            <Text style={styles.levelBonusChipText}>{t('results.levelUpBonus', { bonus: levelBonusGold.toLocaleString() })}</Text>
+          </Animated.View>
+
+          {showCoinBurst && <CoinBurst key={coinBurstNonce} />}
+        </View>}
+        {potionsUsed.length > 0 && <View style={{ marginTop: 12, gap: 8 }}>
+          <Text style={styles.rowLabel}>{t('results.potionsUsed')}</Text>
+          {potionsUsed.map(p => <View key={`${p.kind}:${p.boost_percent}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Image source={p.boost_percent >= 200 ? MYTHIC_REWARD_IMAGES[p.kind] : REWARD_IMAGES[p.kind]} style={{ width: 32, height: 36 }} resizeMode="contain" />
+            <View style={{ flex: 1 }}><Text style={styles.rowLabel}>{p.boost_percent >= 200 ? 'Mythic' : 'Regular'} {p.kind === 'xp_potion' ? 'XP' : 'Gold'} · +{p.boost_percent}%</Text><Text style={styles.rowValueSmall}>+{(p.bonus ?? 0).toLocaleString()} {p.kind === 'xp_potion' ? 'XP' : 'gold'} · 1 use consumed · {p.remaining} left</Text></View>
+          </View>)}
+        </View>}
+        {!!potionSyncError && <Text accessibilityRole="alert" style={{ color: '#ffaaaa', marginTop: 10, textAlign: 'center' }}>{potionSyncError}</Text>}
       </ViewShot>
 
       {/* Hidden capture card for sharing only (not shown in summary UI) */}
@@ -781,12 +864,10 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
           </View>
           <View style={styles.shareCaptureHeader}>
             <Image source={shareQuizIcon} style={styles.shareCaptureIcon} resizeMode="contain" />
-            <Text style={styles.shareCaptureHeadline}>
-              This is how much I scored in the quiz,{'\n'}think you can do better?
-            </Text>
+            <Text style={styles.shareCaptureHeadline}>{t('results.shareHeadline')}</Text>
           </View>
           <View style={styles.shareCaptureStoreRow}>
-            <Text style={styles.shareCaptureStoreText}>Download Geo Conquest</Text>
+            <Text style={styles.shareCaptureStoreText}>{t('results.shareDownload')}</Text>
           </View>
           <Image source={shareBadgeSource} style={styles.shareCaptureHero} resizeMode="contain" />
           <Text style={styles.shareCaptureQuiz}>{QUIZ_LABELS[quizType] ?? quizType}</Text>
@@ -801,19 +882,19 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
             if (tickets < 1) {
               showAlert({
                 variant: 'ticket',
-                title: 'No Tickets',
-                message: 'You need at least 1 ticket to play again.\n\nEarn tickets from daily rewards or buy them in Shop → Items.',
+                title: t('maps.noTickets'),
+                message: t('results.noTicketsPlayMsg'),
               });
               return;
             }
 
             showAlert({
               variant: 'ticket',
-              title: 'Play Again?',
-              message: `This will cost 1 ticket. You have ${tickets} ticket${tickets !== 1 ? 's' : ''}.`,
+              title: t('maps.playAgainPrompt'),
+              message: t('results.ticketCostMsg', { n: tickets, s: tickets !== 1 ? 's' : '' }),
               buttons: [
-                { text: 'Play', style: 'cta', onPress: () => navigation.replace('MillionaireQuiz' as any) },
-                { text: 'Cancel', style: 'cancel' },
+                { text: t('results.play'), style: 'cta', onPress: () => navigation.replace('MillionaireQuiz' as any) },
+                { text: t('results.cancelBtn'), style: 'cancel' },
               ],
             });
             return;
@@ -833,16 +914,16 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
           startQuiz();
         }}
       >
-        <Text style={styles.playAgainText}>Play Again</Text>
+        <Text style={styles.playAgainText}>{t('results.playAgain')}</Text>
       </TouchableOpacity>
 
       <View style={styles.bottomRow}>
         <TouchableOpacity style={[styles.menuButton, { flex: 1 }]} onPress={() => navigation.popToTop()}>
-          <Text style={styles.menuText}>Back to Quizzes</Text>
+          <Text style={styles.menuText}>{t('results.backToQuizzes')}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={[styles.shareButton, { flex: 1 }]} onPress={handleShare}>
-          <Text style={styles.shareText}>Share Result</Text>
+          <Text style={styles.shareText}>{t('results.shareResult')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -852,7 +933,7 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
       <Modal visible={showMapsModal} animationType="fade" transparent statusBarTranslucent onRequestClose={() => setShowMapsModal(false)}>
         <TouchableOpacity style={styles.mapsModalOverlay} activeOpacity={1} onPress={() => setShowMapsModal(false)}>
           <View style={styles.mapsModalContainer} onStartShouldSetResponder={() => true}>
-            <Text style={styles.mapsModalTitle}>Out of Maps!</Text>
+            <Text style={styles.mapsModalTitle}>{t('maps.outOfMaps')}</Text>
 
             {mapsRemainingSeconds > 0 && (
               <View style={{ alignItems: 'center', marginBottom: 12 }}>
@@ -866,7 +947,7 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
               </View>
             )}
 
-            <Text style={styles.mapsModalSubtext}>Maps refill 1 every 60 minutes.</Text>
+            <Text style={styles.mapsModalSubtext}>{t('maps.refillRate')}</Text>
 
             <TouchableOpacity
               style={styles.mapsModalCard}
@@ -875,11 +956,11 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
             >
               <Image source={require('../../assets/avatars/conqueror.png')} style={{ width: 72, height: 72, margin: -8 }} resizeMode="contain" />
               <View style={styles.mapsModalCardInfo}>
-                <Text style={[styles.mapsModalCardTitle, { fontSize: 12 }]} numberOfLines={1}>Become a Conqueror</Text>
-                <Text style={styles.mapsModalCardDesc}>Unlimited maps — never wait again</Text>
+                <Text style={[styles.mapsModalCardTitle, { fontSize: 12 }]} numberOfLines={1}>{t('maps.becomeConqueror')}</Text>
+                <Text style={styles.mapsModalCardDesc}>{t('maps.unlimitedMaps')}</Text>
               </View>
               <View style={[styles.mapsModalBadge, { backgroundColor: '#3a1a5a', borderColor: '#9b59b6' }]}>
-                <Text style={[styles.mapsModalBadgeText, { color: '#c084fc' }]}>Go</Text>
+                <Text style={[styles.mapsModalBadgeText, { color: '#c084fc' }]}>{t('results.go')}</Text>
               </View>
             </TouchableOpacity>
 
@@ -891,20 +972,20 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
             >
               <Image source={require('../../assets/avatars/star2.png')} style={{ width: 72, height: 72, margin: -8 }} resizeMode="contain" />
               <View style={styles.mapsModalCardInfo}>
-                <Text style={styles.mapsModalCardTitle}>Watch an Ad</Text>
+                <Text style={styles.mapsModalCardTitle}>{t('maps.watchAd')}</Text>
                 <Text style={styles.mapsModalCardDesc}>
                   {(mapsAdsUsedToday ?? 0) >= MAX_ADS_PER_DAY
-                    ? 'Come back tomorrow'
-                    : `Get 1 map · ${MAX_ADS_PER_DAY - (mapsAdsUsedToday ?? 0)} left today`}
+                    ? t('maps.comeBackTomorrow')
+                    : t('maps.getMap', { left: MAX_ADS_PER_DAY - (mapsAdsUsedToday ?? 0) })}
                 </Text>
               </View>
               <View style={[styles.mapsModalBadge, { backgroundColor: '#302a10', borderColor: '#FFD700' }]}>
-                <Text style={styles.mapsModalBadgeText}>Watch</Text>
+                <Text style={styles.mapsModalBadgeText}>{t('results.watch')}</Text>
               </View>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.mapsModalCancel} onPress={() => setShowMapsModal(false)}>
-              <Text style={styles.mapsModalCancelText}>Wait</Text>
+              <Text style={styles.mapsModalCancelText}>{t('maps.wait')}</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
@@ -916,13 +997,12 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
           pointerEvents="none"
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <Text style={styles.levelUpText}>Level Up — Level {levelUpTo}  (+{levelUpTo * 20}</Text>
+            <Text style={styles.levelUpText}>{t('results.levelUpTitle', { n: levelUpTo, bonus: levelUpTo * 20 })}</Text>
             <Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 14, height: 14 }} resizeMode="contain" />
-            <Text style={styles.levelUpText}>)</Text>
           </View>
         </Animated.View>
       )}
-    </View>
+    </ScrollView>
   );
 }
 
@@ -952,7 +1032,7 @@ function Row({
   );
 }
 
-function CoinBurst() {
+const CoinBurst = React.memo(function CoinBurst() {
   const progress = useRef(new Animated.Value(0)).current;
   const fade = useRef(new Animated.Value(1)).current;
 
@@ -1000,7 +1080,7 @@ function CoinBurst() {
       })}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {
