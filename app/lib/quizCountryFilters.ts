@@ -1,7 +1,8 @@
 import { Country } from '../types';
 import { hasCountryShape } from '../components/CountryShapeView';
+import { QUIZ_EXCLUDED_CCA2, isQuizEligibleCca2 } from './countryExclusions';
 
-export const QUIZ_EXCLUDED_CCA2 = new Set<string>(['PS']);
+export { QUIZ_EXCLUDED_CCA2 };
 
 // Some territories technically exist in the atlas dataset but still render badly
 // or not at all in the silhouette quiz flow.
@@ -12,7 +13,7 @@ export const SHAPE_QUESTION_EXCLUDED_CCA2 = new Set<string>([
 ]);
 
 export function isQuizEligibleCountry(country: Country): boolean {
-  return !QUIZ_EXCLUDED_CCA2.has(country.cca2);
+  return isQuizEligibleCca2(country.cca2);
 }
 
 export function isShapeQuizEligibleCountry(country: Country): boolean {

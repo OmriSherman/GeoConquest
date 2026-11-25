@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { Country, getCountryPrice } from '../types';
 import { fetchCountries } from '../lib/countryData';
+import { t } from '../lib/i18n';
 import { useGame } from '../context/GameContext';
 import CountryTile from '../components/CountryTile';
 import GoldDisplay from '../components/GoldDisplay';
@@ -30,30 +31,30 @@ export default function WorldMapScreen() {
     const price = getCountryPrice(country.area);
 
     if (isOwned(country.cca2)) {
-      Alert.alert(country.name, 'You already own this country!');
+      Alert.alert(country.name, t('worldMap.alreadyOwned'));
       return;
     }
     if (!canAfford(price)) {
       Alert.alert(
-        'Not enough Gold',
-        `You need ${price} Gold to purchase ${country.name}.`
+        t('worldMap.notEnoughGold'),
+        t('worldMap.notEnoughGoldBody', { cost: price, country: country.name }),
       );
       return;
     }
 
     Alert.alert(
-      `Purchase ${country.name}?`,
-      `This will cost ${price} Gold.`,
+      t('worldMap.purchaseTitle', { country: country.name }),
+      t('worldMap.purchaseBody', { country: country.name, cost: price }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('worldMap.cancel'), style: 'cancel' },
         {
-          text: 'Buy',
+          text: t('worldMap.confirm'),
           onPress: async () => {
             try {
               await purchaseCountry(country);
-              Alert.alert('Success!', `You now own ${country.name}! 🎉`);
+              Alert.alert(t('worldMap.successTitle'), t('worldMap.success', { country: country.name }));
             } catch (err: any) {
-              Alert.alert('Error', err.message ?? 'Purchase failed');
+              Alert.alert(t('worldMap.error'), err.message ?? 'Purchase failed');
             }
           },
         },
@@ -65,7 +66,7 @@ export default function WorldMapScreen() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#FFD700" />
-        <Text style={styles.loadingText}>Loading countries…</Text>
+        <Text style={styles.loadingText}>{t('worldMap.loading')}</Text>
       </View>
     );
   }
@@ -82,8 +83,8 @@ export default function WorldMapScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.title}>World Map</Text>
-          <Text style={styles.subtitle}>{countries.length} countries to conquer</Text>
+          <Text style={styles.title}>{t('worldMap.title')}</Text>
+          <Text style={styles.subtitle}>{t('worldMap.subtitle', { n: countries.length })}</Text>
         </View>
         <GoldDisplay />
       </View>

@@ -1,6 +1,7 @@
 import { Country, MillionaireQuestion, MILLIONAIRE_GOLD_LADDER } from '../types';
 import { getCca3ToCca2Map } from './countryData';
 import { isShapeQuizEligibleCountry } from './quizCountryFilters';
+import { isQuizEligibleCca2 } from './countryExclusions';
 
 // ─── Difficulty Tiers ─────────────────────────────────────────────────────────
 
@@ -52,7 +53,7 @@ export function getSmartDistractors(
 ): Country[] {
   const excludeSet = new Set([correct.cca2, ...exclude.map((c) => c.cca2)]);
 
-  let pool = all.filter((c) => !excludeSet.has(c.cca2));
+  let pool = all.filter((c) => isQuizEligibleCca2(c.cca2) && !excludeSet.has(c.cca2));
 
   if (difficulty >= 4) {
     const sameRegion = pool.filter((c) => c.region === correct.region);
@@ -127,7 +128,7 @@ export function buildBorderYesQuestion(
   if (country.borders.length === 0) return null;
 
   const cca3Map = getCca3ToCca2Map();
-  const neighborCca2s = country.borders.map((b) => cca3Map[b]).filter(Boolean);
+  const neighborCca2s = country.borders.map((b) => cca3Map[b]).filter((cca2): cca2 is string => !!cca2 && isQuizEligibleCca2(cca2));
   if (neighborCca2s.length === 0) return null;
 
   const randomNeighborCca2 = neighborCca2s[Math.floor(Math.random() * neighborCca2s.length)];
@@ -164,7 +165,7 @@ export function buildBorderNoQuestion(
   if (country.borders.length === 0) return null;
 
   const cca3Map = getCca3ToCca2Map();
-  const neighborCca2s = country.borders.map((b) => cca3Map[b]).filter(Boolean);
+  const neighborCca2s = country.borders.map((b) => cca3Map[b]).filter((cca2): cca2 is string => !!cca2 && isQuizEligibleCca2(cca2));
   if (neighborCca2s.length < 3) return null;
 
   const validNeighbors = all.filter((c) => neighborCca2s.includes(c.cca2));
@@ -222,6 +223,107 @@ export function buildAreaQuestion(
   };
 }
 
+export function buildCapitalReverseQuestion(
+  country: Country,
+  all: Country[],
+  difficulty: number,
+  goldReward: number,
+): MillionaireQuestion | null {
+  if (!country.capital) return null;
+
+  const withCapital = all.filter((c) => c.capital && c.cca2 !== country.cca2);
+  const distractors = getSmartDistractors(country, withCapital, difficulty, 3);
+  if (distractors.length < 3 || distractors.some((d) => !d.capital)) return null;
+
+  const optionCountries = [...distractors, country].sort(() => Math.random() - 0.5);
+  const correctIndex = optionCountries.findIndex((c) => c.cca2 === country.cca2);
+
+  return {
+    type: 'capital_reverse',
+    difficulty,
+    questionText: `What is the capital of ${country.name}?`,
+    subjectCountry: country,
+    options: optionCountries.map((c) => c.capital!),
+    optionCountries,
+    correctIndex,
+    flagUrl: country.flagUrl,
+    goldReward,
+  };
+}
+
+export function buildFlagReverseQuestion(
+  country: Country,
+  all: Country[],
+  difficulty: number,
+  goldReward: number,
+): MillionaireQuestion {
+  const distractors = getSmartDistractors(country, all, difficulty, 3);
+  const optionCountries = [...distractors, country].sort(() => Math.random() - 0.5);
+  const correctIndex = optionCountries.findIndex((o) => o.cca2 === country.cca2);
+
+  return {
+    type: 'flag_reverse',
+    difficulty,
+    questionText: `Which of these is the flag of ${country.name}?`,
+    subjectCountry: country,
+    options: optionCountries.map((c) => c.name),
+    optionCountries,
+    correctIndex,
+    goldReward,
+  };
+}
+
+export function buildShapeReverseQuestion(
+  country: Country,
+  all: Country[],
+  difficulty: number,
+  goldReward: number,
+): MillionaireQuestion | null {
+  if (country.area <= 1000) return null;
+
+  const validDistractors = all.filter((c) => c.area > 1000);
+  const distractors = getSmartDistractors(country, validDistractors, difficulty, 3);
+  if (distractors.length < 3) return null;
+
+  const optionCountries = [...distractors, country].sort(() => Math.random() - 0.5);
+  const correctIndex = optionCountries.findIndex((o) => o.cca2 === country.cca2);
+
+  return {
+    type: 'shape_reverse',
+    difficulty,
+    questionText: `Which of these is the shape of ${country.name}?`,
+    subjectCountry: country,
+    options: optionCountries.map((c) => c.name),
+    optionCountries,
+    correctIndex,
+    goldReward,
+  };
+}
+
+function buildAnyReverseQuestion(
+  country: Country,
+  all: Country[],
+  difficulty: number,
+  goldReward: number,
+): MillionaireQuestion | null {
+  const builders: Array<() => MillionaireQuestion | null> = [
+    () => buildFlagReverseQuestion(country, all, difficulty, goldReward),
+  ];
+  if (country.capital) {
+    builders.push(() => buildCapitalReverseQuestion(country, all, difficulty, goldReward));
+  }
+  if (country.area > 1000) {
+    builders.push(() => buildShapeReverseQuestion(country, all, difficulty, goldReward));
+  }
+
+  const shuffled = [...builders].sort(() => Math.random() - 0.5);
+  for (const build of shuffled) {
+    const q = build();
+    if (q) return q;
+  }
+  return null;
+}
+
 export function buildShapeQuestion(
   country: Country,
   all: Country[],
@@ -262,18 +364,18 @@ interface SlotPlan {
 }
 
 const SLOT_PLANS: SlotPlan[] = [
-  { minDiff: 1, maxDiff: 2, types: ['flag', 'shape'] },          // Q1
-  { minDiff: 1, maxDiff: 2, types: ['shape', 'flag'] },          // Q2
-  { minDiff: 2, maxDiff: 3, types: ['flag', 'shape'] },          // Q3
-  { minDiff: 3, maxDiff: 4, types: ['shape', 'flag', 'capital'] }, // Q4
-  { minDiff: 3, maxDiff: 4, types: ['flag', 'shape', 'capital'] }, // Q5
-  { minDiff: 4, maxDiff: 5, types: ['shape', 'flag', 'capital'] }, // Q6
-  { minDiff: 5, maxDiff: 6, types: ['shape', 'capital', 'border_yes', 'border_no'] }, // Q7
-  { minDiff: 5, maxDiff: 6, types: ['capital', 'shape', 'border_yes', 'border_no'] }, // Q8
-  { minDiff: 6, maxDiff: 7, types: ['shape', 'capital', 'border_yes', 'border_no'] }, // Q9
-  { minDiff: 7, maxDiff: 8, types: ['shape', 'flag', 'border_yes', 'capital', 'border_no'] }, // Q10
-  { minDiff: 7, maxDiff: 8, types: ['flag', 'shape', 'border_yes', 'capital', 'border_no'] }, // Q11
-  { minDiff: 8, maxDiff: 9, types: ['shape', 'flag', 'border_yes', 'capital', 'border_no'] }, // Q12
+  { minDiff: 1, maxDiff: 2, types: ['flag', 'shape'] },                                    // Q1
+  { minDiff: 1, maxDiff: 2, types: ['shape', 'flag'] },                                    // Q2
+  { minDiff: 2, maxDiff: 3, types: ['flag', 'shape'] },                                    // Q3
+  { minDiff: 3, maxDiff: 4, types: ['shape', 'flag', 'capital'] },                         // Q4
+  { minDiff: 3, maxDiff: 4, types: ['flag', 'shape', 'capital'] },                         // Q5
+  { minDiff: 4, maxDiff: 5, types: ['shape', 'flag', 'capital'] },                         // Q6
+  { minDiff: 5, maxDiff: 6, types: ['shape', 'capital', 'border_yes', 'border_no'] },      // Q7
+  { minDiff: 5, maxDiff: 6, types: ['capital', 'shape', 'border_yes', 'border_no'] },      // Q8
+  { minDiff: 6, maxDiff: 7, types: ['shape', 'capital', 'border_yes', 'border_no'] },      // Q9
+  { minDiff: 7, maxDiff: 8, types: ['shape', 'flag', 'border_yes', 'capital', 'border_no'] },  // Q10
+  { minDiff: 7, maxDiff: 8, types: ['flag', 'shape', 'border_yes', 'capital', 'border_no'] },  // Q11
+  { minDiff: 8, maxDiff: 9, types: ['shape', 'flag', 'border_yes', 'capital', 'border_no'] },  // Q12
   { minDiff: 9, maxDiff: 10, types: ['shape', 'flag', 'border_yes', 'capital', 'border_no'] }, // Q13
   { minDiff: 9, maxDiff: 10, types: ['flag', 'shape', 'border_yes', 'capital', 'border_no'] }, // Q14
   { minDiff: 9, maxDiff: 10, types: ['shape', 'flag', 'border_yes', 'capital', 'border_no'] }, // Q15
@@ -284,6 +386,7 @@ export function buildSingleMillionaireQuestion(
   usedCca2: Set<string>,
   buckets: Record<number, Country[]>
 ): MillionaireQuestion {
+  all = all.filter((c) => isQuizEligibleCca2(c.cca2));
   const plan = SLOT_PLANS[index];
   const goldReward = MILLIONAIRE_GOLD_LADDER[index];
   const typeChoices = [...plan.types].sort(() => Math.random() - 0.5);
@@ -337,16 +440,25 @@ export function buildSingleMillionaireQuestion(
   }
 
   if (!question) {
-    const fallbackPool = all.filter((c) => !usedCca2.has(c.cca2));
+    const fallbackPool = all.filter((c) => isQuizEligibleCca2(c.cca2) && !usedCca2.has(c.cca2));
     const fallback = fallbackPool[Math.floor(Math.random() * fallbackPool.length)] ?? all[index % all.length];
     question = buildFlagQuestion(fallback, all, plan.minDiff, goldReward);
     usedCca2.add(fallback.cca2);
+  }
+
+  // 50% chance of flipping to a reverse question from Q3 onwards
+  if (index >= 2 && Math.random() < 0.50) {
+    const reversed = buildAnyReverseQuestion(
+      question.subjectCountry, all, question.difficulty, goldReward,
+    );
+    if (reversed) question = reversed;
   }
 
   return question;
 }
 
 export function buildMillionaireQuestions(all: Country[]): MillionaireQuestion[] {
+  all = all.filter((c) => isQuizEligibleCca2(c.cca2));
   // Pre-compute difficulties
   const withDiff = all.map((c) => ({ country: c, diff: getCountryDifficulty(c) }));
 
@@ -376,7 +488,7 @@ function getCandidatesFromBuckets(
     const candidates: Country[] = [];
     for (let d = Math.max(1, targetDiff - radius); d <= Math.min(10, targetDiff + radius); d++) {
       for (const c of buckets[d]) {
-        if (!used.has(c.cca2)) candidates.push(c);
+        if (isQuizEligibleCca2(c.cca2) && !used.has(c.cca2)) candidates.push(c);
       }
     }
     if (candidates.length >= count) {
@@ -391,6 +503,7 @@ function getCandidatesFromBuckets(
  * 10 questions at difficulty 10, no repeats, randomly choosing types.
  */
 export function buildNightmareQuestions(all: Country[]): MillionaireQuestion[] {
+  all = all.filter((c) => isQuizEligibleCca2(c.cca2));
   const withDiff = all.map((c) => ({ country: c, diff: getCountryDifficulty(c) }));
 
   const buckets: Record<number, Country[]> = {};
@@ -416,7 +529,7 @@ export function buildNightmareQuestions(all: Country[]): MillionaireQuestion[] {
   for (let i = 0; i < 10; i++) {
     const typeChoices = [...types].sort(() => Math.random() - 0.5);
     let question: MillionaireQuestion | null = null;
-    const diff = 10;
+    const diff = 8 + Math.floor(Math.random() * 3); // 8, 9, or 10
 
     for (const type of typeChoices) {
       if (type === 'flag') {

@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import {
   Alert,
+  Dimensions,
   FlatList,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   Text,
   TextInput,
   TouchableOpacity,
@@ -13,6 +16,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AvatarDisplay from '../components/AvatarDisplay';
 import { useAuth } from '../context/AuthContext';
+import { t } from '../lib/i18n';
+import { getDisplayFlagEmoji } from '../lib/flagDisplay';
 import { supabase } from '../lib/supabase';
 import {
   ONBOARDING_AVATARS,
@@ -35,6 +40,13 @@ function flagEmojiToCca2(emoji: string): string | null {
   } catch {}
   return null;
 }
+
+const FLAG_PADDING = 20;
+const FLAG_GAP = 8;
+const FLAG_MIN_SIZE = 52;
+const screenWidth = Dimensions.get('window').width;
+const FLAG_COLUMNS = Math.floor((screenWidth - FLAG_PADDING * 2 + FLAG_GAP) / (FLAG_MIN_SIZE + FLAG_GAP));
+const FLAG_ITEM_SIZE = (screenWidth - FLAG_PADDING * 2 - FLAG_GAP * (FLAG_COLUMNS - 1)) / FLAG_COLUMNS;
 
 type Step = 'username' | 'avatar' | 'flag';
 
@@ -81,7 +93,7 @@ export default function OnboardingScreen() {
       .limit(1);
 
     if (existing && existing.length > 0) {
-      setUsernameError('This username is already taken');
+      setUsernameError(t('onboarding.usernameTaken'));
       setLoading(false);
       return;
     }
@@ -103,7 +115,7 @@ export default function OnboardingScreen() {
 
     if (code.toLowerCase() === username.trim().toLowerCase()) {
       setReferralStatus('error');
-      setReferralMessage("You can't use your own username as a referral code.");
+      setReferralMessage(t('onboarding.ownUsername'));
       return null;
     }
 
@@ -115,13 +127,13 @@ export default function OnboardingScreen() {
 
     if (error || !data || data.length === 0) {
       setReferralStatus('error');
-      setReferralMessage('Referral code not found. Please check and try again.');
+      setReferralMessage(t('onboarding.referralNotFound'));
       return null;
     }
 
     const canonical = data[0].username as string;
     setReferralStatus('success');
-    setReferralMessage('Referral accepted! You and your friend each get 1,500 gold after your first completed quiz.');
+    setReferralMessage(t('onboarding.referralAccepted'));
     return canonical;
   }
 
@@ -146,7 +158,7 @@ export default function OnboardingScreen() {
       );
       if (code) await AsyncStorage.removeItem('@pending_referral_code');
     } catch (err: any) {
-      Alert.alert('Error', err.message ?? 'Failed to create profile');
+      Alert.alert(t('onboarding.error'), err.message ?? 'Failed to create profile');
     } finally {
       setLoading(false);
     }
@@ -159,6 +171,7 @@ export default function OnboardingScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+      <Pressable style={{ flex: 1 }} onPress={Keyboard.dismiss}>
       <KeyboardAvoidingView
         style={styles.container}
         behavior="padding"
@@ -182,25 +195,23 @@ export default function OnboardingScreen() {
         {step === 'username' && (
           <View style={styles.stepContainerUsername}>
             <Text style={styles.stepEmoji}>🌍</Text>
-            <Text style={styles.stepTitle}>Choose Your Name</Text>
-            <Text style={styles.stepSubtitle}>
-              Pick a unique username for the leaderboard
-            </Text>
+            <Text style={styles.stepTitle}>{t('onboarding.chooseName')}</Text>
+            <Text style={styles.stepSubtitle}>{t('onboarding.usernameSubtitle')}</Text>
 
             <TextInput
               style={[styles.input, usernameError ? styles.inputError : null]}
-              placeholder="Enter your username"
+              placeholder={t('onboarding.enterUsername')}
               placeholderTextColor="#555"
               value={username}
-              onChangeText={(t) => { setUsernameInput(t); setUsernameError(''); }}
+              onChangeText={(val) => { setUsernameInput(val); setUsernameError(''); }}
               autoCapitalize="none"
-              autoFocus
+              autoFocus={false}
               maxLength={20}
             />
             {usernameError ? (
               <Text style={styles.errorText}>{usernameError}</Text>
             ) : (
-              <Text style={styles.hint}>3–20 characters, letters, numbers, underscores</Text>
+              <Text style={styles.hint}>{t('onboarding.usernameHint')}</Text>
             )}
 
             <TouchableOpacity
@@ -209,7 +220,7 @@ export default function OnboardingScreen() {
               disabled={loading}
             >
               <Text style={styles.nextButtonText}>
-                {loading ? 'Checking…' : 'Next →'}
+                {loading ? t('onboarding.checking') : t('onboarding.next')}
               </Text>
             </TouchableOpacity>
           </View>
@@ -219,10 +230,8 @@ export default function OnboardingScreen() {
         {step === 'avatar' && (
           <View style={styles.stepContainer}>
             <AvatarDisplay avatarId={selectedAvatar} size={80} />
-            <Text style={styles.stepTitle}>Choose Your Avatar</Text>
-            <Text style={styles.stepSubtitle}>
-              This will represent you in the game
-            </Text>
+            <Text style={styles.stepTitle}>{t('onboarding.chooseAvatar')}</Text>
+            <Text style={styles.stepSubtitle}>{t('onboarding.avatarSubtitle')}</Text>
 
             <View style={styles.grid}>
               {ONBOARDING_AVATARS.map((av) => (
@@ -234,18 +243,24 @@ export default function OnboardingScreen() {
                   ]}
                   onPress={() => setSelectedAvatar(av.emoji)}
                 >
-                  <AvatarDisplay avatarId={av.emoji} size={52} />
+                  <View style={{ flex: 1, justifyContent: 'center', marginTop: -10 }}>
+                    <AvatarDisplay avatarId={av.emoji} size={100} />
+                  </View>
                   <Text style={styles.gridLabel}>{av.label}</Text>
                 </TouchableOpacity>
               ))}
             </View>
 
+            <Text style={{ color: '#666', fontSize: 11, textAlign: 'center', marginTop: 4 }}>
+              {t('onboarding.avatarHint')}
+            </Text>
+
             <View style={styles.navRow}>
               <TouchableOpacity style={styles.backButton} onPress={() => setStep('username')}>
-                <Text style={styles.backButtonText}>← Back</Text>
+                <Text style={styles.backButtonText}>{t('onboarding.back')}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.nextButton, styles.navNextButton]} onPress={() => setStep('flag')}>
-                <Text style={styles.nextButtonText}>Next →</Text>
+                <Text style={styles.nextButtonText}>{t('onboarding.next')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -255,15 +270,13 @@ export default function OnboardingScreen() {
         {step === 'flag' && (
           <View style={styles.stepContainerFull}>
             <AvatarDisplay avatarId={selectedAvatar} avatarFlag={selectedFlag} size={80} />
-            <Text style={styles.stepTitle}>Choose Your Flag</Text>
-            <Text style={styles.stepSubtitle}>
-              Pick your country's flag to fly beside your avatar
-            </Text>
+            <Text style={styles.stepTitle}>{t('onboarding.chooseFlag')}</Text>
+            <Text style={styles.stepSubtitle}>{t('onboarding.flagSubtitle')}</Text>
 
             {/* Search */}
             <TextInput
               style={styles.searchInput}
-              placeholder="Search country…"
+              placeholder={t('onboarding.searchCountry')}
               placeholderTextColor="#555"
               value={flagSearch}
               onChangeText={setFlagSearch}
@@ -272,32 +285,34 @@ export default function OnboardingScreen() {
             <FlatList
               data={filteredFlags}
               keyExtractor={(item) => item.emoji + item.label}
-              numColumns={5}
+              numColumns={FLAG_COLUMNS}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.flagGrid}
               style={styles.flagList}
+              columnWrapperStyle={{ gap: FLAG_GAP }}
               renderItem={({ item }) => (
                 <TouchableOpacity
                   style={[
                     styles.flagItem,
+                    { width: FLAG_ITEM_SIZE, height: FLAG_ITEM_SIZE },
                     selectedFlag === item.emoji && styles.flagItemSelected,
                   ]}
                   onPress={() => setSelectedFlag(item.emoji)}
                 >
-                  <Text style={styles.flagEmoji}>{item.emoji}</Text>
+                  <Text style={styles.flagEmoji}>{getDisplayFlagEmoji(item.emoji)}</Text>
                 </TouchableOpacity>
               )}
             />
 
             <View style={styles.navRow}>
               <TouchableOpacity style={styles.backButton} onPress={() => setStep('avatar')}>
-                <Text style={styles.backButtonText}>← Back</Text>
+                <Text style={styles.backButtonText}>{t('onboarding.back')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.nextButton, styles.navNextButton]}
                 onPress={() => setStep('referral')}
               >
-                <Text style={styles.nextButtonText}>Next →</Text>
+                <Text style={styles.nextButtonText}>{t('onboarding.next')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -306,10 +321,8 @@ export default function OnboardingScreen() {
         {step === 'referral' && (
           <View style={styles.stepContainerUsername}>
             <Image source={require('../../assets/avatars/compass.png')} style={{ width: 72, height: 72 }} resizeMode="contain" />
-            <Text style={styles.stepTitle}>Got a Referral Code?</Text>
-            <Text style={styles.stepSubtitle}>
-              If a friend invited you to the conquest, enter their username below.
-            </Text>
+            <Text style={styles.stepTitle}>{t('onboarding.referral')}</Text>
+            <Text style={styles.stepSubtitle}>{t('onboarding.referralSubtitle')}</Text>
 
             <View style={styles.referralRow}>
               <TextInput
@@ -318,7 +331,7 @@ export default function OnboardingScreen() {
                   referralStatus === 'success' && styles.referralInputSuccess,
                   referralStatus === 'error' && styles.referralInputError,
                 ]}
-                placeholder="Referral code (optional)"
+                placeholder={t('onboarding.referralPlaceholder')}
                 placeholderTextColor="#666"
                 value={referralCode}
                 onChangeText={(value) => {
@@ -330,7 +343,7 @@ export default function OnboardingScreen() {
                 maxLength={20}
               />
               <TouchableOpacity style={styles.verifyReferralButton} onPress={verifyReferralCode} disabled={loading}>
-                <Text style={styles.verifyReferralText}>Verify</Text>
+                <Text style={styles.verifyReferralText}>{t('onboarding.verify')}</Text>
               </TouchableOpacity>
             </View>
 
@@ -342,7 +355,7 @@ export default function OnboardingScreen() {
 
             <View style={styles.navRow}>
               <TouchableOpacity style={styles.backButton} onPress={() => setStep('flag')}>
-                <Text style={styles.backButtonText}>← Back</Text>
+                <Text style={styles.backButtonText}>{t('onboarding.back')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.nextButton, styles.navNextButton, loading && styles.buttonDisabled]}
@@ -350,13 +363,14 @@ export default function OnboardingScreen() {
                 disabled={loading}
               >
                 <Text style={styles.nextButtonText}>
-                  {loading ? 'Creating…' : "I'm ready"}
+                  {loading ? t('onboarding.creating') : t('onboarding.imReady')}
                 </Text>
               </TouchableOpacity>
             </View>
           </View>
         )}
       </KeyboardAvoidingView>
+      </Pressable>
     </SafeAreaView>
   );
 }
@@ -451,28 +465,28 @@ const styles = StyleSheet.create({
     width: '100%',
     marginTop: 4,
   },
-  // Avatar grid (2x2 for 4 explorer items)
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
-    gap: 14,
+    gap: 12,
     width: '100%',
   },
   gridItem: {
-    width: 100,
-    height: 110,
+    width: '46%',
+    aspectRatio: 1,
     borderRadius: 16,
     backgroundColor: '#1a1a2e',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-end',
+    paddingBottom: 10,
     borderWidth: 2,
     borderColor: '#2a2a4e',
-    gap: 6,
+    gap: 4,
   },
   gridItemSelected: { borderColor: '#FFD700', backgroundColor: '#1a1a30' },
   gridEmoji: { fontSize: 32 },
-  gridLabel: { color: '#888', fontSize: 11 },
+  gridLabel: { color: '#888', fontSize: 14, fontWeight: '600' },
   // Search
   searchInput: {
     backgroundColor: '#1a1a2e',
@@ -489,13 +503,11 @@ const styles = StyleSheet.create({
   flagList: { width: '100%' },
   flagGrid: { paddingBottom: 4 },
   flagItem: {
-    width: 56,
-    height: 56,
     borderRadius: 14,
     backgroundColor: '#1a1a2e',
     alignItems: 'center',
     justifyContent: 'center',
-    margin: 4,
+    marginBottom: FLAG_GAP,
     borderWidth: 2,
     borderColor: '#2a2a4e',
   },

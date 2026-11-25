@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useState, useMemo } from 'react';
+import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import {
   ActivityIndicator,
+  Animated,
   FlatList,
   ImageSourcePropType,
   Modal,
@@ -18,7 +19,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import TopFallConfetti from '../components/TopFallConfetti';
-import { getRewardedAdFailureHint, showRewardedAd } from '../lib/rewardedAds';
+import { showRewardedAd } from '../lib/rewardedAds';
 import { Country, getCountryPrice } from '../types';
 import { fetchCountries } from '../lib/countryData';
 import { playDing, playPurchasedItem, playReject } from '../lib/audio';
@@ -31,13 +32,54 @@ import { ACHIEVEMENTS_DATA } from '../lib/achievementsData';
 import { CARD_PALETTES, resolveCardState } from '../lib/cardStates';
 import { useToast } from '../context/ToastContext';
 import { useAlert } from '../context/AlertContext';
+import { t } from '../lib/i18n';
+import { getDisplayFlagEmoji } from '../lib/flagDisplay';
+import { DEV_MODE, DEV_UNLOCKED_ITEM_IDS } from '../lib/devMode';
+import { purchasePotionPreview } from '../lib/potionPreview';
+import { PotionKind, REWARD_IMAGES } from '../lib/dailyChest';
+import { getRegularPotionPrice } from '../lib/potionPricing';
 
 import GoldDisplay from '../components/GoldDisplay';
 import AvatarDisplay from '../components/AvatarDisplay';
 import GoldShopScreen from './GoldShopScreen';
 
+function MythicChestPromoCard({ onPress }: { onPress: () => void }) {
+  const pulse = useRef(new Animated.Value(0.55)).current;
+  const sweep = useRef(new Animated.Value(-1)).current;
+
+  useEffect(() => {
+    const pulseAnimation = Animated.loop(Animated.sequence([
+      Animated.timing(pulse, { toValue: 1, duration: 900, useNativeDriver: true }),
+      Animated.timing(pulse, { toValue: 0.55, duration: 900, useNativeDriver: true }),
+    ]));
+    const sweepAnimation = Animated.loop(Animated.timing(sweep, { toValue: 1, duration: 2600, useNativeDriver: true }));
+    pulseAnimation.start();
+    sweepAnimation.start();
+    return () => { pulseAnimation.stop(); sweepAnimation.stop(); };
+  }, [pulse, sweep]);
+
+  return (
+    <TouchableOpacity style={styles.mythicChestCard} onPress={onPress} activeOpacity={0.86}>
+      <Animated.View style={[styles.mythicChestGlow, { opacity: pulse }]} />
+      <Animated.Text style={[styles.mythicChestSparkle, { opacity: pulse, transform: [{ scale: pulse }] }]}>✦</Animated.Text>
+      <Animated.Text style={[styles.mythicChestSparkleTwo, { opacity: pulse }]}>✧</Animated.Text>
+      <Animated.View style={[styles.mythicChestSweep, { transform: [{ translateX: sweep.interpolate({ inputRange: [-1, 1], outputRange: [-120, 240] }) }] }]} />
+      <Image source={require('../../assets/avatars/mythic_closed.png')} style={styles.mythicChestImage} resizeMode="contain" />
+      <View style={styles.mythicChestInfo}>
+        <Text style={styles.mythicChestEyebrow}>{t('shop.premiumTreasure')}</Text>
+        <Text style={styles.mythicChestTitle}>Mythic Chest</Text>
+        <Text style={styles.mythicChestSubtitle}>{t('shop.mythicChestSubtitle')}</Text>
+      </View>
+      <Text style={styles.mythicChestArrow}>›</Text>
+    </TouchableOpacity>
+  );
+}
+
 type ShopTab = 'countries' | 'avatars' | 'flags' | 'upgrades';
 type SortMode = 'name' | 'price-asc' | 'price-desc';
+type AvatarPreview = { id: string; label: string; mythicBonus?: 'gold' | 'xp' };
+
+const MYTHIC_AVATAR_OPTIONS = CUSTOM_AVATARS.filter(a => a.culture === 'Mythic Chest');
 
 const REWARD_AVATAR_TO_ACHIEVEMENT_IDS = ACHIEVEMENTS_DATA.reduce((map, achievement) => {
   const rewardItems = achievement.rewardItems ?? (achievement.rewardItem ? [achievement.rewardItem] : []);
@@ -52,7 +94,7 @@ const REWARD_AVATAR_TO_ACHIEVEMENT_IDS = ACHIEVEMENTS_DATA.reduce((map, achievem
 // ── Conqueror (premium) styling constants ─────────────────────────────────────
 
 // Emoji flags only — no SVG/tier flags, no quest-only items
-const SHOP_FLAGS: Array<{ id: string; label: string; price: number; isPremium: boolean; isSvg: boolean; questOnly?: boolean }> = [
+const SHOP_FLAGS: Array<{ id: string; label: string; price: number; isPremium: boolean; isSvg: boolean; category: string; questOnly?: boolean }> = [
   ...FLAG_OPTIONS
     .filter(f => !f.questOnly)
     .map(f => ({
@@ -61,21 +103,35 @@ const SHOP_FLAGS: Array<{ id: string; label: string; price: number; isPremium: b
       price: f.category === 'country' ? 1000 : f.price,
       isPremium: f.category === 'country' ? true : f.isPremium,
       isSvg: false,
+      category: f.category,
     })),
 ];
 
 // Quest-only flags — shown in owned tab only when unlocked
-const QUEST_FLAGS: Array<{ id: string; label: string; price: number; isPremium: boolean; isSvg: boolean; questOnly: boolean }> = FLAG_OPTIONS
+const QUEST_FLAGS: Array<{ id: string; label: string; price: number; isPremium: boolean; isSvg: boolean; category: string; questOnly: boolean }> = FLAG_OPTIONS
   .filter(f => f.questOnly)
-  .map(f => ({ id: f.emoji, label: f.label, price: 0, isPremium: true, isSvg: false, questOnly: true }));
+  .map(f => ({ id: f.emoji, label: f.label, price: 0, isPremium: true, isSvg: false, category: f.category, questOnly: true }));
+
+// Decode regional-indicator emoji (e.g. 🇩🇿) to ISO alpha-2 (e.g. "DZ")
+function flagEmojiToCca2(emoji: string): string | null {
+  const chars = [...emoji];
+  if (chars.length !== 2) return null;
+  const base = 0x1F1E6; // U+1F1E6 = Regional Indicator A
+  const cp0 = chars[0].codePointAt(0) ?? 0;
+  const cp1 = chars[1].codePointAt(0) ?? 0;
+  if (cp0 < base || cp0 > 0x1F1FF) return null;
+  return String.fromCharCode(cp0 - base + 65, cp1 - base + 65);
+}
 
 const SHOP_LOCAL_FLAG_SOURCES: Record<string, ImageSourcePropType> = {
   AF: require('../../assets/flags/afghanistan.png'),
 };
 
 export default function ShopScreen() {
-  const { isOwned, canAfford, purchaseCountry, goldBalance } = useGame();
-  const { profile, setUsername, purchaseAvatarItem, purchaseQuizUpgrade, disabledUpgrades, toggleUpgrade, purchaseTicket, purchaseTickets, refreshQuestStatus } = useAuth();
+  const { refreshProfile } = useAuth();
+  const { ticketAdsRemaining, ticketAdReward } = useAuth();
+  const { isOwned, canAfford, purchaseCountry, bulkPurchaseCountries, goldBalance, ownedCountries } = useGame();
+  const { profile, setUsername, purchaseAvatarItem, purchaseQuizUpgrade, disabledUpgrades, toggleUpgrade, purchaseTicket, purchaseTickets, refreshQuestStatus, pendingAvatarNotification, clearAvatarNotification } = useAuth();
   const { showToast } = useToast();
   const { showAlert, showNotEnoughGoldAlert, showPremiumAlert, showLevelAlert, showUniqueAlert } = useAlert();
   const navigation = useNavigation<any>();
@@ -100,6 +156,7 @@ export default function ShopScreen() {
 
   // ── Countries tab state ────────────────────────────────────────────────────
   const [countries, setCountries] = useState<Country[]>([]);
+  const countryNameMap = useMemo(() => new Map(countries.map(c => [c.cca2, c.name])), [countries]);
   const [filteredCountries, setFilteredCountries] = useState<Country[]>([]);
   const [loadingCountries, setLoadingCountries] = useState(true);
   const [countryError, setCountryError] = useState<string | null>(null);
@@ -111,11 +168,14 @@ export default function ShopScreen() {
 
   // ── Avatar/Flag tab state ──────────────────────────────────────────────────
   const [subTab, setSubTab] = useState<'buy' | 'owned'>('buy');
+  const [newItemBadge, setNewItemBadge] = useState<'avatar' | 'flag' | null>(null);
   const [unlockedItems, setUnlockedItems] = useState<Set<string>>(new Set());
   const [loadingUnlocks, setLoadingUnlocks] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
   const [hideOwned, setHideOwned] = useState(true);
+  const [bulkBuying, setBulkBuying] = useState(false);
+  const [previewAvatar, setPreviewAvatar] = useState<AvatarPreview | null>(null);
   const [easterEggClaimed, setEasterEggClaimed] = useState(false);
   const [claimedAchievementIds, setClaimedAchievementIds] = useState<Set<string>>(new Set());
 
@@ -130,6 +190,12 @@ export default function ShopScreen() {
 
     AsyncStorage.getItem('easter_egg_claimed').then(val => { if (val) setEasterEggClaimed(true); });
   }, []);
+
+  useEffect(() => {
+    if (!loadingCountries && countries.length > 0 && ownedCountries.length >= countries.length && activeTab === 'countries') {
+      setActiveTab('avatars');
+    }
+  }, [ownedCountries.length, countries.length, loadingCountries]);
 
   useEffect(() => {
     let result = countries.filter((c) =>
@@ -156,7 +222,87 @@ export default function ShopScreen() {
     }
   }, [search, sortMode, countries, isOwned, hideOwned]);
 
+  // ── Bulk buy preview ──────────────────────────────────────────────────────
+  const bulkBuyPreview = useMemo(() => {
+    const gold = profile?.gold_balance ?? 0;
+    if (gold < 100_000) return null;
+    let remaining = gold;
+    const toBuy: Country[] = [];
+    const sorted = [...countries]
+      .filter(c => !isOwned(c.cca2))
+      .sort((a, b) => getCountryPrice(a.area) - getCountryPrice(b.area));
+    for (const c of sorted) {
+      const price = getCountryPrice(c.area);
+      if (remaining < price) break;
+      toBuy.push(c);
+      remaining -= price;
+    }
+    if (toBuy.length === 0) return null;
+    const totalCost = toBuy.reduce((sum, c) => sum + getCountryPrice(c.area), 0);
+    return { count: toBuy.length, totalCost, goldLeft: gold - totalCost };
+  }, [countries, isOwned, profile?.gold_balance]);
+
+  const handleBulkBuy = useCallback(async () => {
+    if (!bulkBuyPreview) return;
+    showAlert({
+      title: t('shop.bulkBuyTitle'),
+      message: `${t('shop.bulkBuyDesc', { count: bulkBuyPreview.count, cost: bulkBuyPreview.totalCost.toLocaleString() })}\n\n${t('shop.goldRemaining', { n: bulkBuyPreview.goldLeft.toLocaleString() })}`,
+      buttons: [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('shop.buyAll'),
+          onPress: async () => {
+            setBulkBuying(true);
+            try {
+              const { count } = await bulkPurchaseCountries(countries);
+              playPurchasedItem();
+              setShowConfetti(true);
+              showToast({ title: t('shop.conqueredTitle'), message: t('shop.countriesAdded', { n: count }) });
+            } catch (e: any) {
+              playReject();
+              showToast({ title: t('shop.purchaseFailed'), message: e?.message ?? t('shop.purchaseFailedBody') });
+            } finally {
+              setBulkBuying(false);
+            }
+          },
+        },
+      ],
+    });
+  }, [bulkBuyPreview, bulkPurchaseCountries, countries, showAlert, showToast]);
+
+  // ── Avatar of the Day ──────────────────────────────────────────────────────
+
+  const featuredAvatar = useMemo(() => {
+    const candidates = AVATAR_CHARACTERS.filter(a =>
+      a.isPremium &&
+      !(a as any).questOnly &&
+      !(a as any).isPremiumSubscription &&
+      (a.price ?? 0) > 0,
+    );
+    if (candidates.length === 0) return null;
+    const dayIndex = Math.floor(Date.now() / 86400000) % candidates.length;
+    const avatar = candidates[dayIndex];
+    const discountedPrice = Math.floor((avatar.price ?? 0) * 0.8);
+    return { ...avatar, discountedPrice };
+  }, []);
+
   // ── Tier chain builder ─────────────────────────────────────────────────────
+
+  const affordableAvatarCount = useMemo(() => {
+    if (subTab !== 'buy') return 0;
+    const allBuyable = [
+      ...AVATAR_CHARACTERS,
+      ...CUSTOM_AVATARS.map(a => ({ emoji: a.key, price: a.price, isPremium: a.isPremium, questOnly: a.questOnly, isPremiumSubscription: a.isPremiumSubscription })),
+    ];
+    return allBuyable.filter(a => {
+      if (unlockedItems.has(a.emoji)) return false;
+      if ((a as any).cosmetic) return false;
+      if ((a as any).questOnly) return false;
+      if ((a as any).isPremiumSubscription && !profile?.is_conquerer) return false;
+      if (!a.isPremium) return false; // free avatars don't need to be "bought"
+      return (a.price ?? 0) > 0 && goldBalance >= (a.price ?? 0);
+    }).length;
+  }, [subTab, unlockedItems, goldBalance, profile?.is_conquerer]);
 
   const { avatarTierChains, standaloneCustomAvatars } = useMemo(() => {
     const items = CUSTOM_AVATARS;
@@ -178,7 +324,7 @@ export default function ShopScreen() {
         chains.push(chain);
       }
     }
-    return { avatarTierChains: chains, standaloneCustomAvatars: items.filter(i => !inChain.has(i.key)) };
+    return { avatarTierChains: chains, standaloneCustomAvatars: items.filter(i => !inChain.has(i.key) && !i.cosmetic) };
   }, []);
 
 
@@ -211,7 +357,7 @@ export default function ShopScreen() {
       const claimedAchievementIds = new Set((achData ?? []).map((a: any) => a.achievement_id));
       setClaimedAchievementIds(claimedAchievementIds);
 
-      const invalidRewardAvatars = Array.from(set).filter((itemId) => {
+      const invalidRewardAvatars = DEV_MODE ? [] : Array.from(set).filter((itemId) => {
         const requiredAchievements = REWARD_AVATAR_TO_ACHIEVEMENT_IDS.get(itemId);
         if (!requiredAchievements) return false;
         return !requiredAchievements.some((achievementId) => claimedAchievementIds.has(achievementId));
@@ -225,7 +371,7 @@ export default function ShopScreen() {
         invalidRewardAvatars.forEach((itemId) => set.delete(itemId));
       }
 
-      setUnlockedItems(set);
+      setUnlockedItems(DEV_MODE ? new Set([...set, ...DEV_UNLOCKED_ITEM_IDS]) : set);
     } catch (err) {
       console.warn('Failed to load unlocks:', err);
     } finally {
@@ -262,7 +408,7 @@ export default function ShopScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       playPurchasedItem();
     } catch (err: any) {
-      showAlert({ title: 'Error', message: err.message ?? 'Purchase failed' });
+      showAlert({ title: t('shop.error'), message: err.message ?? 'Purchase failed' });
     } finally {
       setPurchasingCca2(null);
     }
@@ -279,8 +425,13 @@ export default function ShopScreen() {
       setUnlockedItems(prev => new Set(prev).add(itemId));
       setShowConfetti(true);
       setTimeout(() => setShowConfetti(false), 3000);
+      setNewItemBadge(itemType);
+      showAlert({
+        title: itemType === 'avatar' ? t('shop.avatarUnlockedTitle') : t('shop.flagUnlockedTitle'),
+        message: t('shop.switchToOwned'),
+      });
     } catch (err: any) {
-      showAlert({ title: 'Purchase Failed', message: err.message });
+      showAlert({ title: t('shop.purchaseFailed'), message: err.message });
     } finally {
       setActionLoading(false);
     }
@@ -314,8 +465,11 @@ export default function ShopScreen() {
         }
         playDing();
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        if (itemType === 'avatar') {
+          showToast({ title: t('shop.avatarEquippedTitle'), message: t('shop.avatarEquippedBody'), icon: <AvatarDisplay avatarId={itemId} size={28} /> });
+        }
       } catch (err: any) {
-        showAlert({ title: 'Error', message: err.message });
+        showAlert({ title: t('shop.error'), message: err.message });
       } finally {
         setActionLoading(false);
       }
@@ -333,11 +487,11 @@ export default function ShopScreen() {
       if (itemType === 'avatar' && label) {
         showAlert({
           icon: <AvatarDisplay avatarId={itemId} size={110} />,
-          title: `Buy ${label}?`,
-          message: `${price.toLocaleString()} gold`,
+          title: `${t('shop.buy')} ${label}?`,
+          message: `${price.toLocaleString()} ${t('goldShop.gold')}`,
           buttons: [
-            { text: 'Buy', style: 'default', onPress: () => doPurchaseItem(itemType, itemId, price) },
-            { text: 'Cancel', style: 'cancel' },
+            { text: t('shop.buy'), style: 'default', onPress: () => doPurchaseItem(itemType, itemId, price) },
+            { text: t('common.cancel'), style: 'cancel' },
           ],
         });
         return;
@@ -358,11 +512,11 @@ export default function ShopScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       showAlert({
         variant: 'unique',
-        title: 'Unlock Capitals Quiz',
-        message: 'Complete and claim the Speed Detective quest in Quests to unlock purchase.',
+        title: t('shop.capitalsQuizUpgrade'),
+        message: t('shop.speedDetectiveQuest'),
         buttons: [
-          { text: 'View Quest', style: 'cta', onPress: () => navigation.navigate('Achievements', { highlightId: 'flag_mastery_30s' }) },
-          { text: 'Got it', style: 'cancel' },
+          { text: t('infoModal.gotIt'), style: 'cta', onPress: () => navigation.navigate('Achievements', { highlightId: 'flag_mastery_30s' }) },
+          { text: t('common.cancel'), style: 'cancel' },
         ],
       });
       return;
@@ -381,7 +535,7 @@ export default function ShopScreen() {
       playPurchasedItem();
       setUnlockedItems(prev => new Set(prev).add('upgrade_capitals'));
     } catch (err: any) {
-      showAlert({ title: 'Purchase Failed', message: err.message });
+      showAlert({ title: t('shop.purchaseFailed'), message: err.message });
     } finally {
       setActionLoading(false);
     }
@@ -396,11 +550,11 @@ export default function ShopScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       showAlert({
         variant: 'unique',
-        title: 'Unlock Borders Quiz',
-        message: 'Complete and claim the Ground Invasion quest in Quests to unlock purchase.',
+        title: t('shop.bordersQuizUpgrade'),
+        message: t('shop.groundInvasionQuest'),
         buttons: [
-          { text: 'View Quest', style: 'cta', onPress: () => navigation.navigate('Achievements', { highlightId: 'ground_invasion' }) },
-          { text: 'Got it', style: 'cancel' },
+          { text: t('infoModal.gotIt'), style: 'cta', onPress: () => navigation.navigate('Achievements', { highlightId: 'ground_invasion' }) },
+          { text: t('common.cancel'), style: 'cancel' },
         ],
       });
       return;
@@ -419,7 +573,7 @@ export default function ShopScreen() {
       playPurchasedItem();
       setUnlockedItems(prev => new Set(prev).add('upgrade_borders'));
     } catch (err: any) {
-      showAlert({ title: 'Purchase Failed', message: err.message });
+      showAlert({ title: t('shop.purchaseFailed'), message: err.message });
     } finally {
       setActionLoading(false);
     }
@@ -442,7 +596,7 @@ export default function ShopScreen() {
       setShowConfetti(true);
       setTimeout(() => setShowConfetti(false), 3000);
     } catch (err: any) {
-      showAlert({ title: 'Purchase Failed', message: err.message });
+      showAlert({ title: t('shop.purchaseFailed'), message: err.message });
     } finally {
       setActionLoading(false);
     }
@@ -468,19 +622,45 @@ export default function ShopScreen() {
       setShowConfetti(true);
       setTimeout(() => setShowConfetti(false), 3000);
     } catch (err: any) {
-      showAlert({ title: 'Purchase Failed', message: err.message });
+      showAlert({ title: t('shop.purchaseFailed'), message: err.message });
     } finally {
       setActionLoading(false);
     }
   }
 
-  const TICKET_COST = 2000;
+  async function handleBuyInfiniteMaps() {
+    if (!profile) return;
+    if (profile.is_conquerer || playerLevel < 100) return;
+    if (unlockedItems.has('upgrade_infinite_maps')) return;
+
+    const cost = 50000;
+    if (goldBalance < cost) {
+      showNotEnoughGold(cost, <Image source={require('../../assets/avatars/ancient_map.png')} style={{ width: 40, height: 40 }} resizeMode="contain" />, t('shop.infiniteMaps'));
+      return;
+    }
+
+    setActionLoading(true);
+    try {
+      await purchaseAvatarItem('flag', 'upgrade_infinite_maps', cost);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      playPurchasedItem();
+      setUnlockedItems(prev => new Set(prev).add('upgrade_infinite_maps'));
+      setShowConfetti(true);
+      setTimeout(() => setShowConfetti(false), 3000);
+    } catch (err: any) {
+      showAlert({ title: t('shop.purchaseFailed'), message: err.message });
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  const TICKET_COST = 500;
 
   async function handleBuyTicketPack() {
     if (!profile) return;
-    const PACK_COST = 8500;
+    const PACK_COST = 2200;
     if (goldBalance < PACK_COST) {
-      showNotEnoughGold(PACK_COST, undefined, 'Ticket Pack (×5)');
+      showNotEnoughGold(PACK_COST, undefined, t('shop.ticketPack'));
       return;
     }
     setActionLoading(true);
@@ -488,9 +668,9 @@ export default function ShopScreen() {
       await purchaseTickets(5, PACK_COST);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       playPurchasedItem();
-      showToast({ title: 'Ticket Pack Added', message: '5 tickets added to your inventory.' });
+      showToast({ title: t('shop.ticketPackAddedTitle'), message: t('shop.ticketsAddedBody') });
     } catch (err: any) {
-      showAlert({ title: 'Purchase Failed', message: err.message });
+      showAlert({ title: t('shop.purchaseFailed'), message: err.message });
     } finally {
       setActionLoading(false);
     }
@@ -507,32 +687,33 @@ export default function ShopScreen() {
       await purchaseTicket(TICKET_COST);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       playPurchasedItem();
-      showToast({ title: 'Ticket Added', message: 'Added to your inventory.' });
+      showToast({ title: t('shop.ticketAddedTitle'), message: t('shop.ticketAddedBody') });
     } catch (err: any) {
-      showAlert({ title: 'Purchase Failed', message: err.message });
+      showAlert({ title: t('shop.purchaseFailed'), message: err.message });
     } finally {
       setActionLoading(false);
     }
   }
 
   async function handleWatchAdForTicket() {
-    if (!profile) return;
+    if (!profile || actionLoading) return;
     setActionLoading(true);
     try {
-      const adResult = await showRewardedAd();
-      if (!adResult.rewarded) {
-        showAlert({
-          title: 'Ad Unavailable',
-          message: `Could not load a rewarded ad right now. Please try again.${getRewardedAdFailureHint(adResult)}`,
-        });
+      if (await ticketAdReward() <= 0) {
+        showAlert({ title: t('quizMenu.dailyLimitReached'), message: t('shop.adTicketLimitBody') });
         return;
       }
-      await purchaseTickets(1, 0);
+      const adResult = await showRewardedAd();
+      if (!adResult.rewarded) {
+        showAlert({ title: t('shop.adUnavailable'), message: `Could not load a rewarded ad right now. Please try again.\n\n[${adResult.reason ?? 'unknown'}${adResult.errorCode ? ` · ${adResult.errorCode}` : ''}${adResult.errorMessage ? `\n${adResult.errorMessage}` : ''}]` });
+        return;
+      }
+      await ticketAdReward(true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       playPurchasedItem();
-      showToast({ title: 'Thanks for Watching!', message: '1 ticket added to your inventory.' });
+      showToast({ title: t('shop.thanksForWatchingTitle'), message: t('shop.ticketWatchBody') });
     } catch (err: any) {
-      showAlert({ title: 'Error', message: err.message });
+      showAlert({ title: t('shop.error'), message: err.message });
     } finally {
       setActionLoading(false);
     }
@@ -549,7 +730,7 @@ export default function ShopScreen() {
       setShowConfetti(true);
       setTimeout(() => setShowConfetti(false), 3000);
     } catch (err: any) {
-      showAlert({ title: 'Error', message: err.message });
+      showAlert({ title: t('shop.error'), message: err.message });
     } finally {
       setActionLoading(false);
     }
@@ -574,10 +755,49 @@ export default function ShopScreen() {
       setShowConfetti(true);
       setTimeout(() => setShowConfetti(false), 3000);
     } catch (err: any) {
-      showAlert({ title: 'Purchase Failed', message: err.message });
+      showAlert({ title: t('shop.purchaseFailed'), message: err.message });
     } finally {
       setActionLoading(false);
     }
+  }
+
+  async function handleBuyBorderDraw() {
+    if (!profile || actionLoading || unlockedItems.has('upgrade_border_draw')) return;
+    if (goldBalance < 50000) {
+      showNotEnoughGold(50000, undefined, t('quiz.draw'));
+      return;
+    }
+    setActionLoading(true);
+    try {
+      await purchaseAvatarItem('flag', 'upgrade_border_draw', 50000);
+      setUnlockedItems(prev => new Set(prev).add('upgrade_border_draw'));
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      playPurchasedItem();
+      showToast({ title: t('shop.drawUnlockedTitle'), message: t('shop.drawUnlockedBody') });
+    } catch (err: any) {
+      showAlert({ title: t('shop.purchaseFailed'), message: err.message });
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function handleBuyPotion(kind: PotionKind) {
+    if (!profile || actionLoading) return;
+    const price = getRegularPotionPrice(kind, profile.xp ?? 0);
+    if (goldBalance < price) { showNotEnoughGold(price); return; }
+    setActionLoading(true);
+    try {
+      if (DEV_MODE) await purchasePotionPreview(profile.id, kind);
+      else {
+        const { error } = await supabase.rpc('purchase_regular_potion', { p_kind: kind });
+        if (error) throw error;
+        await refreshProfile();
+      }
+      playPurchasedItem();
+      showToast({ title: DEV_MODE ? t('shop.potionAddedPreview') : t('shop.potionPurchased'), message: t('shop.potionPurchaseBody') });
+    } catch (error: any) {
+      showAlert({ title: t('shop.purchaseFailed'), message: error.message });
+    } finally { setActionLoading(false); }
   }
 
   function handleTicketShopPress() {
@@ -615,21 +835,6 @@ export default function ShopScreen() {
         </View>
       </View>
 
-      {/* Tab Bar */}
-      <View style={styles.tabBar}>
-        {(['countries', 'avatars', 'flags', 'upgrades'] as ShopTab[]).map((tab) => (
-          <TouchableOpacity
-            key={tab}
-            style={[styles.tab, activeTab === tab && styles.tabActive]}
-            onPress={() => { setActiveTab(tab); setSubTab('buy'); }}
-          >
-            <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
-              {tab === 'countries' ? 'Countries' : tab === 'avatars' ? 'Avatars' : tab === 'flags' ? 'Flags' : 'Upgrades'}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
       {/* Conqueror's Pass Banner (hide for active Conquerors) */}
       {!profile?.is_conquerer && (
         <TouchableOpacity
@@ -639,10 +844,35 @@ export default function ShopScreen() {
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <Image source={require('../../assets/avatars/crown.png')} style={{ width: 16, height: 16 }} resizeMode="contain" />
-            <Text style={styles.commanderBannerText}>Conqueror's Pass — Unlock Everything</Text>
+            <Text style={styles.commanderBannerText}>{t('shop.conquererPass')}</Text>
           </View>
         </TouchableOpacity>
       )}
+
+      <MythicChestPromoCard onPress={() => navigation.getParent()?.navigate('MythicChest')} />
+
+      {/* Tab Bar */}
+      {(() => {
+        const allOwned = !loadingCountries && countries.length > 0 && ownedCountries.length >= countries.length;
+        const visibleTabs = (['countries', 'avatars', 'flags', 'upgrades'] as ShopTab[])
+          .filter(t => t !== 'countries' || !allOwned);
+        return (
+          <View style={styles.tabBar}>
+            {visibleTabs.map((tab) => (
+              <TouchableOpacity
+                key={tab}
+                style={[styles.tab, activeTab === tab && styles.tabActive]}
+                onPress={() => { setActiveTab(tab); setSubTab('buy'); }}
+              >
+                <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
+                  {tab === 'countries' ? t('shop.countries') : tab === 'avatars' ? t('shop.avatars') : tab === 'flags' ? t('shop.flags') : t('shop.upgrades')}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        );
+      })()}
+
 
 
       {/* ── Countries Tab ──────────────────────────────────────────────────── */}
@@ -651,7 +881,7 @@ export default function ShopScreen() {
           {loadingCountries ? (
             <View style={styles.centered}>
               <ActivityIndicator size="large" color="#FFD700" />
-              <Text style={styles.loadingText}>Loading countries…</Text>
+              <Text style={styles.loadingText}>{t('shop.loadingCountries')}</Text>
             </View>
           ) : countryError ? (
             <View style={styles.centered}>
@@ -662,38 +892,69 @@ export default function ShopScreen() {
               <View style={styles.searchFilterRow}>
                 <TextInput
                   style={styles.searchInputInline}
-                  placeholder="Search countries…"
+                  placeholder={t('shop.searchCountries')}
                   placeholderTextColor="#555"
                   value={search}
                   onChangeText={setSearch}
                 />
-                {(['name', 'price-asc', 'price-desc'] as SortMode[]).map((mode) => (
-                  <TouchableOpacity
-                    key={mode}
-                    style={[styles.sortButtonCompact, sortMode === mode && styles.sortButtonActive]}
-                    onPress={() => setSortMode(mode)}
-                  >
-                    <Text style={[styles.sortText, sortMode === mode && styles.sortTextActive]}>
-                      {mode === 'name' ? 'A–Z' : mode === 'price-asc' ? '↑$' : '↓$'}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                <TouchableOpacity
+                  style={[styles.sortButtonCompact, sortMode === 'name' && styles.sortButtonActive]}
+                  onPress={() => setSortMode('name')}
+                >
+                  <Text style={[styles.sortText, sortMode === 'name' && styles.sortTextActive]}>A–Z</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.sortButtonCompact, (sortMode === 'price-asc' || sortMode === 'price-desc') && styles.sortButtonActive]}
+                  onPress={() => setSortMode(sortMode === 'price-asc' ? 'price-desc' : 'price-asc')}
+                >
+                  <Text style={[styles.sortText, (sortMode === 'price-asc' || sortMode === 'price-desc') && styles.sortTextActive]}>
+                    {sortMode === 'price-desc' ? '↓$' : '↑$'}
+                  </Text>
+                </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.sortButtonCompact, !hideOwned && styles.sortButtonActive]}
                   onPress={() => setHideOwned(h => !h)}
                 >
                   <Text style={[styles.sortText, !hideOwned && styles.sortTextActive]}>
-                    {!hideOwned ? '✓' : '—'} Owned
+                    {!hideOwned ? '✓' : '—'} {t('shop.owned')}
                   </Text>
                 </TouchableOpacity>
               </View>
               <TouchableOpacity style={styles.goldBanner} onPress={() => setShowGoldShop(true)}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                   <Image source={require('../../assets/avatars/diamond.png')} style={{ width: 14, height: 14 }} resizeMode="contain" />
-                  <Text style={styles.goldBannerText}>Need more Gold?</Text>
+                  <Text style={styles.goldBannerText}>{t('shop.needMoreGold')}</Text>
                 </View>
-                <Text style={styles.goldBannerCta}>Buy Gold →</Text>
+                <Text style={styles.goldBannerCta}>{t('shop.buyGold')}</Text>
               </TouchableOpacity>
+              {bulkBuyPreview && (
+                <TouchableOpacity
+                  style={styles.bulkBuyCard}
+                  onPress={handleBulkBuy}
+                  disabled={bulkBuying}
+                  activeOpacity={0.85}
+                >
+                  <View style={styles.bulkBuyLeft}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 2 }}>
+                      <Image source={require('../../assets/avatars/diamond.png')} style={{ width: 13, height: 13 }} resizeMode="contain" />
+                      <Text style={styles.bulkBuyTitle}>{t('shop.bulkBuy')}</Text>
+                    </View>
+                    <Text style={styles.bulkBuyDesc}>
+                      {t('shop.bulkBuyDesc', { count: bulkBuyPreview.count, cost: bulkBuyPreview.totalCost.toLocaleString() })}
+                    </Text>
+                    <Text style={styles.bulkBuyRemaining}>
+                      {t('shop.goldRemaining', { n: bulkBuyPreview.goldLeft.toLocaleString() })}
+                    </Text>
+                  </View>
+                  <View style={styles.bulkBuyBtn}>
+                    {bulkBuying ? (
+                      <ActivityIndicator size="small" color="#1a1a2e" />
+                    ) : (
+                      <Text style={styles.bulkBuyBtnText}>{t('shop.buyAll')}</Text>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              )}
               <FlatList
                 data={filteredCountries}
                 keyExtractor={(item) => item.cca2}
@@ -723,7 +984,7 @@ export default function ShopScreen() {
                           <ActivityIndicator size="small" color="#FFD700" />
                         ) : owned ? (
                           <View style={styles.ownedBadge}>
-                            <Text style={styles.ownedBadgeText}>Owned ✓</Text>
+                            <Text style={styles.ownedBadgeText}>{t('shop.ownedCheck')}</Text>
                           </View>
                         ) : (
                           <View style={[styles.priceBadge, !affordable && styles.priceBadgeDim]}>
@@ -751,14 +1012,58 @@ export default function ShopScreen() {
       {activeTab === 'avatars' && (
         <>
           <View style={styles.subTabBar}>
-            {(['buy', 'owned'] as const).map(t => (
-              <TouchableOpacity key={t} style={[styles.subTab, subTab === t && styles.subTabActive]} onPress={() => setSubTab(t)}>
-                <Text style={[styles.subTabText, subTab === t && styles.subTabTextActive]}>
-                  {t === 'buy' ? '🛍️ Buy' : '🎒 Owned'}
-                </Text>
+            {(['buy', 'owned'] as const).map(tab => (
+              <TouchableOpacity
+                key={tab}
+                style={[styles.subTab, subTab === tab && styles.subTabActive]}
+                onPress={() => { setSubTab(tab); if (tab === 'owned') { setNewItemBadge(null); clearAvatarNotification(); } }}
+              >
+                <View style={{ position: 'relative' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                    {tab === 'owned' && <Image source={require('../../assets/avatars/crown.png')} style={{ width: 12, height: 12 }} resizeMode="contain" />}
+                    <Text style={[styles.subTabText, subTab === tab && styles.subTabTextActive]}>
+                      {tab === 'buy' ? t('shop.buy') : t('shop.owned')}
+                    </Text>
+                  </View>
+                  {tab === 'owned' && (newItemBadge === 'avatar' || pendingAvatarNotification) && (
+                    <View style={{ position: 'absolute', top: -3, right: -8, width: 8, height: 8, borderRadius: 4, backgroundColor: '#e74c3c' }} />
+                  )}
+                </View>
               </TouchableOpacity>
             ))}
           </View>
+
+          {/* ── Avatar of the Day ───────────────────────────────────────── */}
+          {subTab === 'buy' && featuredAvatar && !unlockedItems.has(featuredAvatar.emoji) && (
+            <TouchableOpacity
+              style={styles.featuredAvatarCard}
+              onPress={() => handleItemPress('avatar', featuredAvatar.emoji, featuredAvatar.discountedPrice, featuredAvatar.isPremium, featuredAvatar.label)}
+              disabled={actionLoading}
+              activeOpacity={0.85}
+            >
+              <View style={styles.featuredAvatarBadge}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Image source={require('../../assets/avatars/star.png')} style={{ width: 10, height: 10 }} resizeMode="contain" />
+                  <Text style={styles.featuredAvatarBadgeText}>{t('shop.featuredToday')}</Text>
+                </View>
+              </View>
+              <View style={styles.featuredAvatarBody}>
+                <AvatarDisplay avatarId={featuredAvatar.emoji} size={64} />
+                <View style={styles.featuredAvatarInfo}>
+                  <Text style={styles.featuredAvatarName}>{featuredAvatar.label}</Text>
+                  <Text style={styles.featuredAvatarSub}>{t('shop.todayOff')}</Text>
+                  <View style={styles.featuredPriceRow}>
+                    <Text style={styles.featuredOldPrice}>{(featuredAvatar.price ?? 0).toLocaleString()}</Text>
+                    <View style={styles.goldRow}>
+                      <Image source={require('../../assets/avatars/gold_coin.png')} style={styles.goldCoinSmall} resizeMode="contain" />
+                      <Text style={styles.featuredNewPrice}>{featuredAvatar.discountedPrice.toLocaleString()}</Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
+            </TouchableOpacity>
+          )}
+
           {loadingUnlocks ? (
             <View style={styles.centered}>
               <ActivityIndicator size="large" color="#FFD700" />
@@ -783,10 +1088,65 @@ export default function ShopScreen() {
                 if (pa !== pb) return pa - pb;
                 return String(a.label ?? '').localeCompare(String(b.label ?? ''));
               })}
-              ListFooterComponent={subTab !== 'buy' ? null :
-                <View>
-                  {avatarTierChains
-                    .map((chain, idx) => {
+              ListHeaderComponent={(
+                <>
+                  {subTab === 'owned' && (
+                    <View style={styles.mythicAvatarSection}>
+                      <View style={styles.mythicAvatarHeader}>
+                        <View>
+                          <Text style={styles.mythicAvatarTitle}>{t('shop.mythicAvatarTitle')}</Text>
+                          <Text style={styles.mythicAvatarSubtitle}>{t('shop.mythicAvatarSubtitle')}</Text>
+                        </View>
+                        <Text style={styles.mythicAvatarCount}>{MYTHIC_AVATAR_OPTIONS.filter(a => unlockedItems.has(a.key)).length} / {MYTHIC_AVATAR_OPTIONS.length}</Text>
+                      </View>
+                      {MYTHIC_AVATAR_OPTIONS.filter(a => unlockedItems.has(a.key)).length === 0 ? (
+                        <View style={styles.mythicAvatarEmpty}>
+                          <Text style={styles.mythicAvatarQuestion}>?</Text>
+                          <Text style={styles.mythicAvatarEmptyText}>{t('shop.mythicAvatarEmpty')}</Text>
+                        </View>
+                      ) : (
+                        <View style={styles.mythicAvatarGrid}>
+                          {MYTHIC_AVATAR_OPTIONS.filter(a => unlockedItems.has(a.key)).map(avatar => (
+                            <TouchableOpacity
+                              key={avatar.key}
+                              style={[styles.mythicAvatarCard, profile?.avatar_emoji === avatar.key && styles.mythicAvatarEquipped]}
+                              onPress={() => setPreviewAvatar({ id: avatar.key, label: avatar.label, mythicBonus: avatar.mythicBonus })}
+                              accessibilityRole="button"
+                              accessibilityLabel={`${avatar.label}. Tap to view unique bonus.`}
+                            >
+                              <View style={styles.mythicAvatarStar}><Text style={styles.mythicAvatarStarText}>★</Text></View>
+                              <AvatarDisplay avatarId={avatar.key} size={58} />
+                              <Text style={styles.mythicAvatarName} numberOfLines={2}>{avatar.label}</Text>
+                              <View style={styles.mythicAvatarHint}><Text style={styles.mythicAvatarHintText}>{t('shop.mythicAvatarBonusHint')}</Text></View>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      )}
+                    </View>
+                  )}
+                  {subTab === 'buy' && affordableAvatarCount > 0 && (
+                    <TouchableOpacity style={styles.affordBanner} onPress={() => {}} activeOpacity={0.8}>
+                      <Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 16, height: 16 }} resizeMode="contain" />
+                      <Text style={styles.affordBannerText}>
+                        You can afford <Text style={styles.affordBannerCount}>{affordableAvatarCount}</Text> {affordableAvatarCount === 1 ? 'avatar' : 'avatars'} right now
+                      </Text>
+                      <Text style={styles.affordBannerArrow}>↓</Text>
+                    </TouchableOpacity>
+                  )}
+                </>
+              )}
+              ListFooterComponent={(() => {
+                const visibleChains = subTab === 'owned'
+                  ? avatarTierChains.filter(chain =>
+                      chain.some(a => (!a.isPremium && !a.questOnly) || unlockedItems.has(a.key))
+                    )
+                  : avatarTierChains.filter(chain =>
+                      chain.some(a => (a.isPremium || a.questOnly) && !unlockedItems.has(a.key))
+                    );
+                if (visibleChains.length === 0) return null;
+                return (
+                  <View>
+                    {visibleChains.map((chain, idx) => {
                       const sectionName = chain[0].collection?.replace(/ Tier \d+$/, '') || chain[0].culture;
                       return (
                         <View key={idx} style={styles.tierSection}>
@@ -802,7 +1162,7 @@ export default function ShopScreen() {
                                 meetsReq = unlockedItems.has(a.requiresId);
                                 if (!meetsReq) {
                                   const req = CUSTOM_AVATARS.find(x => x.key === a.requiresId) || AVATAR_CHARACTERS.find(x => x.emoji === a.requiresId);
-                                  reqName = req?.label || 'Previous Tier';
+                                  reqName = req?.label || t('shop.previousTier');
                                 }
                               }
                               const tierLocked = !meetsReq;
@@ -816,9 +1176,11 @@ export default function ShopScreen() {
                                       tierLocked && styles.itemCardTierLocked,
                                     ]}
                                     onPress={() => {
-                                      if (tierLocked) { showAlert({ title: 'Locked', message: `You must own ${reqName} first.` }); return; }
+                                      if (tierLocked) { showAlert({ title: t('shop.locked'), message: t('shop.mustOwnFirst', { name: reqName }) }); return; }
                                       handleItemPress('avatar', id, a.price, a.isPremium, a.label);
                                     }}
+                                    onLongPress={isUnlocked ? () => setPreviewAvatar({ id, label: a.label }) : undefined}
+                                    delayLongPress={300}
                                     disabled={actionLoading}
                                   >
                                     <View style={{ opacity: tierLocked ? 0.3 : 1, alignItems: 'center' }}>
@@ -826,9 +1188,11 @@ export default function ShopScreen() {
                                     </View>
                                     <Text style={styles.itemLabel} numberOfLines={1}>{a.label}</Text>
                                     {isEquipped ? (
-                                      <View style={styles.equippedBadge}><Ionicons name="checkmark-circle" size={12} color="#fff" /><Text style={styles.equippedBadgeText}>Equipped</Text></View>
+                                      <View style={styles.equippedBadge}><Ionicons name="checkmark-circle" size={12} color="#fff" /><Text style={styles.equippedBadgeText}>{t('shop.equipped')}</Text></View>
                                     ) : isUnlocked ? (
-                                      <View style={styles.ownedItemBadge}><Text style={styles.ownedItemText}>Owned</Text></View>
+                                      subTab === 'owned'
+                                        ? <View style={styles.equipBadge}><Text style={styles.equipBadgeText}>{t('shop.equip')}</Text></View>
+                                        : <View style={styles.ownedItemBadge}><Text style={styles.ownedItemText}>{t('shop.owned')}</Text></View>
                                     ) : tierLocked ? (
                                       <View style={styles.statusBadgeTierLocked}>
                                         <View style={styles.goldRow}>
@@ -855,8 +1219,9 @@ export default function ShopScreen() {
                         </View>
                       );
                     })}
-                </View>
-              }
+                  </View>
+                );
+              })()}
               keyExtractor={(item) => item.emoji}
               numColumns={3}
               contentContainerStyle={styles.itemListContent}
@@ -899,6 +1264,8 @@ export default function ShopScreen() {
                       }
                       handleItemPress('avatar', id, item.price, item.isPremium, item.label);
                     }}
+                    onLongPress={isUnlocked ? () => setPreviewAvatar({ id, label: item.label }) : undefined}
+                    delayLongPress={300}
                     disabled={actionLoading}
                   >
                     <View style={{ opacity: cs.contentOpacity }}>
@@ -906,19 +1273,20 @@ export default function ShopScreen() {
                     </View>
                     <Text style={styles.itemLabel} numberOfLines={1}>{item.label}</Text>
                     {isEquipped ? (
-                      <View style={styles.equippedBadge}><Ionicons name="checkmark-circle" size={12} color="#fff" /><Text style={styles.equippedBadgeText}>Equipped</Text></View>
+                      <View style={styles.equippedBadge}><Ionicons name="checkmark-circle" size={12} color="#fff" /><Text style={styles.equippedBadgeText}>{t('shop.equipped')}</Text></View>
                     ) : isUnlocked ? (
-                      <View style={styles.ownedItemBadge}><Text style={styles.ownedItemText}>Owned</Text></View>
+                      subTab === 'owned'
+                        ? <View style={styles.equipBadge}><Text style={styles.equipBadgeText}>{t('shop.equip')}</Text></View>
+                        : <View style={styles.ownedItemBadge}><Text style={styles.ownedItemText}>{t('shop.owned')}</Text></View>
                     ) : cs.isLevelLocked ? (
-                      <View style={[styles.stateBadge, { backgroundColor: bp.badgeBg, borderColor: bp.badgeBorder }]}>
-                        <Text style={[styles.stateBadgeText, { color: bp.badgeColor }]}>🔒 Lvl {item.requiresLevel}</Text>
+                      <View style={[styles.stateBadge, { backgroundColor: bp.badgeBg, borderColor: bp.badgeBorder, flexDirection: 'row', alignItems: 'center', gap: 3 }]}>
+                        <Image source={require('../../assets/avatars/lock.png')} style={{ width: 10, height: 10 }} resizeMode="contain" />
+                        <Text style={[styles.stateBadgeText, { color: bp.badgeColor }]}>Lvl {item.requiresLevel}</Text>
                       </View>
                     ) : cs.isSubscriptionLocked ? (
-                      <View style={[styles.stateBadge, { backgroundColor: bp.badgeBg, borderColor: bp.badgeBorder }]}>
-                        <View style={styles.goldRow}>
-                          <Image source={require('../../assets/avatars/gold_coin.png')} style={styles.goldCoinTiny} resizeMode="contain" />
-                          <Text style={[styles.stateBadgeText, { color: bp.badgeColor }]}>{item.price}</Text>
-                        </View>
+                      <View style={styles.conquerorStamp}>
+                        <Image source={require('../../assets/avatars/conqueror.png')} style={{ width: 12, height: 12 }} resizeMode="contain" />
+                        <Text style={styles.conquerorStampText}>Conqueror</Text>
                       </View>
                     ) : (
                       <View style={styles.itemPriceBadge}>
@@ -940,11 +1308,23 @@ export default function ShopScreen() {
       {activeTab === 'flags' && (
         <>
           <View style={styles.subTabBar}>
-            {(['buy', 'owned'] as const).map(t => (
-              <TouchableOpacity key={t} style={[styles.subTab, subTab === t && styles.subTabActive]} onPress={() => setSubTab(t)}>
-                <Text style={[styles.subTabText, subTab === t && styles.subTabTextActive]}>
-                  {t === 'buy' ? '🛍️ Buy' : '🎒 Owned'}
-                </Text>
+            {(['buy', 'owned'] as const).map(tab => (
+              <TouchableOpacity
+                key={tab}
+                style={[styles.subTab, subTab === tab && styles.subTabActive]}
+                onPress={() => { setSubTab(tab); if (tab === 'owned') setNewItemBadge(null); }}
+              >
+                <View style={{ position: 'relative' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                    {tab === 'owned' && <Image source={require('../../assets/avatars/crown.png')} style={{ width: 12, height: 12 }} resizeMode="contain" />}
+                    <Text style={[styles.subTabText, subTab === tab && styles.subTabTextActive]}>
+                      {tab === 'buy' ? t('shop.buy') : t('shop.owned')}
+                    </Text>
+                  </View>
+                  {tab === 'owned' && newItemBadge === 'flag' && (
+                    <View style={{ position: 'absolute', top: -3, right: -8, width: 8, height: 8, borderRadius: 4, backgroundColor: '#e74c3c' }} />
+                  )}
+                </View>
               </TouchableOpacity>
             ))}
           </View>
@@ -963,6 +1343,9 @@ export default function ShopScreen() {
                   ? QUEST_FLAGS.filter(item => unlockedItems.has(item.id) || profile?.avatar_flag === item.id)
                   : []),
               ].sort((a, b) => {
+                const aIsCountry = a.category === 'country';
+                const bIsCountry = b.category === 'country';
+                if (aIsCountry !== bIsCountry) return aIsCountry ? 1 : -1;
                 if (a.price !== b.price) return a.price - b.price;
                 return a.label.localeCompare(b.label);
               })}
@@ -976,11 +1359,11 @@ export default function ShopScreen() {
                   onPress={() => {
                     showAlert({
                       variant: 'ticket',
-                      title: '🎉 Easter Egg Found!',
-                      message: 'Good job on finding the easter egg! Here are 5 free tickets.',
+                      title: t('shop.easterEggTitle'),
+                      message: t('shop.easterEggBody'),
                       buttons: [
-                        { text: 'Claim!', style: 'cta', onPress: () => handleClaimEasterEgg() },
-                        { text: 'Cancel', style: 'cancel' },
+                        { text: t('shop.claim'), style: 'cta', onPress: () => handleClaimEasterEgg() },
+                        { text: t('common.cancel'), style: 'cancel' },
                       ],
                     });
                   }}
@@ -1003,13 +1386,13 @@ export default function ShopScreen() {
                     disabled={actionLoading}
                   >
                     <View style={{ width: 44, height: 44, justifyContent: 'center', alignItems: 'center', marginBottom: 6 }}>
-                      <Text style={{ fontSize: 38, textAlign: 'center', lineHeight: 44 }}>{item.id}</Text>
+                      <Text style={{ fontSize: 38, textAlign: 'center', lineHeight: 44 }}>{getDisplayFlagEmoji(item.id)}</Text>
                     </View>
-                    <Text style={styles.itemLabel} numberOfLines={1}>{item.label}</Text>
+                    <Text style={styles.itemLabel} numberOfLines={1}>{item.category === 'country' ? (countryNameMap.get(flagEmojiToCca2(item.id) ?? '') ?? item.label) : item.label}</Text>
                     {isEquipped ? (
-                      <View style={styles.equippedBadge}><Ionicons name="checkmark-circle" size={12} color="#fff" /><Text style={styles.equippedBadgeText}>Equipped</Text></View>
+                      <View style={styles.equippedBadge}><Ionicons name="checkmark-circle" size={12} color="#fff" /><Text style={styles.equippedBadgeText}>{t('shop.equipped')}</Text></View>
                     ) : isUnlocked ? (
-                      <View style={styles.ownedItemBadge}><Text style={styles.ownedItemText}>Owned</Text></View>
+                      <View style={styles.ownedItemBadge}><Text style={styles.ownedItemText}>{t('shop.owned')}</Text></View>
                     ) : (
                       <View style={styles.itemPriceBadge}>
                         <View style={styles.goldRow}>
@@ -1029,7 +1412,43 @@ export default function ShopScreen() {
       {/* ── Upgrades Tab ──────────────────────────────────────────────────────── */}
       {activeTab === 'upgrades' && (
         <ScrollView contentContainerStyle={styles.upgradesContainer}>
-          <Text style={styles.upgradesSubtitle}>Extend your map expeditions to earn massive streak multipliers.</Text>
+          <Text style={styles.upgradesSubtitle}>{t('shop.upgradesSubtitle')}</Text>
+          {(['gold_potion', 'xp_potion'] as const).map(kind => {
+            const price = getRegularPotionPrice(kind, profile?.xp ?? 0);
+            const name = kind === 'gold_potion' ? t('shop.goldPotion') : t('shop.xpPotion');
+            return <TouchableOpacity key={kind} accessibilityRole="button" style={styles.upgradeCard} disabled={actionLoading} onPress={() => showAlert({
+              title: name, message: t('shop.potionShopBody', { price: price.toLocaleString() }),
+              buttons: [{ text: t('shop.buyGoldPrice', { price: price.toLocaleString() }), style: 'cta', onPress: () => void handleBuyPotion(kind) }, { text: t('common.cancel'), style: 'cancel' }],
+            })}>
+              <Image source={REWARD_IMAGES[kind]} style={styles.upgradeCardImage} resizeMode="contain" />
+              <View style={styles.upgradeInfo}><Text style={styles.upgradeTitle}>{name} ⓘ</Text><Text style={styles.upgradeDesc}>{t('shop.potionCardDesc')}</Text></View>
+              <View style={styles.goldBadge}><View style={styles.goldRow}><Image source={require('../../assets/avatars/gold_coin.png')} style={styles.goldCoinSmall} resizeMode="contain" /><Text style={styles.goldText}>{price.toLocaleString()}</Text></View></View>
+            </TouchableOpacity>;
+          })}
+
+          <TouchableOpacity
+            accessibilityRole="button"
+            style={[styles.upgradeCard, unlockedItems.has('upgrade_border_draw') && styles.upgradeCardOwned]}
+            disabled={actionLoading}
+            onPress={() => showAlert({
+              title: t('quiz.draw'),
+              message: unlockedItems.has('upgrade_border_draw')
+                ? t('shop.borderDrawOwnedBody')
+                : t('shop.borderDrawBuyBody'),
+              buttons: unlockedItems.has('upgrade_border_draw') ? undefined : [
+                { text: t('shop.borderDrawUnlockButton'), style: 'cta', onPress: handleBuyBorderDraw },
+                { text: t('common.cancel'), style: 'cancel' },
+              ],
+            })}
+          >
+            <Image source={require('../../assets/avatars/border_drawing_quiz.png')} style={styles.upgradeCardImage} resizeMode="contain" />
+            <View style={styles.upgradeInfo}>
+              <Text style={styles.upgradeTitle}>{t('quiz.draw')} ⓘ</Text>
+              <Text style={styles.upgradeDesc}>{t('shop.permanentQuizUnlock')}</Text>
+            </View>
+            {unlockedItems.has('upgrade_border_draw') ? <View style={styles.uniqueOwnedBadge}><Text style={styles.uniqueOwnedBadgeText}>{t('shop.ownedMinus')}</Text></View> :
+              <View style={styles.goldBadge}><View style={styles.goldRow}><Image source={require('../../assets/avatars/gold_coin.png')} style={styles.goldCoinSmall} resizeMode="contain" /><Text style={styles.goldText}>50,000</Text></View></View>}
+          </TouchableOpacity>
 
           {/* Capitals Quiz Unlock (complete Speed Detective quest) */}
           {(() => {
@@ -1047,12 +1466,12 @@ export default function ShopScreen() {
               >
                 <Image source={require('../../assets/avatars/building.png')} style={styles.upgradeCardImage} resizeMode="contain" />
                 <View style={styles.upgradeInfo}>
-                  <Text style={styles.upgradeTitle}>Capitals Quiz</Text>
-                  {!isQuestUnlocked && !isOwned && <Text style={{ fontSize: 12, color: '#aaa', marginTop: 4 }}>Turn in Speed Detective quest</Text>}
+                  <Text style={styles.upgradeTitle}>{t('shop.capitalsQuizUpgrade')}</Text>
+                  {!isQuestUnlocked && !isOwned && <Text style={{ fontSize: 12, color: '#aaa', marginTop: 4 }}>{t('shop.speedDetectiveQuest')}</Text>}
                 </View>
                 {isOwned ? (
                   <View style={styles.uniqueOwnedBadge}>
-                    <Text style={styles.uniqueOwnedBadgeText}>- Owned</Text>
+                    <Text style={styles.uniqueOwnedBadgeText}>{t('shop.ownedMinus')}</Text>
                   </View>
                 ) : isQuestUnlocked ? (
                   <View style={styles.goldBadge}>
@@ -1062,8 +1481,9 @@ export default function ShopScreen() {
                     </View>
                   </View>
                 ) : (
-                  <View style={[styles.upgradeBadge, { backgroundColor: bp.badgeBg, borderColor: bp.badgeBorder }]}>
-                    <Text style={[styles.upgradeBadgeText, { color: bp.badgeColor }]}>🔒 Locked</Text>
+                  <View style={[styles.upgradeBadge, { backgroundColor: bp.badgeBg, borderColor: bp.badgeBorder, flexDirection: 'row', alignItems: 'center', gap: 5 }]}>
+                    <Image source={require('../../assets/avatars/lock.png')} style={{ width: 12, height: 12 }} resizeMode="contain" />
+                    <Text style={[styles.upgradeBadgeText, { color: bp.badgeColor }]}>{t('shop.locked')}</Text>
                   </View>
                 )}
               </TouchableOpacity>
@@ -1086,12 +1506,12 @@ export default function ShopScreen() {
               >
                 <Image source={require('../../assets/avatars/border.png')} style={styles.upgradeCardImage} resizeMode="contain" />
                 <View style={styles.upgradeInfo}>
-                  <Text style={styles.upgradeTitle}>Borders Quiz</Text>
-                  {!isQuestUnlocked && !isOwned && <Text style={{ fontSize: 12, color: '#aaa', marginTop: 4 }}>Turn in Ground Invasion quest</Text>}
+                  <Text style={styles.upgradeTitle}>{t('shop.bordersQuizUpgrade')}</Text>
+                  {!isQuestUnlocked && !isOwned && <Text style={{ fontSize: 12, color: '#aaa', marginTop: 4 }}>{t('shop.groundInvasionQuest')}</Text>}
                 </View>
                 {isOwned ? (
                   <View style={styles.uniqueOwnedBadge}>
-                    <Text style={styles.uniqueOwnedBadgeText}>- Owned</Text>
+                    <Text style={styles.uniqueOwnedBadgeText}>{t('shop.ownedMinus')}</Text>
                   </View>
                 ) : isQuestUnlocked ? (
                   <View style={styles.goldBadge}>
@@ -1101,8 +1521,9 @@ export default function ShopScreen() {
                     </View>
                   </View>
                 ) : (
-                  <View style={[styles.upgradeBadge, { backgroundColor: bp.badgeBg, borderColor: bp.badgeBorder }]}>
-                    <Text style={[styles.upgradeBadgeText, { color: bp.badgeColor }]}>🔒 Locked</Text>
+                  <View style={[styles.upgradeBadge, { backgroundColor: bp.badgeBg, borderColor: bp.badgeBorder, flexDirection: 'row', alignItems: 'center', gap: 5 }]}>
+                    <Image source={require('../../assets/avatars/lock.png')} style={{ width: 12, height: 12 }} resizeMode="contain" />
+                    <Text style={[styles.upgradeBadgeText, { color: bp.badgeColor }]}>{t('shop.locked')}</Text>
                   </View>
                 )}
               </TouchableOpacity>
@@ -1121,8 +1542,8 @@ export default function ShopScreen() {
             >
               <Image source={require('../../assets/avatars/expedition2.png')} style={styles.upgradeCardImage} resizeMode="contain" />
               <View style={styles.upgradeInfo}>
-                <Text style={styles.upgradeTitle}>Level 2 Expedition</Text>
-                {(profile?.max_quiz_turns || 10) < 20 && <Text style={styles.upgradeDesc}>Play up to 20 turns per quiz</Text>}
+                <Text style={styles.upgradeTitle}>{t('shop.level2Expedition')}</Text>
+                {(profile?.max_quiz_turns || 10) < 20 && <Text style={styles.upgradeDesc}>{t('shop.level2Desc')}</Text>}
               </View>
               {(profile?.max_quiz_turns || 10) >= 20 ? (
                 <View style={styles.ownedItemBadgeRow}>
@@ -1154,7 +1575,7 @@ export default function ShopScreen() {
                 style={[styles.upgradeCard, isOwned ? styles.upgradeCardOwned : { backgroundColor: cp.cardBg, borderColor: cp.cardBorder, opacity: cs.states.length > 0 ? 0.8 : 1 }]}
                 onPress={() => {
                   if (cs.isLevelLocked) {
-                    showLevelAlert({ requiredLevel: 25, itemName: 'Level 3 Expedition' });
+                    showLevelAlert({ requiredLevel: 25, itemName: t('shop.level3Expedition') });
                     return;
                   }
                   if (isOwned) return;
@@ -1165,8 +1586,8 @@ export default function ShopScreen() {
               >
                 <Image source={require('../../assets/avatars/expedition3.png')} style={styles.upgradeCardImage} resizeMode="contain" />
                 <View style={styles.upgradeInfo}>
-                  <Text style={styles.upgradeTitle}>Level 3 Expedition</Text>
-                  {!isOwned && <Text style={styles.upgradeDesc}>Play up to 30 turns per quiz</Text>}
+                  <Text style={styles.upgradeTitle}>{t('shop.level3Expedition')}</Text>
+                  {!isOwned && <Text style={styles.upgradeDesc}>{t('shop.level3Desc')}</Text>}
                 </View>
                 {isOwned ? (
                   <View style={styles.ownedItemBadgeRow}>
@@ -1178,8 +1599,9 @@ export default function ShopScreen() {
                     />
                   </View>
                 ) : cs.isLevelLocked ? (
-                  <View style={[styles.upgradeBadge, { backgroundColor: bp.badgeBg, borderColor: bp.badgeBorder }]}>
-                    <Text style={[styles.upgradeBadgeText, { color: bp.badgeColor }]}>🔒 Locked</Text>
+                  <View style={[styles.upgradeBadge, { backgroundColor: bp.badgeBg, borderColor: bp.badgeBorder, flexDirection: 'row', alignItems: 'center', gap: 5 }]}>
+                    <Image source={require('../../assets/avatars/lock.png')} style={{ width: 12, height: 12 }} resizeMode="contain" />
+                    <Text style={[styles.upgradeBadgeText, { color: bp.badgeColor }]}>{t('shop.locked')}</Text>
                   </View>
                 ) : (
                   <View style={styles.goldBadge}>
@@ -1206,8 +1628,8 @@ export default function ShopScreen() {
             >
               <Image source={require('../../assets/avatars/swap.png')} style={styles.upgradeCardImage} resizeMode="contain" />
               <View style={styles.upgradeInfo}>
-                <Text style={styles.upgradeTitle}>Millionaire Swap</Text>
-                {!unlockedItems.has('upgrade_millionaire_skip') && <Text style={styles.upgradeDesc}>Swap one question in the Millionaire Quiz</Text>}
+                <Text style={styles.upgradeTitle}>{t('shop.millionaireSwap')}</Text>
+                {!unlockedItems.has('upgrade_millionaire_skip') && <Text style={styles.upgradeDesc}>{t('shop.millionaireSwapDesc')}</Text>}
               </View>
               {unlockedItems.has('upgrade_millionaire_skip') ? (
                 <View style={styles.ownedItemBadgeRow}>
@@ -1240,7 +1662,7 @@ export default function ShopScreen() {
                 style={[styles.upgradeCard, isOwned ? styles.upgradeCardOwned : { backgroundColor: cp.cardBg, borderColor: cp.cardBorder, opacity: cs.states.length > 0 ? 0.8 : 1 }]}
                 onPress={() => {
                   if (cs.isLevelLocked) {
-                    showLevelAlert({ requiredLevel: 33, itemName: 'Dark Scroll' });
+                    showLevelAlert({ requiredLevel: 33, itemName: t('shop.darkScroll') });
                     return;
                   }
                   if (isOwned) return;
@@ -1251,8 +1673,8 @@ export default function ShopScreen() {
               >
                 <Image source={require('../../assets/avatars/dark_scroll.png')} style={styles.upgradeCardImage} resizeMode="contain" />
                 <View style={styles.upgradeInfo}>
-                  <Text style={styles.upgradeTitle}>Dark Scroll</Text>
-                  {!isOwned && !cs.isLevelLocked && <Text style={styles.upgradeDesc}>Unlocks the Nightmare Quiz</Text>}
+                  <Text style={styles.upgradeTitle}>{t('shop.darkScroll')}</Text>
+                  {!isOwned && !cs.isLevelLocked && <Text style={styles.upgradeDesc}>{t('shop.darkScrollDesc')}</Text>}
                 </View>
                 {isOwned ? (
                   <View style={styles.ownedItemBadgeRow}>
@@ -1264,14 +1686,61 @@ export default function ShopScreen() {
                     />
                   </View>
                 ) : cs.isLevelLocked ? (
-                  <View style={[styles.upgradeBadge, { backgroundColor: bp.badgeBg, borderColor: bp.badgeBorder }]}>
-                    <Text style={[styles.upgradeBadgeText, { color: bp.badgeColor }]}>🔒 Locked</Text>
+                  <View style={[styles.upgradeBadge, { backgroundColor: bp.badgeBg, borderColor: bp.badgeBorder, flexDirection: 'row', alignItems: 'center', gap: 5 }]}>
+                    <Image source={require('../../assets/avatars/lock.png')} style={{ width: 12, height: 12 }} resizeMode="contain" />
+                    <Text style={[styles.upgradeBadgeText, { color: bp.badgeColor }]}>{t('shop.locked')}</Text>
                   </View>
                 ) : (
                   <View style={styles.goldBadge}>
                     <View style={styles.goldRow}>
                       <Image source={require('../../assets/avatars/gold_coin.png')} style={styles.goldCoinSmall} resizeMode="contain" />
-                      <Text style={styles.goldText}>66,666</Text>
+                      <Text style={styles.goldText}>66666</Text>
+                    </View>
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })()}
+
+          {/* Infinite Maps */}
+          {!profile?.is_conquerer && (() => {
+            const isOwned = unlockedItems.has('upgrade_infinite_maps');
+            const cs = resolveCardState({ isUnlocked: isOwned, requiredLevel: 100, playerLevel });
+            const cp = CARD_PALETTES[cs.primaryState];
+            const bp = CARD_PALETTES[cs.badgeState];
+            return (
+              <TouchableOpacity
+                style={[styles.upgradeCard, isOwned ? styles.upgradeCardOwned : { backgroundColor: cp.cardBg, borderColor: cp.cardBorder, opacity: cs.states.length > 0 ? 0.8 : 1 }]}
+                onPress={() => {
+                  if (cs.isLevelLocked) {
+                    showLevelAlert({ requiredLevel: 100, itemName: t('shop.infiniteMaps') });
+                    return;
+                  }
+                  if (isOwned) return;
+                  handleBuyInfiniteMaps();
+                }}
+                disabled={actionLoading || isOwned}
+                activeOpacity={0.8}
+              >
+                <Image source={require('../../assets/avatars/ancient_map.png')} style={styles.upgradeCardImage} resizeMode="contain" />
+                <View style={styles.upgradeInfo}>
+                  <Text style={styles.upgradeTitle}>{t('shop.infiniteMaps')}</Text>
+                  {!isOwned && !cs.isLevelLocked && <Text style={styles.upgradeDesc}>{t('shop.infiniteMapsDesc')}</Text>}
+                </View>
+                {isOwned ? (
+                  <View style={[styles.ownedItemBadgeRow, { paddingRight: 12 }]}>
+                    <Text style={{ color: '#FFD700', fontSize: 22, fontWeight: 'bold' }}>∞</Text>
+                  </View>
+                ) : cs.isLevelLocked ? (
+                  <View style={[styles.upgradeBadge, { backgroundColor: bp.badgeBg, borderColor: bp.badgeBorder, flexDirection: 'row', alignItems: 'center', gap: 5 }]}>
+                    <Image source={require('../../assets/avatars/lock.png')} style={{ width: 12, height: 12 }} resizeMode="contain" />
+                    <Text style={[styles.upgradeBadgeText, { color: bp.badgeColor }]}>Lvl 100</Text>
+                  </View>
+                ) : (
+                  <View style={styles.goldBadge}>
+                    <View style={styles.goldRow}>
+                      <Image source={require('../../assets/avatars/gold_coin.png')} style={styles.goldCoinSmall} resizeMode="contain" />
+                      <Text style={styles.goldText}>50,000</Text>
                     </View>
                   </View>
                 )}
@@ -1303,7 +1772,7 @@ export default function ShopScreen() {
           <View style={styles.ticketModalContainer} onStartShouldSetResponder={() => true}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
               <Image source={require('../../assets/avatars/raffle_ticket.png')} style={{ width: 22, height: 22 }} resizeMode="contain" />
-              <Text style={styles.ticketModalTitle}>acquire millionaire tickets</Text>
+              <Text style={styles.ticketModalTitle}>{t('shop.acquireTickets')}</Text>
             </View>
 
             <TouchableOpacity
@@ -1314,8 +1783,8 @@ export default function ShopScreen() {
             >
               <Image source={require('../../assets/avatars/raffle_ticket.png')} style={styles.upgradeCardImageLarge} resizeMode="contain" />
               <View style={styles.upgradeInfo}>
-                <Text style={styles.upgradeTitle}>Millionaire Ticket</Text>
-                <Text style={styles.upgradeDesc}>1 ticket</Text>
+                <Text style={styles.upgradeTitle}>{t('shop.millionaireTicket')}</Text>
+                <Text style={styles.upgradeDesc}>{t('shop.oneTicket')}</Text>
               </View>
               <View style={[styles.goldBadge, { flexDirection: 'row', alignItems: 'center', gap: 5, marginRight: 8, marginLeft: -8 }]}>
                 <Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 14, height: 14 }} resizeMode="contain" />
@@ -1331,8 +1800,8 @@ export default function ShopScreen() {
             >
               <Image source={require('../../assets/avatars/raffle_ticket_pack.png')} style={styles.upgradeCardImageLarge} resizeMode="contain" />
               <View style={styles.upgradeInfo}>
-                <Text style={styles.upgradeTitle}>Ticket Pack</Text>
-                <Text style={styles.upgradeDesc}>5 millionaire tickets</Text>
+                <Text style={styles.upgradeTitle}>{t('shop.ticketPack')}</Text>
+                <Text style={styles.upgradeDesc}>{t('shop.ticketsCount')}</Text>
               </View>
               <View style={[styles.goldBadge, { flexDirection: 'row', alignItems: 'center', gap: 5, marginRight: 8, marginLeft: -8 }]}>
                 <Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 14, height: 14 }} resizeMode="contain" />
@@ -1343,16 +1812,17 @@ export default function ShopScreen() {
             <TouchableOpacity
               style={[styles.upgradeCard, { padding: 4, borderColor: '#9b59b6' }]}
               onPress={() => { setShowTicketModal(false); handleWatchAdForTicket(); }}
-              disabled={actionLoading}
+              disabled={actionLoading || ticketAdsRemaining === 0}
               activeOpacity={0.8}
             >
               <Image source={require('../../assets/avatars/raffle_ticket.png')} style={styles.upgradeCardImageLarge} resizeMode="contain" />
               <View style={styles.upgradeInfo}>
-                <Text style={styles.upgradeTitle}>Watch an ad</Text>
-                <Text style={styles.upgradeDesc}>1 ticket for 1 ad</Text>
+                <Text style={styles.upgradeTitle}>{t('shop.watchAnAd')}</Text>
+                <Text style={styles.upgradeDesc}>{t('shop.oneAdTicket')}</Text>
+                <Text style={styles.upgradeDesc}>{ticketAdsRemaining} / 3 left today · resets 00:00 UTC</Text>
               </View>
               <View style={[styles.goldBadge, { backgroundColor: '#9b59b6', borderColor: '#9b59b6' }]}>
-                <Text style={styles.goldText}>Free</Text>
+                <Text style={styles.goldText}>{t('shop.free')}</Text>
               </View>
             </TouchableOpacity>
 
@@ -1360,7 +1830,7 @@ export default function ShopScreen() {
               style={styles.ticketModalCancel}
               onPress={() => setShowTicketModal(false)}
             >
-              <Text style={styles.ticketModalCancelText}>Cancel</Text>
+              <Text style={styles.ticketModalCancelText}>{t('common.cancel')}</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
@@ -1375,7 +1845,7 @@ export default function ShopScreen() {
         <View style={styles.goldShopModal}>
           <View style={styles.goldShopCloseBar}>
             <TouchableOpacity style={styles.closeGoldShop} onPress={() => setShowGoldShop(false)}>
-              <Text style={styles.closeGoldShopText}>✕ Close</Text>
+              <Text style={styles.closeGoldShopText}>✕ {t('common.cancel')}</Text>
             </TouchableOpacity>
           </View>
           <GoldShopScreen />
@@ -1383,6 +1853,27 @@ export default function ShopScreen() {
       </Modal>
 
       {showConfetti && <TopFallConfetti />}
+
+      {/* Avatar long-press preview overlay */}
+      {previewAvatar && (
+        <TouchableOpacity
+          style={styles.avatarPreviewOverlay}
+          activeOpacity={1}
+          onPress={() => setPreviewAvatar(null)}
+        >
+          <View style={styles.avatarPreviewCard}>
+            <AvatarDisplay avatarId={previewAvatar.id} size={120} />
+            <View style={styles.mythicPreviewBadge}><Text style={styles.mythicPreviewBadgeText}>{t('shop.mythicAvatarBonusBadge')}</Text></View>
+            <Text style={styles.avatarPreviewLabel}>{previewAvatar.label}</Text>
+            {previewAvatar.mythicBonus && (
+              <Text style={styles.mythicPreviewBonus}>
+                {t(previewAvatar.mythicBonus === 'gold' ? 'shop.mythicBonusGold' : 'shop.mythicBonusXp')}
+              </Text>
+            )}
+            <Text style={styles.avatarPreviewHint}>{t('shop.tapToClose')}</Text>
+          </View>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -1402,7 +1893,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: 12,
     paddingTop: 56,
     paddingBottom: 12,
   },
@@ -1425,7 +1916,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   currencyIconTicket: { backgroundColor: '#1a0a2a' },
-  currencyIconText: { fontSize: 15 },
   currencyAmount: {
     color: '#FFD700',
     fontSize: 13,
@@ -1441,7 +1931,7 @@ const styles = StyleSheet.create({
   // Tab bar
   tabBar: {
     flexDirection: 'row',
-    marginHorizontal: 20,
+    marginHorizontal: 12,
     backgroundColor: '#1a1a2e',
     borderRadius: 12,
     overflow: 'hidden',
@@ -1460,7 +1950,7 @@ const styles = StyleSheet.create({
   // Sub-tab bar (Buy / Owned)
   subTabBar: {
     flexDirection: 'row',
-    marginHorizontal: 20,
+    marginHorizontal: 12,
     marginBottom: 10,
     backgroundColor: '#1a1a2e',
     borderRadius: 10,
@@ -1474,7 +1964,7 @@ const styles = StyleSheet.create({
   subTabTextActive: { color: '#FFD700', fontWeight: 'bold' },
   // Commander banner
   commanderBanner: {
-    marginHorizontal: 20,
+    marginHorizontal: 12,
     marginBottom: 10,
     backgroundColor: '#1a0a2e',
     borderRadius: 10,
@@ -1493,7 +1983,7 @@ const styles = StyleSheet.create({
   searchFilterRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: 12,
     gap: 8,
     marginBottom: 10,
   },
@@ -1519,7 +2009,7 @@ const styles = StyleSheet.create({
   sortButtonActive: { backgroundColor: '#FFD700', borderColor: '#FFD700' },
   sortText: { color: '#aaa', fontSize: 13, fontWeight: '600' },
   sortTextActive: { color: '#0a0a1a' },
-  list: { paddingHorizontal: 20, paddingBottom: 20 },
+  list: { paddingHorizontal: 12, paddingBottom: 20 },
   countryCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1561,7 +2051,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     backgroundColor: '#1a1a2e',
-    marginHorizontal: 20,
+    marginHorizontal: 12,
     marginBottom: 10,
     padding: 14,
     borderRadius: 14,
@@ -1570,6 +2060,32 @@ const styles = StyleSheet.create({
   },
   goldBannerText: { color: '#FFD700', fontSize: 14, fontWeight: '600' },
   goldBannerCta: { color: '#FFD700', fontSize: 13, fontWeight: 'bold' },
+  bulkBuyCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#0d2a1a',
+    marginHorizontal: 12,
+    marginBottom: 10,
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#22c55e',
+  },
+  bulkBuyLeft: { flex: 1, marginRight: 12 },
+  bulkBuyTitle: { color: '#22c55e', fontSize: 14, fontWeight: 'bold', marginBottom: 2 },
+  bulkBuyDesc: { color: '#aaa', fontSize: 13 },
+  bulkBuyCost: { color: '#FFD700', fontWeight: 'bold' },
+  bulkBuyRemaining: { color: '#666', fontSize: 11, marginTop: 3 },
+  bulkBuyBtn: {
+    backgroundColor: '#22c55e',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    minWidth: 72,
+    alignItems: 'center',
+  },
+  bulkBuyBtnText: { color: '#0d2a1a', fontWeight: 'bold', fontSize: 13 },
   // Tier sections
   tierSection: {
     marginHorizontal: 12,
@@ -1625,7 +2141,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: 'bold',
   },
-  itemEmoji: { fontSize: 44, marginBottom: 6, lineHeight: 54 },
   itemLabel: { color: '#ccc', fontSize: 11, marginBottom: 6, textAlign: 'center' },
   equippedBadge: {
     backgroundColor: '#FFD700',
@@ -1644,6 +2159,63 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   ownedItemText: { color: '#aaa', fontSize: 10, fontWeight: '600' },
+  equipBadge: {
+    backgroundColor: '#1a3a2e',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#22c55e66',
+  },
+  equipBadgeText: { color: '#22c55e', fontSize: 10, fontWeight: '700' },
+  avatarPreviewOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 200,
+  },
+  avatarPreviewCard: {
+    backgroundColor: '#1a1a2e',
+    borderRadius: 28,
+    padding: 36,
+    alignItems: 'center',
+    gap: 16,
+    borderWidth: 1,
+    borderColor: '#FFD70066',
+    minWidth: 230,
+  },
+  avatarPreviewLabel: {
+    color: '#fff', fontSize: 22, fontWeight: 'bold', textAlign: 'center',
+  },
+  avatarPreviewHint: { color: '#555', fontSize: 11 },
+  mythicAvatarSection: {
+    marginHorizontal: 12,
+    marginBottom: 14,
+    padding: 14,
+    borderRadius: 18,
+    backgroundColor: '#17102a',
+    borderWidth: 1,
+    borderColor: '#9b5de566',
+  },
+  mythicAvatarHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  mythicAvatarTitle: { color: '#f6d365', fontSize: 13, fontWeight: '900', letterSpacing: .7 },
+  mythicAvatarSubtitle: { color: '#a99ab8', fontSize: 11, marginTop: 3 },
+  mythicAvatarCount: { color: '#d8b4fe', fontSize: 12, fontWeight: '900' },
+  mythicAvatarGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  mythicAvatarCard: { width: '31.5%', minHeight: 132, alignItems: 'center', justifyContent: 'center', padding: 7, borderRadius: 13, backgroundColor: '#24183b', borderWidth: 1, borderColor: '#66418c' },
+  mythicAvatarEquipped: { borderColor: '#f6d365', backgroundColor: '#33233e' },
+  mythicAvatarStar: { position: 'absolute', right: 5, top: 4, zIndex: 2 },
+  mythicAvatarStarText: { color: '#f6d365', fontSize: 13 },
+  mythicAvatarName: { color: '#eee4f8', fontSize: 10, fontWeight: '800', textAlign: 'center', marginTop: 2 },
+  mythicAvatarHint: { marginTop: 5, borderRadius: 6, paddingHorizontal: 5, paddingVertical: 2, backgroundColor: '#3c245c' },
+  mythicAvatarHintText: { color: '#d8b4fe', fontSize: 8, fontWeight: '900' },
+  mythicAvatarEmpty: { minHeight: 82, borderRadius: 13, backgroundColor: '#120d20', alignItems: 'center', justifyContent: 'center', padding: 12, flexDirection: 'row', gap: 10 },
+  mythicAvatarQuestion: { color: '#c084fc', fontSize: 34, fontWeight: '900' },
+  mythicAvatarEmptyText: { color: '#a99ab8', fontSize: 11, lineHeight: 16, flex: 1 },
+  mythicPreviewBadge: { borderRadius: 8, backgroundColor: '#3c245c', paddingHorizontal: 10, paddingVertical: 5 },
+  mythicPreviewBadgeText: { color: '#f6d365', fontSize: 10, fontWeight: '900', letterSpacing: .7 },
+  mythicPreviewBonus: { color: '#d8b4fe', fontSize: 16, fontWeight: '900', marginTop: -5 },
   itemPriceBadge: {
     backgroundColor: '#1a1a30',
     paddingHorizontal: 8,
@@ -1653,6 +2225,100 @@ const styles = StyleSheet.create({
     borderColor: '#FFD700',
   },
   itemPriceText: { color: '#FFD700', fontSize: 10, fontWeight: 'bold' },
+  featuredAvatarCard: {
+    marginHorizontal: 12,
+    marginBottom: 14,
+    backgroundColor: '#1a1020',
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#FFD700',
+    padding: 14,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  mythicChestCard: {
+    marginHorizontal: 12,
+    marginBottom: 12,
+    minHeight: 92,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: '#b66cff',
+    backgroundColor: '#160d29',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    overflow: 'hidden',
+  },
+  mythicChestGlow: { ...StyleSheet.absoluteFillObject, backgroundColor: '#8b3fd1', opacity: 0.5 },
+  mythicChestSweep: { position: 'absolute', width: 70, height: 150, backgroundColor: '#ffffff22', transform: [{ rotate: '22deg' }], zIndex: 1 },
+  mythicChestSparkle: { position: 'absolute', right: 52, top: 7, color: '#fff3a3', fontSize: 22, zIndex: 3 },
+  mythicChestSparkleTwo: { position: 'absolute', right: 26, bottom: 9, color: '#c084fc', fontSize: 18, zIndex: 3 },
+  mythicChestImage: { width: 92, height: 78, marginRight: 8 },
+  mythicChestInfo: { flex: 1 },
+  mythicChestEyebrow: { color: '#d8a8ff', fontSize: 9, fontWeight: '900', letterSpacing: 1.1 },
+  mythicChestTitle: { color: '#fff', fontSize: 18, fontWeight: '900', marginTop: 3 },
+  mythicChestSubtitle: { color: '#a89bb9', fontSize: 11, marginTop: 2 },
+  mythicChestArrow: { color: '#d8a8ff', fontSize: 34, fontWeight: '300', paddingLeft: 6 },
+  featuredAvatarBadge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    backgroundColor: '#FFD700',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderBottomLeftRadius: 12,
+  },
+  featuredAvatarBadgeText: {
+    color: '#0a0a1a',
+    fontSize: 10,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
+  },
+  featuredAvatarBody: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    marginTop: 10,
+  },
+  featuredAvatarInfo: { flex: 1 },
+  featuredAvatarName: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginBottom: 2 },
+  featuredAvatarSub: { color: '#6BCB77', fontSize: 12, fontWeight: '600', marginBottom: 6 },
+  featuredPriceRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  featuredOldPrice: { color: '#555', fontSize: 13, textDecorationLine: 'line-through' },
+  featuredNewPrice: { color: '#FFD700', fontSize: 18, fontWeight: 'bold' },
+  affordBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#1a1a20',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FFD700',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginHorizontal: 6,
+    marginBottom: 12,
+  },
+  affordBannerText: { flex: 1, color: '#ccc', fontSize: 13 },
+  affordBannerCount: { color: '#FFD700', fontWeight: 'bold' },
+  affordBannerArrow: { color: '#FFD700', fontSize: 16, fontWeight: 'bold' },
+  conquerorStamp: {
+    backgroundColor: '#2a1a4a',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#9B59B6',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  conquerorStampText: {
+    color: '#9B59B6',
+    fontSize: 9,
+    fontWeight: 'bold',
+    letterSpacing: 0.3,
+  },
   statusBadgeTierLocked: {
     backgroundColor: '#3a1a1a',
     paddingHorizontal: 8,
@@ -1663,7 +2329,6 @@ const styles = StyleSheet.create({
     borderColor: '#ff4444',
   },
   statusTextTierLocked: { color: '#ff4444', fontSize: 9, fontWeight: 'bold' },
-  statusTextTierName: { color: '#ffaaaa', fontSize: 9 },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(10,10,26,0.7)',
@@ -1674,7 +2339,7 @@ const styles = StyleSheet.create({
   goldShopCloseBar: {
     paddingTop: 56,
     paddingBottom: 8,
-    paddingHorizontal: 20,
+    paddingHorizontal: 12,
     alignItems: 'flex-end',
     backgroundColor: '#0a0a1a',
   },
@@ -1687,7 +2352,7 @@ const styles = StyleSheet.create({
   closeGoldShopText: { color: '#aaa', fontSize: 14 },
   // Upgrades
   upgradesContainer: {
-    padding: 20,
+    padding: 12,
     gap: 16,
   },
   upgradesSubtitle: {
@@ -1720,10 +2385,6 @@ const styles = StyleSheet.create({
   upgradeBadgeText: {
     fontSize: 13,
     fontWeight: 'bold',
-  },
-  upgradeCardEmoji: {
-    fontSize: 28,
-    marginRight: 8,
   },
   upgradeCardImage: {
     width: 40,

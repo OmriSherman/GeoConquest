@@ -1,29 +1,38 @@
 {
   "expo": {
-    "name": "GeoConquest",
+    "name": "Geo Conquest",
     "slug": "geoconquest",
-    "version": "1.0.0",
+    "version": "1.2.5",
     "orientation": "portrait",
-    "icon": "./assets/icon-android.png",
+    "icon": "./assets/app-icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "updates": {
       "enabled": false
     },
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/logo-new.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#0a0a1a"
     },
     "scheme": "geoconquest",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.geoconquest.app"
+      "bundleIdentifier": "com.geoconquest.app",
+      "entitlements": {
+        "com.apple.developer.game-center": true,
+        "com.apple.developer.applesignin": [
+          "Default"
+        ]
+      },
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon-foreground.png",
-        "backgroundColor": "#0E2B47"
+        "foregroundImage": "./assets/app-adaptive-foreground.png",
+        "backgroundColor": "#0a0a1a"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
@@ -37,15 +46,19 @@
     },
     "plugins": [
       "expo-web-browser",
+      "expo-apple-authentication",
       "react-native-iap",
       "expo-secure-store",
       [
         "react-native-google-mobile-ads",
         {
-          "androidAppId": "ca-app-pub-7734903998169254~4543896223"
+          "androidAppId": "ca-app-pub-7734903998169254~4543896223",
+          "iosAppId": "ca-app-pub-7734903998169254~7018551092"
         }
       ],
-      "./plugins/withAdIdPermission"
+      "./plugins/withAdIdPermission",
+      "expo-localization",
+      "expo-font"
     ],
     "extra": {
       "eas": {

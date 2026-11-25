@@ -23,12 +23,12 @@ import { getLevelInfo } from '../lib/xpSystem';
 import { fetchCountries } from '../lib/countryData';
 import { CUSTOM_AVATARS } from '../lib/avatarData';
 import { Country, QuizType } from '../types';
+import { t, useLocale } from '../lib/i18n';
 import AvatarDisplay from '../components/AvatarDisplay';
 import { CUSTOM_FLAG_COMPONENTS, isCustomFlag } from '../lib/customFlags';
 
 // Item image map for custom items (non-avatar, non-flag)
 const ITEM_IMAGES: Record<string, any> = {
-  suit_up: require('../../assets/avatars/suit_up.png'),
   png_beast_mark: require('../../assets/avatars/beast_mark.png'),
   upgrade_capitals: require('../../assets/avatars/building.png'),
   upgrade_borders: require('../../assets/avatars/border.png'),
@@ -63,8 +63,22 @@ const ACHIEVEMENT_ICON_IMAGES: Record<string, any> = {
   png_theater_mask:    require('../../assets/avatars/theater_mask.png'),
   png_skull:           require('../../assets/avatars/skull.png'),
   png_bullseye:        require('../../assets/avatars/bullseye.png'),
+  png_sextant:         require('../../assets/avatars/sextant.png'),
+  png_caravel:         require('../../assets/avatars/caravel.png'),
+  png_hourglass:       require('../../assets/avatars/hourglass.png'),
   png_open_scroll:     require('../../assets/avatars/open_scroll.png'),
   png_compass:         require('../../assets/avatars/compass.png'),
+  png_cosmic_armor:    require('../../assets/avatars/cosmic_armor.png'),
+  png_world_ender:     require('../../assets/avatars/world_ender.png'),
+  png_divine_high_king: require('../../assets/avatars/divine_high_king.png'),
+  png_void_eye:        require('../../assets/avatars/void_eye.png'),
+  png_crucible:        require('../../assets/avatars/crucible.png'),
+  // Transcendent quest icons
+  png_ascended_sigil:  require('../../assets/avatars/ascended_sigil.png'),
+  png_atlas_rune:      require('../../assets/avatars/atlas_rune.png'),
+  png_eternal_seal:    require('../../assets/avatars/eternal_seal.png'),
+  png_the_singularity: require('../../assets/avatars/the_singularity.png'),
+  png_winner:          require('../../assets/avatars/winner.png'),
 };
 
 // Small visual preview of a trophy item reward (avatar emoji/SVG or flag)
@@ -72,7 +86,7 @@ function RewardItemPreview({ itemId, type, size = 22 }: { itemId: string; type: 
   const imgSrc = ITEM_IMAGES[itemId];
   if (imgSrc) return <Image source={imgSrc} style={{ width: size, height: size, borderRadius: 4 }} resizeMode="contain" />;
   if (type === 'item') {
-    return <Text style={{ fontSize: size, lineHeight: size + 2 }}>🎁</Text>;
+    return <Image source={require('../../assets/avatars/treasure_chest.png')} style={{ width: size, height: size }} resizeMode="contain" />;
   }
   if (type === 'flag') {
     const FlagComp = isCustomFlag(itemId) ? CUSTOM_FLAG_COMPONENTS[itemId] : null;
@@ -90,6 +104,7 @@ export const ACHIEVEMENT_KEYS = {
   fastFlagMastery: '@achievements/fast_flag_mastery',
   fastCapitalsMastery: '@achievements/fast_capitals_mastery',
   nightmareCompleted: '@achievements/nightmare_completed',
+  gameMasterCompleted: '@achievements/game_master_completed',
 };
 
 // Returns keys scoped to a specific user ID to prevent cross-account bleed
@@ -102,6 +117,7 @@ export function getUserAchievementKeys(userId: string) {
     fastFlagMastery: `@achievements/${userId}/fast_flag_mastery`,
     fastCapitalsMastery: `@achievements/${userId}/fast_capitals_mastery`,
     nightmareCompleted: `@achievements/${userId}/nightmare_completed`,
+    gameMasterCompleted: `@achievements/${userId}/game_master_completed`,
   };
 }
 
@@ -112,6 +128,7 @@ export async function recordQuizCompletion(opts: {
   durationSeconds: number;
   goldEarned: number;
   userId?: string;
+  millionairePowerUpsUsed?: boolean;
 }): Promise<{ newlyCompletedSpeedDemon: boolean; newlyCompletedNightmare: boolean; newlyCompletedCapitalsMastery: boolean }> {
   try {
     let dbAlreadySpeedDemon = false;
@@ -145,7 +162,7 @@ export async function recordQuizCompletion(opts: {
     }
 
     const keys = opts.userId ? getUserAchievementKeys(opts.userId) : ACHIEVEMENT_KEYS;
-    const [flagStr, perfectStr, speedStr, goldStr, fastFlagStr, fastCapitalsStr, nightmareStr] = await AsyncStorage.multiGet([
+    const [flagStr, perfectStr, speedStr, goldStr, fastFlagStr, fastCapitalsStr, nightmareStr, gameMasterStr] = await AsyncStorage.multiGet([
       keys.flagQuizzesCompleted,
       keys.perfectQuizzes,
       keys.speedRuns,
@@ -153,6 +170,7 @@ export async function recordQuizCompletion(opts: {
       keys.fastFlagMastery,
       keys.fastCapitalsMastery,
       keys.nightmareCompleted,
+      keys.gameMasterCompleted,
     ]);
 
     const flags = parseInt(flagStr[1] ?? '0', 10);
@@ -162,11 +180,13 @@ export async function recordQuizCompletion(opts: {
     const wasAlreadySpeedDemon = fastFlagStr[1] === 'true' || dbAlreadySpeedDemon;
     const wasAlreadyCapitalsMastery = fastCapitalsStr[1] === 'true' || dbAlreadyCapitalsMastery;
     const wasAlreadyNightmare = nightmareStr[1] === 'true';
+    const wasAlreadyGameMaster = gameMasterStr[1] === 'true';
     const meetsSpeedDemon = opts.quizType === 'flag' && (opts.scorePercentage ?? 0) >= 90 && opts.durationSeconds < 30;
     const meetsCapitalsMastery = opts.quizType === 'capitals' && (opts.scorePercentage ?? 0) >= 90 && opts.durationSeconds < 30;
     const isFastFlagMastery = wasAlreadySpeedDemon || meetsSpeedDemon;
     const isFastCapitalsMastery = wasAlreadyCapitalsMastery || meetsCapitalsMastery;
     const isNightmareCompleted = wasAlreadyNightmare || (opts.quizType === 'nightmare' && opts.perfect);
+    const isGameMasterCompleted = wasAlreadyGameMaster || (opts.quizType === 'millionaire' && opts.perfect && !opts.millionairePowerUpsUsed);
 
     await AsyncStorage.multiSet([
       [keys.flagQuizzesCompleted, String(opts.quizType === 'flag' ? flags + 1 : flags)],
@@ -176,6 +196,7 @@ export async function recordQuizCompletion(opts: {
       [keys.fastFlagMastery, String(isFastFlagMastery)],
       [keys.fastCapitalsMastery, String(isFastCapitalsMastery)],
       [keys.nightmareCompleted, String(isNightmareCompleted)],
+      [keys.gameMasterCompleted, String(isGameMasterCompleted)],
     ]);
 
     // Update database columns for quest completion tracking
@@ -221,6 +242,12 @@ type StatsType = {
   ownedItems?: Set<string>;
   ownedAvatarCount?: number;
   playerLevel?: number;
+  excellentScoreCount?: number;
+  trailBestScore?: number;
+  gauntletBestScore?: number;
+  dailyFirstPlaceWins?: number;
+  perfectAccuracyCount?: number;
+  gameMasterCompleted?: boolean;
 };
 
 function renderAchievementCard(
@@ -267,7 +294,7 @@ function renderAchievementCard(
         <View style={styles.cardTop}>
           <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <Text style={[styles.cardTitle, isClaimed && styles.cardTitleClaimed, isPremiumSection && { color: '#9B59B6' }, isCosmic && { color: '#a78bfa' }, isNightmareCard && { color: '#ff8888' }]}>
-              {achievement.title}
+              {t(`questData.${achievement.id}.title`, { defaultValue: achievement.title })}
             </Text>
             {isPremiumSection && !isCosmic && <Image source={ACHIEVEMENT_ICON_IMAGES['png_crown']} style={{ width: 14, height: 14 }} resizeMode="contain" />}
             {isCosmic && <Image source={ACHIEVEMENT_ICON_IMAGES['png_galaxy']} style={{ width: 14, height: 14 }} resizeMode="contain" />}
@@ -278,7 +305,7 @@ function renderAchievementCard(
           </Text>
         </View>
 
-        <Text style={[styles.cardDesc, isPremiumSection && { color: '#9B59B6' }, isCosmic && { color: '#7c6fa0' }, isNightmareCard && { color: '#c06060' }]}>{achievement.description}</Text>
+        <Text style={[styles.cardDesc, isPremiumSection && { color: '#9B59B6' }, isCosmic && { color: '#7c6fa0' }, isNightmareCard && { color: '#c06060' }]}>{t(`questData.${achievement.id}.desc`, { defaultValue: achievement.description })}</Text>
 
         {!isClaimed ? (
           <View style={styles.actionRow}>
@@ -306,9 +333,12 @@ function renderAchievementCard(
                     <ActivityIndicator size="small" color="#0a0a1a" />
                   ) : (
                     <View style={styles.claimButtonInner}>
-                      <Text style={styles.claimButtonText}>Claim</Text>
+                      <Text style={styles.claimButtonText}>{t('achievements.claim')}</Text>
                       {!useRewardButton && achievement.rewardGold > 0 && (
-                        <Text style={styles.claimButtonText}>💰 {achievement.rewardGold.toLocaleString()}</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                          <Image source={require('../../assets/avatars/gold_bag.png')} style={{ width: 13, height: 13 }} resizeMode="contain" />
+                          <Text style={styles.claimButtonText}>{achievement.rewardGold.toLocaleString()}</Text>
+                        </View>
                       )}
                       {!useRewardButton && rewardItems.length === 1 && (
                         <View style={styles.claimItemPreview}>
@@ -324,14 +354,20 @@ function renderAchievementCard(
                     style={[styles.rewardsBadge, isPremiumSection && styles.rewardsBadgePremium, isCosmic && styles.rewardsBadgeCosmic, isNightmareCard && styles.rewardsBadgeNightmare]}
                     onPress={() => blockPaywall ? onPaywall!() : showRewards(achievement)}
                   >
-                    <Text style={[styles.rewardsBadgeText, isPremiumSection && { color: '#9B59B6' }, isCosmic && { color: '#a78bfa' }, isNightmareCard && { color: '#ff8888' }]}>🎁 Rewards</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <Image source={require('../../assets/avatars/treasure_chest.png')} style={{ width: 13, height: 13 }} resizeMode="contain" />
+                      <Text style={[styles.rewardsBadgeText, isPremiumSection && { color: '#9B59B6' }, isCosmic && { color: '#a78bfa' }, isNightmareCard && { color: '#ff8888' }]}>{t('achievements.rewards')}</Text>
+                    </View>
                   </TouchableOpacity>
                 )}
               </View>
             ) : (
               <View style={styles.rewardPill}>
                 {!useRewardButton && achievement.rewardGold > 0 && (
-                  <Text style={[styles.rewardHint, isPremiumSection && { color: '#9B59B6' }, isCosmic && { color: '#a78bfa' }, isNightmareCard && { color: '#ff8888' }]}>💰 {achievement.rewardGold.toLocaleString()}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                    <Image source={require('../../assets/avatars/gold_bag.png')} style={{ width: 12, height: 12 }} resizeMode="contain" />
+                    <Text style={[styles.rewardHint, isPremiumSection && { color: '#9B59B6' }, isCosmic && { color: '#a78bfa' }, isNightmareCard && { color: '#ff8888' }]}>{achievement.rewardGold.toLocaleString()}</Text>
+                  </View>
                 )}
                 {!useRewardButton && rewardItems.length === 1 && (
                   <View style={styles.rewardItemRow}>
@@ -344,7 +380,10 @@ function renderAchievementCard(
                     style={[styles.rewardsBadge, isPremiumSection && styles.rewardsBadgePremium, isCosmic && styles.rewardsBadgeCosmic, isNightmareCard && styles.rewardsBadgeNightmare]}
                     onPress={() => blockPaywall ? onPaywall!() : showRewards(achievement)}
                   >
-                    <Text style={[styles.rewardsBadgeText, isPremiumSection && { color: '#9B59B6' }, isCosmic && { color: '#a78bfa' }, isNightmareCard && { color: '#ff8888' }]}>🎁 Rewards</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <Image source={require('../../assets/avatars/treasure_chest.png')} style={{ width: 13, height: 13 }} resizeMode="contain" />
+                      <Text style={[styles.rewardsBadgeText, isPremiumSection && { color: '#9B59B6' }, isCosmic && { color: '#a78bfa' }, isNightmareCard && { color: '#ff8888' }]}>{t('achievements.rewards')}</Text>
+                    </View>
                   </TouchableOpacity>
                 )}
               </View>
@@ -357,6 +396,7 @@ function renderAchievementCard(
 }
 
 export default function AchievementsScreen() {
+  useLocale();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { profile, claimAchievement } = useAuth();
@@ -379,8 +419,14 @@ export default function AchievementsScreen() {
   const [fastFlagMastery, setFastFlagMastery] = useState(false);
   const [fastCapitalsMastery, setFastCapitalsMastery] = useState(false);
   const [nightmareCompleted, setNightmareCompleted] = useState(false);
+  const [gameMasterCompleted, setGameMasterCompleted] = useState(false);
   const [hasDarkScroll, setHasDarkScroll] = useState(false);
   const [ownedItemsSet, setOwnedItemsSet] = useState<Set<string>>(new Set());
+  const [excellentScoreCount, setExcellentScoreCount] = useState(0);
+  const [trailBestScore, setTrailBestScore] = useState(0);
+  const [gauntletBestScore, setGauntletBestScore] = useState(0);
+  const [dailyFirstPlaceWins, setDailyFirstPlaceWins] = useState(0);
+  const [perfectAccuracyCount, setPerfectAccuracyCount] = useState(0);
 
   useEffect(() => {
     fetchCountries().then(setAllCountries).catch(console.warn);
@@ -437,14 +483,16 @@ export default function AchievementsScreen() {
     if (!profile?.id) return;
     try {
       const keys = getUserAchievementKeys(profile.id);
-      const [fastFlagVal, fastCapitalsVal, nightmareVal] = await AsyncStorage.multiGet([
+      const [fastFlagVal, fastCapitalsVal, nightmareVal, gameMasterVal] = await AsyncStorage.multiGet([
         keys.fastFlagMastery,
         keys.fastCapitalsMastery,
         keys.nightmareCompleted,
+        keys.gameMasterCompleted,
       ]);
       if (fastFlagVal[1] === 'true') setFastFlagMastery(true);
       if (fastCapitalsVal[1] === 'true') setFastCapitalsMastery(true);
       if (nightmareVal[1] === 'true') setNightmareCompleted(true);
+      if (gameMasterVal[1] === 'true') setGameMasterCompleted(true);
     } catch (e) {
       console.warn('Failed to load local stats', e);
     }
@@ -481,6 +529,48 @@ export default function AchievementsScreen() {
       setOwnedItemsSet(itemSet);
 
       setHasDarkScroll(itemSet.has('upgrade_nightmare'));
+
+      // Excellence + Precision quests: fetch standard quiz results once
+      const { data: quizRows } = await supabase
+        .from('quiz_results')
+        .select('score, total_questions, quiz_type')
+        .eq('user_id', profile.id)
+        .in('quiz_type', ['flag', 'shape', 'capitals', 'borders', 'trail']);
+      const excellentCount = (quizRows ?? []).filter(
+        (r: any) => r.total_questions > 0 && r.score / r.total_questions >= 0.85,
+      ).length;
+      setExcellentScoreCount(excellentCount);
+      const perfectCount = (quizRows ?? []).filter(
+        (r: any) => r.quiz_type !== 'trail' && r.total_questions > 0 && r.score >= r.total_questions,
+      ).length;
+      setPerfectAccuracyCount(perfectCount);
+
+      // Trail Blazer quest: best single-session score in trail quiz
+      const { data: trailRows } = await supabase
+        .from('quiz_results')
+        .select('score')
+        .eq('user_id', profile.id)
+        .eq('quiz_type', 'trail')
+        .order('score', { ascending: false })
+        .limit(1);
+      setTrailBestScore(trailRows?.[0]?.score ?? 0);
+
+      // Ascendant quest: best score in Gauntlet quiz
+      const { data: gauntletRows } = await supabase
+        .from('gauntlet_scores')
+        .select('score')
+        .eq('user_id', profile.id)
+        .order('score', { ascending: false })
+        .limit(1);
+      setGauntletBestScore(gauntletRows?.[0]?.score ?? 0);
+
+      // Daily Champion quest: number of times finished #1 in daily challenge
+      const { data: champRows } = await supabase
+        .from('daily_leaderboard_rewards')
+        .select('reward_date')
+        .eq('awarded_user_id', profile.id)
+        .eq('reward_rank', 1);
+      setDailyFirstPlaceWins((champRows ?? []).length);
     } catch (err) {
       console.warn('Failed to load achievements:', err);
     } finally {
@@ -504,7 +594,7 @@ export default function AchievementsScreen() {
       setShowConfetti(true);
       setTimeout(() => setShowConfetti(false), 3000);
     } catch (err: any) {
-      showAlert({ title: 'Error', message: err.message });
+      showAlert({ title: t('achievements.error'), message: err.message });
     } finally {
       setClaimingId(null);
     }
@@ -518,10 +608,10 @@ export default function AchievementsScreen() {
       </View>
     ) : undefined;
     const lines: string[] = [];
-    if (ach.rewardGold > 0) lines.push(`💰 ${ach.rewardGold.toLocaleString()} gold`);
-    if (ach.rewardTickets) lines.push(`🎟️ ${ach.rewardTickets} Ticket${ach.rewardTickets > 1 ? 's' : ''}`);
+    if (ach.rewardGold > 0) lines.push(`${ach.rewardGold.toLocaleString()} gold`);
+    if (ach.rewardTickets) lines.push(`${ach.rewardTickets} Ticket${ach.rewardTickets > 1 ? 's' : ''}`);
     items.forEach(item => lines.push(`+ ${item.label}`));
-    showAlert({ title: `${ach.title} — Rewards`, icon, message: lines.join('\n') });
+    showAlert({ title: `${t(`questData.${ach.id}.title`, { defaultValue: ach.title })} — ${t('achievements.rewards')}`, icon, message: lines.join('\n') });
   }
 
   // Calculate user stats for checking progress
@@ -557,12 +647,18 @@ export default function AchievementsScreen() {
     fastFlagMastery,
     fastCapitalsMastery,
     nightmareCompleted,
+    gameMasterCompleted,
     ownedByRegion,
     totalByRegion,
     ownedItems: ownedItemsSet,
     ownedAvatarCount,
     playerLevel: getLevelInfo(profile?.xp ?? 0).level,
     quizCount: profile?.quiz_count ?? 0,
+    excellentScoreCount,
+    trailBestScore,
+    gauntletBestScore,
+    dailyFirstPlaceWins,
+    perfectAccuracyCount,
   };
 
 
@@ -578,11 +674,11 @@ export default function AchievementsScreen() {
     <ScrollView ref={scrollRef} style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Text style={styles.title}>Quests</Text>
+          <Text style={styles.title}>{t('achievements.title')}</Text>
         </View>
         <View style={styles.progressSummary}>
           <Text style={styles.progressSummaryText}>
-            {claimedIds.size} / {ACHIEVEMENTS_DATA.length} Claimed
+            {t('achievements.progress', { claimed: claimedIds.size, total: ACHIEVEMENTS_DATA.length })}
           </Text>
         </View>
       </View>
@@ -596,7 +692,39 @@ export default function AchievementsScreen() {
         />
       </View>
 
+      {!profile?.is_conquerer && (
+        <TouchableOpacity
+          style={styles.commanderBanner}
+          onPress={() => navigation.getParent()?.navigate('Premium')}
+          activeOpacity={0.85}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Image source={require('../../assets/avatars/crown.png')} style={{ width: 16, height: 16 }} resizeMode='contain' />
+            <Text style={styles.commanderBannerText}>{t('achievements.conquerorPass')}</Text>
+          </View>
+        </TouchableOpacity>
+      )}
+
       {ACHIEVEMENTS_DATA.map((achievement) => {
+        // Prerequisite lock — shown as ??? void card until prerequisite is claimed
+        if (achievement.prerequisite && !claimedIds.has(achievement.prerequisite)) {
+          return (
+            <View key={`${achievement.id}_locked`} style={[styles.card, styles.cardTranscendentLocked]}>
+              <View style={[styles.iconBg, styles.iconBgTranscendentLocked]}>
+                {ACHIEVEMENT_ICON_IMAGES[achievement.icon]
+                  ? <Image source={ACHIEVEMENT_ICON_IMAGES[achievement.icon]} style={{ width: 28, height: 28, opacity: 0.45 }} resizeMode="contain" />
+                  : <Text style={styles.achievementEmoji}>?</Text>
+                }
+              </View>
+              <View style={styles.cardBody}>
+                <Text style={styles.cardTitleTranscendentLocked}>???</Text>
+                <View style={[styles.progressBarBg, { marginTop: 8, marginRight: 0 }]}>
+                  <View style={[styles.progressBarFill, { width: '100%', backgroundColor: '#1a0a2e' }]} />
+                </View>
+              </View>
+            </View>
+          );
+        }
         // Nightmare quest: hidden as ??? until user owns the Dark Scroll upgrade
         if (achievement.id === 'nightmare_complete' && !hasDarkScroll) {
           return (
@@ -699,8 +827,20 @@ export default function AchievementsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0a0a1a' },
+  commanderBanner: {
+    marginHorizontal: 0,
+    marginBottom: 10,
+    backgroundColor: '#1a0a2e',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#7B2FBE',
+    paddingVertical: 7,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  commanderBannerText: { color: '#FFD700', fontWeight: 'bold', fontSize: 13 },
   center: { flex: 1, backgroundColor: '#0a0a1a', justifyContent: 'center', alignItems: 'center' },
-  content: { padding: 16, paddingTop: 50, paddingBottom: 40 },
+  content: { padding: 12, paddingTop: 50, paddingBottom: 40 },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -946,5 +1086,20 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.55,
     shadowRadius: 12,
     elevation: 8,
+  },
+  // ── Transcendent locked (prerequisite not yet claimed) ────────────────────
+  cardTranscendentLocked: {
+    borderColor: '#5b21b6',
+    borderWidth: 1.5,
+    backgroundColor: '#07041a',
+  },
+  iconBgTranscendentLocked: {
+    backgroundColor: '#150d2e',
+  },
+  cardTitleTranscendentLocked: {
+    color: '#7c3aed',
+    fontSize: 14,
+    fontWeight: '600' as const,
+    letterSpacing: 3,
   },
 });

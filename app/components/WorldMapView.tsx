@@ -115,7 +115,7 @@ function AnimatedTrailSegment({
       x2={to[0]}
       y2={to[1]}
       stroke={color}
-      strokeWidth={2.4}
+      strokeWidth={1.2}
       strokeLinecap="round"
       animatedProps={animatedProps}
     />
@@ -415,9 +415,9 @@ export default function WorldMapView({
                     key={`trail-node-${code}-${i}`}
                     cx={pt[0]}
                     cy={pt[1]}
-                    r={isCurrent ? 3.7 : 2.4}
+                    r={isCurrent ? 2.2 : 1.4}
                     fill={isCurrent ? '#FFD700' : trailColor}
-                    opacity={isCurrent ? 0.49 : 0.88}
+                    opacity={isCurrent ? 0.6 : 0.88}
                   />
                 );
               })}

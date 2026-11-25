@@ -26,6 +26,7 @@ interface GameContextValue {
   questHighlightId: string | null;
   addGold: (amount: number) => Promise<void>;
   purchaseCountry: (country: Country) => Promise<void>;
+  bulkPurchaseCountries: (countries: Country[]) => Promise<{ count: number; totalCost: number }>;
   isOwned: (cca2: string) => boolean;
   canAfford: (price: number) => boolean;
   clearQuestToast: () => void;
@@ -39,7 +40,9 @@ const GameContext = createContext<GameContextValue | null>(null);
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
 export function GameProvider({ children }: { children: React.ReactNode }) {
-  const { user, profile, addGold: applyGoldDelta, refreshProfile } = useAuth();
+  const { user, profile, addGold: updateGoldBalance } = useAuth();
+  const goldBalance = profile?.gold_balance ?? 0;
+
   const [ownedCountries, setOwnedCountries] = useState<string[]>([]);
   const [loadingGame, setLoadingGame] = useState(true);
   const [questToast, setQuestToast] = useState<string | null>(null);
@@ -49,7 +52,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setQuestToast(message);
     setQuestHighlightId(achievementId ?? null);
   }, []);
-  const goldBalance = profile?.gold_balance ?? 0;
 
   // Track which empire thresholds we've already toasted this session
   const toastedThresholds = useRef<Set<number>>(new Set());
@@ -132,34 +134,91 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   const addGold = useCallback(
     async (amount: number) => {
-      await applyGoldDelta(amount);
+      await updateGoldBalance(amount);
     },
-    [applyGoldDelta]
+    [updateGoldBalance]
   );
 
   const purchaseCountry = useCallback(
     async (country: Country) => {
-      if (!user) return;
+      if (!user || !profile) return;
       const price = getCountryPrice(country.area);
+      const currentGold = profile.gold_balance ?? 0;
 
-      if (goldBalance < price) {
+      if (currentGold < price) {
         throw new Error('Not enough gold');
       }
       if (ownedCountries.includes(country.cca2)) {
         throw new Error('Country already owned');
       }
 
-      const { error } = await supabase.rpc('purchase_country', {
-        p_country_code: country.cca2,
-        p_cost: price,
+      await updateGoldBalance(-price);
+
+      const purchaseRes = await supabase
+        .from('owned_countries')
+        .insert({ user_id: user.id, country_code: country.cca2 });
+
+      if (purchaseRes.error) {
+        try {
+          await updateGoldBalance(price);
+        } catch (refundError) {
+          console.warn('[Game] Failed to refund gold after country purchase error:', refundError);
+        }
+        throw purchaseRes.error;
+      }
+
+      setOwnedCountries(prev => {
+        if (prev.includes(country.cca2)) return prev;
+        const next = [...prev, country.cca2];
+        AsyncStorage.setItem(OWNED_KEY(user.id), JSON.stringify(next)).catch(() => {});
+        return next;
+      });
+    },
+    [user, profile, ownedCountries, updateGoldBalance]
+  );
+
+  const bulkPurchaseCountries = useCallback(
+    async (countries: Country[]): Promise<{ count: number; totalCost: number }> => {
+      if (!user || !profile) throw new Error('Not authenticated');
+
+      // Filter out already-owned, sort cheapest first, accumulate until gold runs out
+      let remaining = profile.gold_balance ?? 0;
+      const toBuy: Country[] = [];
+      const sorted = [...countries]
+        .filter(c => !ownedCountries.includes(c.cca2))
+        .sort((a, b) => getCountryPrice(a.area) - getCountryPrice(b.area));
+
+      for (const c of sorted) {
+        const price = getCountryPrice(c.area);
+        if (remaining < price) break;
+        toBuy.push(c);
+        remaining -= price;
+      }
+
+      if (toBuy.length === 0) throw new Error('Not enough gold to buy any country');
+
+      const totalCost = toBuy.reduce((sum, c) => sum + getCountryPrice(c.area), 0);
+
+      await updateGoldBalance(-totalCost);
+
+      const rows = toBuy.map(c => ({ user_id: user.id, country_code: c.cca2 }));
+      const { error } = await supabase.from('owned_countries').insert(rows);
+
+      if (error) {
+        try { await updateGoldBalance(totalCost); } catch {}
+        throw error;
+      }
+
+      setOwnedCountries(prev => {
+        const newCodes = toBuy.map(c => c.cca2).filter(code => !prev.includes(code));
+        const next = [...prev, ...newCodes];
+        AsyncStorage.setItem(OWNED_KEY(user.id), JSON.stringify(next)).catch(() => {});
+        return next;
       });
 
-      if (error) throw error;
-
-      setOwnedCountries((prev) => (prev.includes(country.cca2) ? prev : [...prev, country.cca2]));
-      await refreshProfile();
+      return { count: toBuy.length, totalCost };
     },
-    [user, profile?.gold_balance, ownedCountries, refreshProfile]
+    [user, profile, ownedCountries, updateGoldBalance]
   );
 
   // ── Helpers ────────────────────────────────────────────────────────────────
@@ -180,7 +239,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     <GameContext.Provider
       value={{
         goldBalance, ownedCountries, loadingGame,
-        addGold, purchaseCountry, isOwned, canAfford,
+        addGold, purchaseCountry, bulkPurchaseCountries, isOwned, canAfford,
         questToast, questHighlightId, clearQuestToast, triggerQuestToast,
       }}
     >

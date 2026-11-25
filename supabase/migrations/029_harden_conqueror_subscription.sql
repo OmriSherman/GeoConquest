@@ -1,6 +1,6 @@
 -- Harden Conqueror activation:
 -- 1) tie activation to auth.uid() instead of client-provided UUID
--- 2) make lifetime bonus idempotent (no repeated 100k/30 grants)
+-- 2) make lifetime bonus idempotent (no repeated 10-ticket grant)
 -- 3) preserve plan metadata on profile
 
 ALTER TABLE public.profiles
@@ -49,8 +49,7 @@ BEGIN
     SET
       is_conquerer = TRUE,
       conqueror_plan = 'unlimited',
-      gold_balance = gold_balance + CASE WHEN v_bonus_already_claimed THEN 0 ELSE 100000 END,
-      tickets = COALESCE(tickets, 0) + CASE WHEN v_bonus_already_claimed THEN 0 ELSE 30 END,
+      tickets = COALESCE(tickets, 0) + CASE WHEN v_bonus_already_claimed THEN 0 ELSE 10 END,
       conqueror_lifetime_bonus_claimed = TRUE
     WHERE id = v_user_id;
   ELSE

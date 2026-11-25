@@ -13,7 +13,7 @@ import { WebView } from 'react-native-webview';
 // Module-level singleton so audio.ts can call injectJavaScript
 let _webView: WebView | null = null;
 
-export function triggerSound(name: 'ding' | 'wrong' | 'purchase' | 'victory' | 'tick' | 'boo' | 'clap' | 'cheers' | 'ahhh' | 'wild_cheers' | 'reject') {
+export function triggerSound(name: 'ding' | 'wrong' | 'purchase' | 'victory' | 'tick' | 'boo' | 'clap' | 'cheers' | 'ahhh' | 'wild_cheers' | 'reject' | 'gauntlet_fail' | 'gauntlet_shield' | 'gauntlet_tier' | 'gauntlet_boss') {
   _webView?.injectJavaScript(`playSound("${name}"); true;`);
 }
 
@@ -185,6 +185,32 @@ function playSound(name) {
     tone(1200, 0.04, 'square', 0.20, 0.00);
   } else if (name === 'victory') {
     fanfare(0);
+  } else if (name === 'gauntlet_fail') {
+    tone(220, 0.06, 'square',   0.65, 0.00);
+    tone(150, 0.14, 'sawtooth', 0.58, 0.05);
+    tone(100, 0.22, 'sawtooth', 0.50, 0.16);
+    tone(70,  0.45, 'sawtooth', 0.40, 0.30);
+  } else if (name === 'gauntlet_shield') {
+    tone(2800, 0.03, 'triangle', 0.65, 0.00);
+    tone(2100, 0.05, 'triangle', 0.48, 0.02);
+    tone(1400, 0.10, 'triangle', 0.36, 0.05);
+    tone(880,  0.18, 'sine',     0.22, 0.10);
+    tone(440,  0.28, 'sine',     0.14, 0.16);
+  } else if (name === 'gauntlet_tier') {
+    tone(440,  0.07, 'sine', 0.30, 0.00);
+    tone(554,  0.07, 'sine', 0.34, 0.09);
+    tone(659,  0.07, 'sine', 0.38, 0.18);
+    tone(880,  0.07, 'sine', 0.42, 0.27);
+    tone(1108, 0.42, 'sine', 0.50, 0.36);
+    tone(659,  0.38, 'sine', 0.24, 0.36);
+  } else if (name === 'gauntlet_boss') {
+    tone(1047, 0.06, 'square', 0.52, 0.00);
+    tone(784,  0.06, 'square', 0.52, 0.09);
+    tone(1047, 0.06, 'square', 0.52, 0.18);
+    tone(784,  0.06, 'square', 0.52, 0.27);
+    tone(1319, 0.10, 'sine',   0.58, 0.38);
+    tone(1047, 0.32, 'sine',   0.54, 0.50);
+    tone(659,  0.28, 'sine',   0.26, 0.50);
   }
 }
 
