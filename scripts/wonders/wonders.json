@@ -1,0 +1,12 @@
+[
+  {"id": "great-pyramid", "name": "Great Pyramid of Giza", "cca2": "EG"},
+  {"id": "taj-mahal", "name": "Taj Mahal", "cca2": "IN"},
+  {"id": "great-wall", "name": "Great Wall of China", "cca2": "CN"},
+  {"id": "machu-picchu", "name": "Machu Picchu", "cca2": "PE"},
+  {"id": "petra", "name": "Petra", "cca2": "JO"},
+  {"id": "colosseum", "name": "Colosseum", "cca2": "IT"},
+  {"id": "christ-redeemer", "name": "Christ the Redeemer", "cca2": "BR"},
+  {"id": "angkor-wat", "name": "Angkor Wat", "cca2": "KH"},
+  {"id": "ha-long-bay", "name": "Ha Long Bay", "cca2": "VN"},
+  {"id": "victoria-falls", "name": "Victoria Falls", "cca2": "ZM"}
+]

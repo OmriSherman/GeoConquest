@@ -1,0 +1,1414 @@
+GEOCONQUEST - NEXT UPDATE PLAN
+==============================
+Status: 13 features (most designed; 8, 10, 11 still have open questions) (no code changes yet)
+Base code: the user's newest app version (with daily chest logic and
+quiz starting pages) must be pushed before implementation starts.
+Last updated: 2026-11-21
+
+Features in this update:
+  1. Daily Quests (replaces the Daily Leaderboard + login reward)
+  2. Weekly Challenge (percentage-based, global competition)
+  3. Weekly Challenge winners announcement
+  4. Passport tab (Main | Stamps | Quests | Collection | Wonders)
+  5. Economy config controlled from the admin dashboard
+  6. New mode: Compass Quiz (country direction)
+  7. Quiz difficulty: Easy / Medium / Hard
+  8. Daily Challenge (3 typed questions: Palette, Zoom, Neighbours)
+  9. Mainland outlines + missing shapes (no more "?")
+ 10. Events (double rewards days + shop sales)
+ 11. Notifications (retention)
+ 12. Endgame: Wonders (paint world wonders with earned pigments)
+ 13. Avatar backgrounds (new cosmetic slot)
+
+
+------------------------------------------------------------
+FEATURE 1: DAILY QUESTS  (DESIGNED)
+------------------------------------------------------------
+
+DECISIONS
+  - REMOVE the Daily Leaderboard entirely (Daily tab, the #1 daily
+    prize, and its server logic). Leaderboard keeps: Weekly + All-time.
+  - REMOVE the "reward just for logging in". Nothing is granted for
+    opening the app anymore.
+  - ADD 3 daily quests per player, Duolingo style:
+      * "Daily Quests" section with a countdown to reset
+      * One row per quest: title, progress bar (e.g. 20 / 20), chest icon
+  - Each quest has a reward chest. The HARDEST quest's chest is the
+    "Daily Chest" (the reward that used to come from logging in).
+  - Quests may overlap in objective (e.g. "Earn XP" and "Complete 3
+    quizzes" fill together), like Duolingo.
+  - Every quest is a TEMPLATE with a number that can change, so one
+    template gives an Easy, Medium and Hard version. New quest types =
+    one new template, not new code per quest.
+  - Note: the newest app version (with the daily chest logic) is not in
+    this repo, so this is a pure design and will be reconciled with that
+    code when implementation starts.
+
+
+1A. TEMPLATE QUESTS (one template -> three difficulty levels)
+
+  #   Template                                   Easy        Medium              Hard
+  --- ------------------------------------------ ----------- ------------------- --------------------
+  VOLUME
+  1   Complete {N} quizzes (any mode)            1           3                   6
+  2   Answer {N} questions correctly             10          30                  60
+  3   Earn {N} XP                                low         mid                 high   (see Q2)
+  4   Earn {N} gold from quizzes                 low         mid                 high   (see Q2)
+  5   Play for {N} minutes                       3           8                   15
+
+  ACCURACY
+  6   Score {X}% or more in a quiz               70%         85%                 100%
+  7   Score {X}% or more in {N} quizzes          70% x2      80% x2              90% x3
+  8   Get the first {N} questions right,         5           10                  a whole quiz
+      no mistakes
+
+  STREAKS
+  9   Get {N} correct answers in a row           5           10                  20
+  10  Get {N}-in-a-row streaks in {M}            -           5 x2                8 x3
+      different quizzes
+
+  SPEED
+  11  Finish a quiz in under {T} seconds         120s        75s                 45s
+  12  Answer {N} questions correctly in under    5           15                  30
+      3 seconds each
+
+  VARIETY
+  13  Play a {mode} quiz                         Flags       Capitals/Shapes/    Trail/Millionaire/
+                                                             Borders             Nightmare
+  14  Play {N} different quiz modes              2           3                   4
+  15  Get {N} correct answers in {mode}          5 Flags     10 Capitals         10 Borders
+
+  GEOGRAPHY
+  16  Answer {N} questions about {continent}     5 Europe    10 Asia/Americas    10 Africa/Oceania
+      correctly
+  17  Answer {N} "hard" countries correctly      2           5                   10
+      (uses the app's country difficulty data)
+  18  Answer about {N} different countries       10          25                  50
+      correctly
+  19  Get a country right that you've never      1           3                   6
+      answered correctly before
+
+  MODE MILESTONES
+  20  Millionaire: reach question {N}            -           5                   10
+  21  Trail: finish a trail of {N} steps         short       medium              long
+  22  Nightmare: survive {N} questions           -           5                   10
+  23  Compass (new mode): point within 20 deg    3           6                   10
+      of the target {N} times
+
+
+1B. QUESTS ABOUT LEARNING AND OTHER FEATURES
+
+  #   Quest                                                   Tier
+  --- ------------------------------------------------------- ------------------------------
+  24  Get a country right that you got wrong in the last      Easy / Medium
+      7 days
+  25  Use "Learn more" on {N} countries                       Easy
+  26  Collect a Passport stamp                                Hard (luck-based: only offer on
+                                                              lucky days, or let it be swapped)
+  27  Play this week's Weekly Challenge                       Medium (sends players to Weekly)
+  28  Claim a quest from the Quests tab                       Easy
+  29  Spend {N} gold in the Shop                              Easy / Medium (gold sink, but can
+                                                              feel like pressure to spend)
+  30  Watch a rewarded ad                                     Easy (ad revenue; some dislike it)
+  31  Beat your best score in {mode}                          Hard
+  32  Get a perfect score in Flags on Easy difficulty         Easy (a sure win for new players)
+  33  Score {X}% or more on {difficulty} (Feature 7)          Medium / Hard
+  34  Answer a 6-answer Hard question correctly (Feature 7)   Medium
+
+
+1C. RULES FOR PICKING EACH DAY'S 3 QUESTS
+  - One Easy, one Medium and one Hard every day.
+  - Overlap allowed, but no two quests from the same template on the
+    same day.
+  - Never give a quest the player can't do: no Nightmare without the
+    Dark Scroll, no Millionaire with 0 tickets, no locked modes.
+  - Time limit: the Hard quest should take about 15-20 minutes of play
+    at most.
+  - Bias toward neglected modes: favour modes the player hasn't played
+    lately (helps discovery).
+  - Ease in new players: for their first 3 days, only easy-ish versions.
+  - Weights and amounts live in the database: every template, its
+    numbers per tier, how often it's picked, and its reward are stored
+    in a table, editable / switchable from the admin dashboard.
+
+
+1D. REWARDS
+  - Easy chest: a little gold.
+  - Medium chest: gold + XP.
+  - Hard chest: the Daily Chest (keeps the escalating 7-day cycle,
+    now driven by a streak of days completing the Hard quest; missing
+    a day resets it).
+  - Conqueror subscribers: 3x on the Daily Chest (moved from the old
+    login reward); update Premium screen text.
+  - Opening animation: tap chest -> it shakes and opens, rewards fly
+    out, confetti + reward sound.
+
+
+1E. QUESTIONS - user accepted the suggestions in [brackets];
+    only Q3 is still open
+  Q1. Which templates ship in the first release?
+      [1, 2, 3, 6, 9, 11, 13, 14, 16, 17, 19, 24, 31, 32 - no new
+      features needed and every category is covered]
+  Q2. Should XP / gold quests scale with player level? A level-80
+      player earns XP much faster, so a flat "Earn 200 XP" is trivial.
+      [Yes: target based on the player's average daily XP, or drop
+      these from the Hard tier]
+  Q3. Should ad-related (#30) and spend-gold (#29) quests exist at all?
+      (STILL OPEN)
+  Q4. Can players swap out a quest they don't like? [1 free swap a day]
+  Q5. Reset time? [Midnight UTC]
+  Q6. Monthly quest (Duolingo's "November Quest: earn 35 Quest Points")?
+      [Nice to have; later update unless wanted now]
+  Q7. Older app versions still claiming the old login reward / daily
+      leaderboard prize: keep working until they update, or stop now?
+      [Stop now, so nobody is rewarded twice]
+
+
+FROM YOUR NOTES (merged into this feature)
+  - Daily chest redesign: closed chest sits in the centre of its glow;
+    ticket amount from the chest follows the ticket price (from config).
+  - Show the Conqueror 2x XP and gold in the new quests and weekly
+    screens.
+
+------------------------------------------------------------
+FEATURE 2: WEEKLY CHALLENGE  (DESIGNED)
+------------------------------------------------------------
+Requirement: must be PERCENTAGE / result based, not totals, because
+"most XP" or "most gold" gives high-level players a huge edge.
+
+DECISIONS
+  - Each week = one FORMAT + one random QUIZ MODE
+    (e.g. "Speed & Accuracy - Capitals").
+  - Random rotation. Last week's format can't repeat; last week's mode
+    can't repeat (pushes players into modes they don't usually play).
+  - Paid/locked modes (Millionaire, Nightmare) either excluded or given
+    a free entry that week.
+  - User favourites: Speed & Accuracy, Gold Efficiency.
+  - PRINCIPLE: Weekly = global competition, everyone does the SAME
+    task, ranked against each other. Anything about your own history /
+    personal bests / self-improvement belongs in Daily Quests, NOT here.
+
+FORMATS (all percentage / ratio based, same task for everyone)
+  A  Speed & Accuracy (*)  % correct x speed bonus in the week's mode
+  B  Gold Efficiency (*)   gold spent / gold earned this week
+  C  Consistency           % of this week's quizzes scoring >= 80%
+                           (min 5 quizzes)
+  G  Lightning Round       % correct among answers given in < 3 seconds
+  J  Same Quiz Sprint      identical 20 questions for everyone;
+                           ranked by %, then time
+  K  Continent Clash       % correct on one random continent, in the
+                           week's mode
+  L  Hard Countries        % correct on hard-rated countries only
+  M  Perfect Rate          % of this week's quizzes that were 100%
+                           (min 5 quizzes)
+  N  Compass Precision     average error in degrees, lower wins
+                           (after Compass mode ships)
+  (*) = user's favourites
+
+REMOVED (self-based, moved out of Weekly by decision):
+  Level Rush, Quest Hunter, Personal Best, Redemption, Explorer
+
+GOLD EFFICIENCY GUARDRAILS
+  - Only gold EARNED THIS WEEK counts (no spending old savings).
+  - Gold bought with real money excluded (not pay-to-win).
+  - Minimum to qualify (e.g. earn >= 2,000 gold this week).
+  - Score capped at 100%; ties -> earliest to reach it.
+  - Side benefit: acts as a gold sink for the economy.
+
+SETTINGS (user accepted the suggestions)
+  - Launch formats: A, B, C, G, J, K, L, M. N after Compass Quiz ships.
+  - Gold Efficiency (B) has no quiz mode.
+  - Millionaire / Nightmare are in the mode rotation, with a free entry
+    that week.
+  - One global board, no leagues for now.
+  - Week: Monday 00:00 UTC to Sunday 23:59 UTC.
+  - Challenge picked by automatic rotation, with a dashboard override.
+  - New "Weekly" tab on the Leaderboard (Leaderboard = Weekly +
+    All-time).
+  - Format J (Same Quiz Sprint) is played at Medium difficulty unless
+    the dashboard says otherwise (Feature 7).
+
+STILL OPEN (settle together with Economy config)
+  W5. Attempt limits per format. [Suggested: 1 free attempt + extra
+      attempts for a ticket for fixed-quiz formats (J); unlimited for
+      average-based formats]
+  W6. Prizes for 1st-3rd, participation reward, badge for 1st.
+      All amounts set in the dashboard.
+
+FROM YOUR NOTES (merged into this feature)
+  - Leaderboard rework: format large XP numbers (1.2M) so they fit.
+
+------------------------------------------------------------
+FEATURE 3: WEEKLY WINNERS ANNOUNCEMENT  (DESIGNED)
+------------------------------------------------------------
+WHEN
+  - Full-screen popup the first time each player opens the app after
+    the week closes (Monday 00:00 UTC), once per player.
+  - Then stays as a "Last Week's Champions" card at the top of the
+    Weekly leaderboard tab until the next results.
+
+CONTENT
+  - The challenge: format + mode + one-line description.
+  - Podium: 2nd left, 1st centre (raised), 3rd right. Each spot shows
+    avatar, name, score in the format's unit, level, prize won.
+  - Your own result: "You placed #47 of 1,203 - Top 4%", or "You
+    didn't play" + Play button.
+  - Teaser for this week's challenge with a "Play now" button.
+
+ANIMATION / SFX
+  - Drumroll -> podium blocks rise 3rd, 2nd, 1st -> avatars drop on
+    -> confetti for 1st, fanfare, haptic on each reveal. Skip button
+    after 1 second.
+
+WINNERS
+  - Top-3 players see their own version first ("You won 1st place!")
+    with a Claim reward button and a bigger celebration, then the podium.
+
+HOW RESULTS ARE PRODUCED
+  - Server job at week end ranks once, saves the result (challenge,
+    top 3, player count), pays prizes. Popup only reads the saved
+    result (fast, cheat-proof). Replaces the current approach of
+    computing the daily winner when someone opens the leaderboard.
+
+DECISIONS
+  - One global podium (no leagues).
+  - Podium entries show what the home page shows for a player: name,
+    avatar, flag, plus score and prize.
+  - Share as image: available to EVERYONE ("I placed #47 / Top 4%"),
+    with a nicer card for the top 3.
+  - Fewer than 3 qualified: show filled places only; skip if none.
+
+LATER (not in this update)
+  - Hall of Fame history of past weeks.
+  - Crown / lasting mark for 1st place.
+  - Fanfare / drumroll sound effects (animation ships without them,
+    or with existing sounds).
+
+FROM YOUR NOTES (merged into this feature)
+  - One shared 'share card' for all share images (results, passport,
+    podium, wonder) using the correct app icon, bigger.
+
+------------------------------------------------------------
+FEATURE 4: PASSPORT  (DESIGNED)
+------------------------------------------------------------
+PURPOSE
+  Stamps exist to EXTEND the game's completion: a long-term collection
+  that keeps players playing. Rare on purpose.
+
+TABS
+  Passport | Quizzes | Shop | Leaderboard
+  (Passport replaces both Home and Quests)
+
+MAIN PASSPORT PAGE (DECIDED) - opens by default
+  - Header: avatar, flag, name, level ring, gold ("passport ID page");
+    tap avatar -> profile menu / Sign Out.
+  - Content: the conquest map (owned countries / empire progress),
+    your Daily Quests, and current progress. That's it.
+  - Top Explorers mini-leaderboard is dropped.
+  - Subtabs: Main | Stamps | Quests | Collection | Wonders
+      Main       - conquest map + Daily Quests + current progress
+      Stamps     - passport book, one page per continent, grid of stamp
+                   slots (collected = stamp art, missing = faint
+                   outline), counter "37 / 250 - Africa 5 / 54"
+      Quests     - current Achievements/Quests screen
+      Collection - owned avatars + upgrades; avatars are EQUIPPED here
+                   (bought in the Shop)
+      Wonders    - endgame paintings (Feature 12); teaser + unlock
+                   progress until level 100 + all countries owned
+
+STAMP DROP RULES (DECIDED)
+  - Chance: 0.3% per CORRECT ANSWER (dashboard-adjustable).
+  - Per QUESTION, not per quiz: any correct answer about a country, in
+    ANY mode, can drop that country's stamp.
+  - No duplicates: once you own a country's stamp, that country can't
+    drop again. Only uncollected countries roll.
+  - Math check: ~10 correct per quiz -> ~3% per quiz -> about 1 stamp
+    per 33 quizzes early on, slowing down as the collection fills.
+    Full 250 is a very long-term goal (intended).
+
+STAMP ART (DECIDED - generic, no per-country art)
+  - The country's flag, recoloured to red/ink tones (red multiply
+    tint over the flag image, so the design stays visible), inside
+    two red concentric circles, slightly rotated + faded edges for
+    an "inked" look. Optional: country name curved along the ring.
+  - Same component for every country; no hand-drawn assets.
+
+STAMP COLLECTED MOMENT
+  - Small "Stamp found: Peru!" chip mid-quiz (doesn't pause timer).
+  - Full animation on the results screen: passport slides up and
+    opens, stamp slams down (squash), ink spreads, slight screen
+    shake, heavy haptic. SFX: later.
+
+DECISIONS
+  - Flat 0.3% for every country (no rarity tiers).
+  - No guaranteed stamp / no pity timer.
+  - Share a passport page as an image: yes.
+  - Avatars equipped in Collection (inside Passport).
+  - Default page: Main.
+
+LATER
+  - Stamp milestone quests (10/25/50 stamps, full continent).
+
+FROM YOUR NOTES (merged into this feature)
+  - Profile/user menu moves behind the avatar in the Passport header:
+    shorter rows, smaller icons.
+  - Collection must list avatars from every source (shop, quests, daily
+    chest, milestones, wonders). Fixes: chest avatars missing from
+    Owned.
+  - Check the 'Game Master' quest icon when Quests move into the
+    Passport.
+  - Flags as collectibles live in Passport > Collection with avatars and
+    backgrounds (see C7).
+
+------------------------------------------------------------
+FEATURE 5: ECONOMY CONFIG IN THE DASHBOARD  (DESIGNED)
+------------------------------------------------------------
+!! SECURITY FINDINGS (fix FIRST, as a separate small hotfix) !!
+  - purchase_country(p_country_code, p_cost): the APP sends the price
+    and the server trusts it. A modified client can buy any country
+    for 0 gold, or send a NEGATIVE cost, which ADDS gold (infinite gold
+    in one call).
+  - purchase_avatar_item(..., p_cost): same issue.
+  - Level requirements (avatars like FrogLord lvl 50, Trail Quiz lvl 50,
+    etc.) are only checked in the app, not on the server.
+  - Hotfix: server computes prices itself (country price from the
+    countries table area; avatar price from a server-side price list),
+    rejects cost <= 0, and checks level requirements. App stops sending
+    prices. (Assumes the repo's migrations match what is live.)
+  - Also review purchase_quiz_upgrade and open_crate for the same
+    pattern during the hotfix.
+
+DESIGN
+  1. game_config table: key, value, category, description, min, max,
+     updated_at. Readable by all players, writable only by the
+     dashboard (admin key). game_config_history table logs every
+     change (old value, new value, time).
+  2. App: loads config at launch + on return to foreground, caches it,
+     falls back to built-in defaults. All hard-coded numbers replaced
+     with config lookups.
+  3. Server: every purchase / reward function reads prices and rewards
+     from game_config itself and never trusts a number from the app
+     (countries, avatars, upgrades, crates, quests, chests, weekly
+     prizes, quiz rewards).
+  4. Dashboard: new "Game Config" tab - grouped by category, inline
+     edit, min/max validation, confirmation summary before saving
+     ("Ticket price: 2000 -> 2500"), change history. Daily quest
+     templates and weekly formats get their own editable tables here.
+
+EDITABLE SETTINGS
+  Shop         ticket price, ticket pack price, country price formula
+               (currently max(20, area / 100)) + per-country overrides,
+               avatar prices (all in DB -> sales / repricing), upgrade
+               prices, crate prices + odds
+  Quizzes      gold + XP per correct answer per mode, ticket cost per mode
+  Levels (NEW) minimum level for each avatar, each upgrade, each quiz
+               mode (e.g. Trail lvl 50), and each quest that has one;
+               enforced on the SERVER too
+  Daily Quests rewards per tier, chest contents, templates + numbers
+  Weekly       1st-3rd prizes, participation reward, enabled formats
+  Stamps       drop chance (0.3%)
+  Real money   gold amount per store pack (store sets the money price)
+  Other        referral bonus, Conqueror multipliers
+
+DECISIONS (user accepted all suggestions)
+  - Fix the purchase exploits first as a separate small update.
+  - Quiz gold/XP calculated on the SERVER in this update.
+  - Country price: formula (divider + minimum) + optional per-country
+    overrides.
+  - All avatar prices move to the database.
+  - Gold amount per real-money pack is editable.
+  - Changes apply on next app open / return to foreground.
+  - Dashboard stays single-admin with the admin key.
+  - Minimum level requirements are editable (user addition).
+
+FROM YOUR NOTES (merged into this feature)
+  - Country price x5 / minimum 200 becomes a dashboard value (see
+    conflict C2).
+  - Mythic chest odds stored in config; the server rolls with the same
+    numbers the shop shows, so stated and real chances can't differ.
+  - Potions included in server-side reward calculation, applied last;
+    same-tier XP potions stack.
+  - Mythic chest / gold pack rebalance and bulk-buy tiers (x1 / x5 /
+    x10) priced from the dashboard (see C3).
+
+------------------------------------------------------------
+FEATURE 6: COMPASS QUIZ  (DESIGNED)
+------------------------------------------------------------
+NAME: "Compass Quiz"
+
+GAMEPLAY (DECIDED)
+  - Map centres on a highlighted "from" country and names a target:
+    "Which way is Japan?" Pairs reasonably far apart; tiny islands
+    excluded.
+  - Compass dial over the map (N/E/S/W marked); drag the arrow in 1 deg
+    steps, press Confirm.
+  - Reveal: map zooms out to show both countries, draws the correct
+    line next to the player's arrow, shows "You were off by 12 deg".
+  - Correct direction = straight line on the app's flat (Mercator) map,
+    so the answer matches what the player sees.
+  - Scoring: within 10 deg = full points, within 30 deg = partial,
+    worse = wrong.
+  - 10 rounds, 15-second timer per round.
+  - Counts toward daily quests, weekly "Compass Precision" format, and
+    stamps (stamp chance applies to the TARGET country).
+  - quiz_results.quiz_type needs a new 'compass' value.
+
+DIFFICULTY
+  - Simple approach for now (sensible pair selection).
+  - Not part of Feature 7 at launch (Flags, Shapes, Capitals, Borders);
+    Easy / Medium / Hard for Compass Quiz can come later using the same
+    system.
+
+ACCESS
+  - Free to play (no ticket cost), but GATED by some unlock condition.
+    Still TBD whether it's level, gold (one-time unlock) or quest based.
+    Whatever is chosen should be editable from the dashboard
+    (Economy config -> Levels / Shop).
+
+
+FROM YOUR NOTES (merged into this feature)
+  - Millionaire gets new question types and harder questions at higher
+    levels (uses F7 country difficulty). See C6.
+
+------------------------------------------------------------
+FEATURE 7: QUIZ DIFFICULTY (Easy / Medium / Hard)  (DESIGNED)
+------------------------------------------------------------
+REQUEST
+  Flags, Shapes, Capitals and Borders get 3 difficulties, picked on
+  the quiz's starting page: 1 Easy, 2 Medium, 3 Hard.
+
+WHAT ALREADY EXISTS (app/lib/questionDifficulty.ts)
+  - getCountryDifficulty(): scores each country 1-10 (hand-picked
+    "iconic" and "well-known" lists, then by population).
+  - getSmartDistractors(): harder wrong answers at higher difficulty
+    (1-3 random, 4-6 same region, 7-10 same region + similar size).
+  - BUT only Millionaire / Nightmare use them. Flag, Shape and Capitals
+    quizzes pick countries and wrong answers fully at random.
+  - The user's newer version already has a quiz starting page and no
+    "Easy Flags" card.
+
+DESIGN
+  Two levers per difficulty:
+    a) WHICH countries are asked (by the 1-10 score)
+    b) HOW CLOSE the wrong answers are
+  Easy    countries scored 1-4, wrong answers random from the world
+  Medium  countries scored 1-7, wrong answers from the same region
+  Hard    mostly countries scored 6-10, wrong answers same region +
+          similar size; Flags also use a hand-made list of look-alike
+          flags (Chad/Romania, Indonesia/Monaco, Ireland/Ivory Coast..)
+  - quiz_results gets a difficulty column (needed for daily quests like
+    "score 85% on Hard" and for weekly challenges).
+
+DECISIONS
+  - Quizzes with difficulty: Flags, Shapes, Capitals AND Borders.
+    (Borders: same two levers - which countries are asked, and how
+    close the wrong answers are, e.g. Hard asks about small/obscure
+    neighbours.)
+  - Rewards: MEDIUM = today's normal gold + XP (x1, matches today's
+    random quizzes). Easy x0.75, Hard x1.25. Both multipliers editable
+    in the dashboard, AND the base gold + XP per correct answer for
+    each quiz is editable there too (Economy config -> Quizzes).
+  - Hard is open to everyone, any time (no level lock).
+  - Starting page already exists in the user's newer version. Add the
+    1 / 2 / 3 picker + Start button there.
+  - The app remembers the last difficulty per quiz and pre-selects it,
+    but the starting page is ALWAYS shown so the player confirms.
+  - Per-country difficulty (the 1-10 score) is editable from the
+    dashboard, in this update. Needs a country_difficulty table
+    (country code -> score) that the app loads like game_config, with
+    the current built-in scoring as the fallback.
+  - Same number of questions and same timer on all difficulties.
+
+HARD MODE: 6-ANSWER QUESTIONS (user addition)
+  - In Hard, some questions randomly show 6 answers instead of 4.
+  - Marked with orange + purple borders so the player notices.
+  - Layout: 3 x 2 grid of answers; must fit small phones.
+  - Frequency: 40% of Hard questions (editable in the dashboard).
+  - No bonus reward: a 6-answer question pays the same as any other.
+  - Orange/purple on the question card's border, with a small
+    "6 OPTIONS" label (suggested; easy to change).
+  - Only when 6 valid answers exist. All Borders questions are
+    multiple choice, but some can't have 6 options (e.g. a question
+    built from a country's neighbours when it only has 3). In that case
+    the question stays at 4 answers. Same fallback rule for every quiz.
+
+FROM YOUR NOTES (merged into this feature)
+  - Starting page shows a better quiz description and the XP / gold per
+    correct for each difficulty.
+  - Gauntlet boss round uses the Hard-mode 6-answer layout (orange /
+    purple), with a smaller time penalty.
+  - Summary redesign: one reward breakdown (base, difficulty, event,
+    Conqueror, ad, potion), faster count-up like Millionaire, special
+    effect for Conqueror / event bonuses, stamp animation (F4). See C4
+    and C5.
+
+------------------------------------------------------------
+FEATURE 8: DAILY CHALLENGE  (in design)
+------------------------------------------------------------
+DECISIONS
+  - Name: "Daily Challenge" (the old daily leaderboard is gone, so
+    the name is free).
+  - 3 questions a day, the same for everyone, reset at midnight UTC:
+      Q1 Palette, Q2 Zoom, Q3 Neighbours.
+  - Answers are TYPED (with autocomplete + forgiving spelling), not
+    4 options.
+  - Timed: about 20 seconds per question.
+  - Leaning: one guess per question ("take it or leave it").
+  - Must NOT block normal daily rewards: Daily Quests and the daily
+    chest stay reachable for players who do badly here.
+  - Unique reward per question (details later).
+  - Twins (near-identical flags) DROPPED: too few pairs for a big,
+    long-running pool.
+
+Q1 PALETTE
+  - Pie chart of a flag's colours; colours at 1% or less grouped into
+    "Other".
+  - Data: one-time script reads every flag image, groups pixels into
+    standard colours, saves colours + percentages per country into a
+    data file shipped with the app. One manual review pass.
+
+Q2 ZOOM
+  - A country's outline, zoomed far in on part of its border/coast.
+    Mockup: planning/daily_zoom_mockup.png (drawn for multiple guesses;
+    with one guess, the map instead zooms out slowly during the 20s,
+    so answering earlier is harder but could pay more).
+  - Start zoom tight (~20-25x) on a less iconic stretch.
+  - Country pool: large to normal countries only. Israel, Qatar,
+    Bahrain OK; San Marino, Vatican, Singapore, Hong Kong, small
+    islands OUT - the map data has too little detail for them.
+    Area alone doesn't work as the cutoff (Hong Kong is bigger than
+    Bahrain), so use area + how detailed the outline is in the map
+    data, then one manual review of the list.
+
+Q3 NEIGHBOURS (DECIDED)
+  - Show the target country's neighbours, each in its OWN separate
+    tile (like the Shape Quiz), not on a map. Player types the
+    country they all border (France, Germany, Austria, Italy,
+    Liechtenstein -> Switzerland).
+  - Mockup: planning/neighbours_mockup.png (A = shapes, B = flags).
+  - DECIDED: alternate by day - shape days and flag days. On shape
+    days, tiny neighbours still fall back to their flag.
+  - Uses the app's existing border data; islands / countries with
+    fewer than 2 neighbours excluded. Cap the tiles at ~6 for
+    countries with many neighbours (China has 14).
+  - Shape tiles show the MAINLAND only: overseas territories (French
+    Guiana, Reunion...) would otherwise shrink France to dots.
+  - Neighbours too small for a clear shape (Liechtenstein, Monaco,
+    Vatican...) show their flag instead.
+  - Mystery Country (facts card that reveals more over time) also
+    liked: keep as an extra question type for later rotation.
+
+STILL OPEN
+  - One guess vs several guesses per question.
+  - Rewards per question + the unique reward. Idea: tie it to the
+    Passport (e.g. a correct answer guarantees or boosts that
+    country's stamp, or a special "Daily Challenge" stamp).
+  - How it links to Daily Quests without making the daily chest
+    depend on success: e.g. a quest for PLAYING the Daily Challenge,
+    not for winning it.
+  - Streak + spoiler-free share result.
+
+------------------------------------------------------------
+FEATURE 9: MAINLAND OUTLINES + MISSING SHAPES  (DESIGNED)
+------------------------------------------------------------
+PROBLEM
+  Countries with far-away parts (France + French Guiana/Reunion,
+  Netherlands + Caribbean islands, USA + Hawaii/Alaska, Norway +
+  Svalbard...) get shrunk to dots or off-centre in every view that fits
+  one country: Shape Quiz, Daily Zoom, Neighbours tiles, Compass Quiz,
+  Learn More zoom.
+
+AUDIT DONE
+  Full list in planning/overseas_territories_audit.txt (generated from
+  the app's own map data):
+    A. automatic rule works  - France, Netherlands, Portugal, Spain,
+       Ecuador, Chile, Norway, Australia, South Africa, NZ, Mexico,
+       Japan, Yemen
+    B. manual decision       - USA (Alaska?), Russia (date line +
+       keep Kaliningrad), Malaysia (keep both halves), Norway
+       (Svalbard?), India (Andaman?), Fiji + Pacific archipelagos
+    C. exclaves always kept  - Kaliningrad, Cabinda, Nakhchivan,
+       Musandam, Bioko
+    D. already separate in the data - Greenland, Faroes, Falklands,
+       Puerto Rico, etc.
+
+APPROACH
+  - One-time script builds a "display outline" per country (automatic
+    rule + small manual override table), shipped as a data file and
+    used by all single-country views. Full outline kept for the world /
+    conquest map and km2.
+  - Fix date-line countries so they draw as one piece.
+  - Antarctica (from notes): show it from above the South Pole, like on
+    its flag, instead of the stretched flat-map version.
+  - Visual review: contact sheet of every country's outline.
+  - Should ship BEFORE / WITH Daily Challenge and Compass Quiz, which
+    depend on it.
+
+DECISIONS
+  - USA: keep Alaska, drop Hawaii, drop date-line-crossing Aleutians.
+  - Russia: drop the date-line-crossing part of Chukotka, keep
+    Kaliningrad.
+  - Norway: drop Svalbard. India: keep as is. Malaysia: both halves.
+    Fiji / Pacific archipelagos: keep all islands.
+
+MISSING SHAPES (part of this feature - the "?" problem)
+  - 15 app countries have NO outline in the map file (Tuvalu,
+    Gibraltar, Tokelau, Kosovo, French Guiana, Reunion, Guadeloupe,
+    Martinique, Mayotte, Caribbean Netherlands, Christmas Is., Cocos
+    Is., Bouvet Is., US Minor Outlying Is., Svalbard & Jan Mayen).
+  - ~54 more have very rough outlines (Vatican, Monaco, San Marino,
+    Singapore, Bahrain, Malta, Andorra, Hong Kong...).
+  - The shape view also downloads the world map from the internet each
+    time, although the same file is already inside the app.
+  - Fix: one bundled, more detailed shape file for every app country
+    (Natural Earth 1:10m, public domain), looked up by country code,
+    with the mainland rules applied. Anything still unusable is kept
+    out of shape questions and shown as a flag - never a "?".
+  - Full lists: planning/overseas_territories_audit.txt (sections E1/E2).
+
+FROM YOUR NOTES (merged into this feature)
+  - Missing shapes, USA / New Zealand / Russia fixes, the same shapes
+    used in Learn, Antarctica from the South Pole.
+  - Learn uses the new bundled shapes: slower zoom, move / zoom the mini
+    map; Learn button in every regular quiz except Borders.
+
+------------------------------------------------------------
+FEATURE 10: EVENTS (Double Rewards days + Shop Sales)  (in design)
+------------------------------------------------------------
+IDEA
+  1-2 random days a week, one quiz type pays DOUBLE rewards. Clearly
+  labelled while it's on.
+
+PROPOSED DESIGN
+  - Event = quiz type + start/end time + multiplier (default 2x gold +
+    XP). Stored in an events table on the server.
+  - Picked automatically each week (random days, random eligible quiz
+    type, not the same quiz type twice in a row); the dashboard can
+    add, move or cancel events.
+  - Same for everyone, by UTC day (00:00-23:59 UTC).
+  - The SERVER applies the multiplier when it calculates quiz rewards
+    (Economy config feature), so it can't be faked.
+  - Label: "2x EVENT" badge + glow on the quiz's card, a banner at the
+    top of the Quizzes tab with a countdown ("Capitals pays double -
+    ends in 5h 12m"), and "2x" shown on the results screen.
+  - Built so other event types can be added later (e.g. "Stamp Day":
+    3x stamp chance, "XP weekend").
+
+SHOP SALES (second event type, user addition)
+  - A sale = what's discounted + discount % + start/end time.
+  - What can go on sale: all avatars, one avatar collection, a single
+    avatar, countries (e.g. one continent), tickets / ticket packs,
+    upgrades, crates.
+  - The SERVER applies the sale price at purchase (Economy config:
+    prices are already server-side), so it can't be faked.
+  - Label: "SALE -30%" ribbon on the item, old price struck through,
+    banner at the top of the Shop with a countdown; red dot on the
+    Shop tab while a sale is on.
+  - Real-money gold packs: store prices can't be changed by us, so a
+    "sale" there = bonus gold (e.g. +50% gold per pack) instead.
+  - Spending at sale prices counts as normal spending for the Weekly
+    "Gold Efficiency" format.
+
+OPEN QUESTIONS (suggested answer in [brackets])
+  E1. Does the event stack with difficulty (Hard 1.25 x 2 = 2.5x)?
+      [Yes, multiply]
+  E2. Which quiz types can get an event? Paid ones (Millionaire,
+      Nightmare) too? [All quiz types; paid ones less often]
+  E3. Announce in advance ("Tomorrow: double Flags!") or surprise on
+      the day? [Surprise, plus a notification when it starts]
+  E4. Effect on Weekly "Gold Efficiency" format - event gold counts
+      like normal gold? [Yes]
+  E5. Does Daily Challenge ever get a double day? [No, quizzes only]
+  (User accepted the suggested answers for S1-S5.)
+  S1. Sales picked automatically (random, like double rewards) or only
+      set by hand in the dashboard? [Automatic weekly, with dashboard
+      override]
+  S2. How often and how long? [1 sale a week, 24-48 hours]
+  S3. Discount range? [20-50%, set per sale]
+  S4. Same day as a double-rewards event, or always separate days?
+      [Separate days, so something is happening more often]
+  S5. Bonus gold on real-money packs during sales? [Yes, occasionally]
+
+------------------------------------------------------------
+FEATURE 11: NOTIFICATIONS (retention)  (in design)
+------------------------------------------------------------
+CURRENT STATE
+  - The app has no notification support yet (no expo-notifications).
+
+TWO KINDS
+  - LOCAL (scheduled on the phone, no server): reminders based on the
+    player's own state, e.g. streak about to break.
+  - PUSH (sent from the server): things that happen to everyone or
+    because of others, e.g. weekly results, events.
+  Needs: expo-notifications, a push_tokens table (user, token,
+  platform, time zone, settings), a server job (Supabase scheduled
+  function) that sends through Expo's push service.
+
+NOTIFICATION TYPES (candidates)
+  Streaks & daily
+    - Daily Quests reset: "3 new quests are waiting" (morning, local)
+    - Streak at risk: "Your 12-day streak ends in 3 hours" (evening,
+      only if not played today)
+    - Unclaimed chest: "Your daily chest is still closed"
+    - Daily Challenge ready: "Today's Palette / Zoom / Neighbours"
+  Competition
+    - Weekly Challenge started: "This week: Speed & Accuracy - Capitals"
+    - Last day of the week: "1 day left - you're #23"
+    - Rank change: "You dropped out of the top 3"
+    - Weekly results: "Results are in - you placed #47" / "You won!"
+  Events
+    - "Double rewards on Flags today!"
+  Progress & collection
+    - New stamp milestones, "5 countries left to complete Africa"
+    - Level-up close: "40 XP to level 25"
+    - Enough gold to buy a country on your wishlist
+  Social / account
+    - Referral friend joined -> bonus ready
+    - Conqueror subscription ending
+  Win-back (inactive players)
+    - After 3 days, 7 days, 14 days away; then stop
+
+RULES (suggested)
+  - Max 1-2 notifications per day per player; priority order decides.
+  - Quiet hours (no sends 22:00-08:00 player's local time).
+  - Send at the player's usual play time where known.
+  - Per-category on/off switches in Settings.
+  - Ask for permission at a good moment (after the first finished quiz
+    or first claimed quest), not at app launch; explain the benefit.
+  - Every notification opens the right screen (deep link).
+  - Texts and timing editable from the dashboard; track open rate per
+    type.
+
+OPEN QUESTIONS
+  N1. Which types ship first? [Streak at risk, Daily Quests reset,
+      Weekly started / results, Events, Win-back]
+  N2. Daily cap? [2]
+  N3. Tone: playful (Duolingo-style) or neutral? [Playful]
+  N4. Rank-change alerts can feel spammy - include? [Only top 3 /
+      top 10 changes]
+  N5. Should the dashboard be able to send a one-off notification to
+      everyone (announcements, updates)? [Yes]
+
+FROM YOUR NOTES (merged into this feature)
+  - One Settings screen: sound effects on/off + volume next to the
+    notification switches.
+
+------------------------------------------------------------
+FEATURE 12: ENDGAME - WONDERS  (DESIGNED)
+------------------------------------------------------------
+PROBLEM
+  After level 100 little happens; quests every 50 levels up to 300,
+  then nothing. A very active player (hours a day) hit level 300 and
+  stopped playing.
+
+OPTIONS ON THE TABLE
+  1. Prestige ("Ascension") - optional reset at level 300 back to 1,
+     keep everything owned; earn a prestige rank (shown next to the
+     name), an exclusive avatar/frame per rank, small permanent bonus.
+  2. Country Mastery - every country levels up Bronze -> Silver ->
+     Gold -> Diamond from correct answers across all modes. ~250
+     countries x 4 tiers = a very long tail. Builds on the Passport
+     (stamp first, then mastery).
+  3. Seasons - monthly season track (e.g. 50 tiers) with season-only
+     avatars/frames; resets every month, so it never ends. Free track
+     + Conqueror track (also revenue).
+  4. Endless mode - play until 3 mistakes; global best-run leaderboard.
+     Skill has no ceiling.
+  5. Empire upgrades - spend gold to develop owned countries (map
+     look, titles, small bonuses). A gold sink that fits "Conquest".
+  6. Leagues with promotion/relegation (Duolingo style) - later, once
+     there are enough active players.
+  7. Async duels vs friends - strongest for retention but the biggest
+     build; later.
+
+USER'S DIRECTION: "WONDERS" (pigments + paintings)
+  - After level 300 + owning every country, the world map is replaced
+    by a new stage: a painting of a world wonder, in ~10 colours
+    ("pigments"), starting empty (UPDATED: locked colours are hidden,
+    not grey - see WONDER ART & REVEAL SYSTEM below).
+  - Each pigment is earned, then applied: that colour fills in on the
+    painting. All pigments -> wonder complete -> next wonder.
+  - Path A, Mega Quest: a list of requirements turned in together,
+    e.g. "Borders 90%+ x30" + "500,000 gold" + "30 tickets".
+  - (Path B, Pigment Trial - dropped, see below.)
+
+ASSESSMENT
+  Strong: fits the game (colours/flags/palettes), very visual progress
+  (paint-by-numbers reveal), a real gold + ticket sink for rich
+  endgame players, and new wonders can be added forever.
+  Watch-outs:
+  - Gate too narrow: level 300 + ALL countries means almost nobody
+    reaches it. Suggest the first wonder unlocks earlier (e.g. level
+    100) and later wonders need higher levels / more countries.
+  - Only infinite if content keeps coming: make it cheap - mega quests
+    reuse the daily quest templates with big numbers; paintings are
+    turned into 10-colour regions by a script. Art must be
+    public-domain or our own (no copyrighted photos).
+  - "Same quiz 30 times" can feel like a chore: mix requirements
+    across modes and let several mega quests progress at once.
+  - Gold / tickets in a mega quest should be CONSUMED on turn-in
+    (that's what makes it a sink).
+  - Pigment Trial: losing many tickets for nothing is harsh. Failed
+    tries should still leave something (pigment fragments / a counter
+    toward a guaranteed pigment).
+  - Replaces Prestige as the post-300 goal; Seasons / Country Mastery
+    can still come later.
+
+DECISIONS
+  - Unlock: BOTH level 100 AND owning every country in the shop
+    (250 countries, about 1.5 million gold in total at today's
+    prices - a real long-term goal, and the conquest map is "done").
+  - New Passport subtab: Main | Stamps | Quests | Collection | Wonders.
+  - Wonders tab is visible to EVERYONE from day one as a teaser:
+      * Locked: the wonders shown greyed / silhouetted, with the unlock
+        requirements and live progress ("Level 64 / 100",
+        "Countries 112 / 250") and a short explainer of what Wonders are.
+      * Unlocked: wonders in progress (painting + pigments collected)
+        and completed wonders.
+
+MORE DECISIONS
+  - Pigment Trial DROPPED: it would burn the same gold / tickets the
+    mega quests need. Pigments come from MEGA QUESTS only.
+  - Mega quests cost gold, used up on turn-in (gold sink).
+  - Several mega quests can progress at the same time.
+  - 5 wonders at launch, more added over time.
+  - Finishing a wonder gives: a title, an avatar frame, a wonder badge
+    on profile / leaderboard, a shareable image of the painting, AND
+    the wonder becomes an AVATAR BACKGROUND.
+  - Avatar system upgrade: profile = avatar + flag + BACKGROUND.
+    Finished wonders are the first backgrounds. Full design: Feature 13.
+  - No hard level cap today; after level 300 nothing new happens
+    (level quests exist only at 150 / 200 / 250 / 300).
+
+ENDLESS LEVEL MILESTONES (DECIDED)
+  - After level 300, a milestone quest every 50 levels, forever
+    (350, 400, 450, ...), generated automatically.
+  - Rewards spread out so new avatars aren't needed every time:
+      * most milestones: a big gold reward (+ tickets), growing a bit
+        each time
+      * every 3rd milestone (levels 450, 600, 750, 900...): an
+        exclusive avatar or avatar background
+  - Milestone rewards live in a dashboard table: you can assign an
+    avatar / background to any future milestone whenever you have one
+    ready; milestones with nothing assigned pay gold by default.
+
+WONDER ART & REVEAL SYSTEM  (ASSETS + DATA BUILT, SCREEN NOT BUILT YET)
+  Changes to the design above (DECIDED):
+  - Locked colours are HIDDEN (transparent), not grey. A wonder starts
+    as an empty card and the finished picture is a surprise.
+  - Each pigment unlocks a RANDOM colour of that wonder (not chosen by
+    the player, not one fixed order for everybody).
+
+  Art rules (DECIDED)
+  - One image per wonder: 1600x1200 with EXACTLY 10 colours (no
+    blending, no anti-aliasing). Pixel-art style, drawn by a script, so
+    it is our own art (no copyright problem).
+  - Keep the subject in the centre (about 75% wide, 80% tall): the card
+    crops the sides on narrow phones.
+  - Not every colour has to be a meaningful step; some reveal little.
+
+  Where it shows (DECIDED)
+  - The wonder takes the same space as the world map card on Home:
+    260 high, width = screen width - 66 (about 294-364 on phones),
+    shown "cover" (fills the card, crops a little).
+
+  How it works (BUILT)
+  - Files per wonder, in assets/wonders/<id>/:
+      final.png                 hand-made master, the source of truth
+      layer_0.webp ... layer_9  one transparent 800x600 lossless WebP
+                                per colour. Layers never overlap, so
+                                they stack in any order.
+  - scripts/wonders/build_layers.py turns final.png into the 10 layers
+    and generates app/lib/wondersData.ts (needed because the app
+    bundler only accepts literal require() calls). It refuses an image
+    that is not exactly 1600x1200 with 10 colours.
+  - scripts/wonders/wonders.json lists the wonders (id, name, country).
+  - app/lib/wonderReveal.ts: pickNextLayer(unlocked) returns a random
+    colour the player does not have yet (null when all 10 are done).
+  - Size: about 190 KB per wonder (master + layers), so 10 wonders are
+    under 2 MB. Memory: about 19 MB, only while all 10 layers of one
+    wonder are on screen.
+  - To add a wonder: put final.png in assets/wonders/<id>/, add a line
+    to wonders.json, run:  python3 -I scripts/wonders/build_layers.py
+  - Built: ALL 10 wonders (art + layers + wondersData.ts), about 2.1 MB in
+    total. Great Pyramid of Giza, Taj Mahal, Great Wall of China, Machu
+    Picchu, Petra, Colosseum, Christ the Redeemer, Angkor Wat, Ha Long Bay,
+    Victoria Falls. Art scripts are in scripts/wonders/art/ (one per wonder).
+
+  The 10 wonders (AGREED; ALL 10 ARE DRAWN; the plan launches with 5) -
+  drawn in this order, each with its own mood so the set doesn't repeat:
+     1 Great Pyramid of Giza  Egypt      golden-hour sunset   
+     2 Taj Mahal              India      pre-dawn, reflecting pool
+     3 Great Wall of China    China      misty blue-green dawn
+     4 Machu Picchu           Peru       sunrise, green terraces, mist
+     5 Petra (the Treasury)   Jordan     red canyon, beam of sun
+     6 Colosseum              Italy      blue-hour dusk, glowing arches
+     7 Christ the Redeemer    Brazil     above the clouds, Rio lights
+     8 Angkor Wat             Cambodia   sunrise over a lotus pond
+     9 Ha Long Bay            Vietnam    golden sunset, karst towers, red-sailed junks
+    10 Victoria Falls         Zambia/Zimbabwe  falls + rainbow in the spray (tagged
+                              Zambia; border: owner = whoever holds Zambia,
+                              or a special case)
+  Chichen Itza was swapped out: it is another stepped pyramid (too close
+  to Giza). Uluru replaced it first but was dropped after the art review;
+  Ha Long Bay (Vietnam) took its place. No Oceania wonder for now.
+  Easiest / most recognisable, good launch picks: Taj Mahal, Christ the
+  Redeemer, Angkor Wat, Ha Long Bay, + Great Wall or Machu Picchu (see W4).
+
+  ------------------------------------------------------------------
+  BACKGROUND: WHAT WAS DONE AND HOW THE LAYERS WORK
+  (written so someone new can pick up the Wonders screen from here)
+  ------------------------------------------------------------------
+  THE IDEA IN ONE PARAGRAPH
+    Once a player owns the whole world map, the map card on Home is
+    replaced by a wonder: a pixel-art picture made of exactly 10
+    colours that starts EMPTY. Each pigment the player earns (from a
+    mega quest) switches on ONE random colour of that picture, until
+    all 10 are on and the wonder is complete. Colours that are not
+    unlocked yet are simply not drawn, so the card background shows
+    through and the finished picture stays a surprise.
+
+  HOW THE ART WAS MADE
+    - The "exactly 10 colours" rule is what makes the reveal work: each
+      colour is one pigment. An AI image generator can't guarantee that
+      (it blends shades), so every picture is DRAWN BY A SCRIPT onto a
+      canvas where each pixel is a number 0-9 pointing at a 10-colour
+      palette. Shading and gradients use ordered (Bayer) dithering
+      between palette colours instead of blending, so no extra colour
+      can ever appear.
+    - The canvas is 800x600, saved at 1600x1200 by exact 2x scaling
+      ("nearest neighbour"), so pixels stay crisp. The shared drawing
+      kit is scripts/wonders/art/pixkit.py; each wonder has its own
+      script (scripts/wonders/art/<wonder>.py) with its own palette.
+    - The kit REFUSES to save an image that is not exactly 1600x1200
+      with exactly 10 colours.
+    - Each wonder was reviewed with the owner and revised until
+      approved (examples: Machu Picchu was rebuilt twice so the ruins
+      read as walled compounds with gabled houses; the Colosseum got
+      street-level perspective and more shading; Christ the Redeemer
+      got proper sleeves, a walkway and balustrades; Angkor Wat got a
+      stepped terrace so its central tower no longer floats; Uluru was
+      dropped and replaced by Ha Long Bay).
+    - Reference photos from the owner were used ONLY as a guide for
+      layout and detail. Nothing is traced or copied from photos, so
+      all art is our own (the plan requires no copyrighted art).
+    - Every script is reproducible: running it again gives the same
+      PNG, byte for byte (checked for each approved image).
+
+  WHY LAYERS (the decision)
+    Two ways to show "N colours unlocked" were compared:
+      A) Pre-rendered frames: step_01 ... step_10, each showing the
+         first N colours in a FIXED order. About 0.28 MB per wonder,
+         but every player sees the same order, and a different order
+         would need a different set of frames.
+      B) One transparent image per colour ("layers"): the app stacks
+         the layers the player has unlocked, in ANY order. About
+         70-90 KB for the layers (plus the ~100 KB master) per wonder.
+    B was chosen: it allows a random order per player (and later
+    "pick one of two colours" or player choice) without making new art,
+    and it is smaller. Layers are 800x600 (not 1600x1200) because that
+    is the resolution the art is drawn at, and it keeps memory low:
+    10 full-size layers would decode to ~77 MB, 800x600 layers ~19 MB.
+
+  WHAT A LAYER IS
+    - layer_i.webp holds ONLY the pixels of colour i, fully opaque in
+      that colour, fully transparent everywhere else.
+    - Every pixel of the picture belongs to exactly one colour, so the
+      10 layers NEVER OVERLAP and stacking order does not matter.
+    - Stacking all 10 gives back the final image exactly. This was
+      verified for all 10 wonders (every layer set rebuilds its master
+      pixel for pixel, and the layers cover every pixel).
+    - Layer numbers 0-9 follow the palette sorted by RGB value, and
+      wondersData.ts lists each wonder's palette in that same order.
+    - Format: lossless WebP (supported on Android, and on iOS 14+),
+      so colours are never altered by compression.
+
+  HOW THE APP SHOULD USE IT (to be built)
+    1. Per player and wonder, store WHICH colours are unlocked: a set
+       of layer numbers, i.e. a bitmask 0-1023 (bit i = layer i).
+    2. The wonder card is the same size as the world map card (260
+       high, width = screen - 66), with the card's dark background.
+    3. Render one <Image> per UNLOCKED layer, absolutely stacked, all
+       filling the card ("cover" fit). Do not mount locked layers
+       (saves memory, and a hidden layer must never be visible).
+    4. When a colour unlocks, fade ONLY that new layer in (opacity 0
+       to 1). The rest of the picture does not change. A "6/10
+       colours" label sits on the card.
+    5. Pick the colour with pickNextLayer(unlockedList) from
+       app/lib/wonderReveal.ts (uniform random among locked colours;
+       returns null when all are unlocked). It takes a random function
+       so the SERVER can use it with its own random source.
+    6. The random pick and the saved unlock should happen on the
+       server (like the gold fix) so a player cannot re-roll or fake
+       it. The app only shows the result.
+    7. When all 10 are unlocked, show the full picture, give the
+       completion rewards (Feature 12) and the wonder becomes an
+       avatar background (Feature 13), reusing final.png.
+    Test the scaling on a real phone: the layers are 800x600 and are
+    scaled up, so check that pixels stay crisp and not blurry.
+
+  HOW IT FITS THE REST OF FEATURE 12
+    - Unlock: level 100 AND every country owned (DECIDED earlier).
+    - A pigment = one mega quest (pigments come from mega quests only).
+      10 colours per wonder means 10 mega quests per wonder (see W5).
+    - Wonders launch with 5 of the 10 drawn; the rest can be added
+      later without new art (see W4).
+
+  FILES AND COMMANDS
+    assets/wonders/<id>/final.png       the picture (source of truth)
+    assets/wonders/<id>/layer_0..9.webp  generated layers
+    scripts/wonders/wonders.json        id, name, country per wonder
+    scripts/wonders/art/pixkit.py       shared drawing kit
+    scripts/wonders/art/<wonder>.py     one drawing script per wonder
+    scripts/wonders/build_layers.py     final.png -> layers + data file
+    app/lib/wondersData.ts              GENERATED list for the app
+    app/lib/wonderReveal.ts             pickNextLayer()
+    - Redraw a wonder:  python3 scripts/wonders/art/<wonder>.py
+          assets/wonders/<id>/final.png
+    - Rebuild layers and the data file (all wonders):
+          python3 -I scripts/wonders/build_layers.py
+    - NEVER edit the layers or wondersData.ts by hand: they are
+      overwritten by the build. Change the script, redraw, rebuild.
+    - Add a wonder: new script + final.png + a line in wonders.json,
+      then rebuild. The build checks size and the 10-colour rule.
+
+  NOT BUILT / NOT CHECKED YET
+    - The screen, the saving of progress and the server function.
+    - The app itself was not launched here, so wondersData.ts has not
+      been bundled by Metro yet (it is plain require() calls on WebP
+      files, which the bundler supports).
+    - Faint colours (very dark ones close to the card background)
+      have not been checked for every wonder (see W3).
+
+  QUESTIONS TO DECIDE BEFORE BUILDING THE SCREEN
+   W1. Applying a pigment: does the random colour appear immediately on
+       mega quest turn-in, or does the player tap "apply" (the plan says
+       "earned, then applied")? A tap gives a moment and a place for the
+       reveal animation. [Suggestion: tap to apply, short animation.]
+   W2. Where the random pick happens: on the server, like the gold fix,
+       so nobody can re-roll or fake it; the app only shows the result.
+       [Suggestion: yes. Table user_wonders (user_id, wonder_id,
+       unlocked colours as a bitmask 0-1023, completed_at) plus a server
+       function grant_pigment(wonder_id) that picks a random locked
+       colour in one step.]
+   W3. Faint colours: in the Giza art the darkest navy and dark brown
+       are almost invisible on the dark card, so unlocking them looks
+       like nothing happened. Accepted for now. Options later: a
+       slightly lighter backdrop for the wonder card (about #16162E), or
+       the random pick avoids two faint colours in a row. Check each new
+       wonder for this.
+   W4. Which 5 of the 10 candidates launch, and in what order (easiest
+       or best-looking first)? Add an Oceania wonder?
+   W5. Exactly 10 mega quests per wonder (1 pigment each)? How the cost
+       grows from the first wonder to the later ones.
+   W6. Finished wonder as an avatar background (Feature 13): the
+       background crop (shape / ratio) is needed to check that each
+       wonder still looks right cropped. The share image (the shared
+       share card, F3) can reuse final.png.
+   W7. Locked teaser in the Passport Wonders tab: the plan says "greyed
+       / silhouetted", but locked colours are now hidden. Show an empty
+       card with the wonder name, a darkened final image, or an outline?
+   W8. After a wonder is finished: a gallery of finished wonders in the
+       Wonders tab, and what the card shows between finishing one and
+       starting the next.
+   W9. Reveal animation for a newly unlocked colour (fade in only that
+       layer, maybe a short flash) and a "6/10 colours" label on the
+       card.
+  W10. Changing a wonder's colours after launch: layer numbers follow the
+       sorted palette, so re-colouring a wonder would make players' saved
+       unlocks point to different colours. Either FREEZE each wonder's
+       art once it ships, or save the unlocked colours by hex code (or
+       an art version number) instead of by layer number.
+
+------------------------------------------------------------
+FEATURE 13: AVATAR BACKGROUNDS  (DESIGNED)
+------------------------------------------------------------
+IDEA
+  A new cosmetic slot. A player's look becomes:
+  AVATAR + FLAG + BACKGROUND.
+
+WHERE BACKGROUNDS COME FROM
+  - Finished Wonders (Feature 12): each completed wonder becomes a
+    background.
+  - Endless level milestones: every 3rd milestone after level 300
+    (450, 600, 750...) gives an exclusive avatar OR background.
+  - Conqueror subscription: an exclusive Conqueror background.
+  - Later: events, seasons (Shop sales not planned for now).
+
+WHERE THEY SHOW
+  - Passport header (the "ID page"), leaderboard rows, the weekly
+    winners podium, share images (passport page, weekly result,
+    finished wonder).
+
+HOW IT WORKS
+  - Owned and equipped in the Passport -> Collection tab, next to
+    avatars.
+  - Stored like other unlocked items (type "background") plus an
+    equipped-background field on the profile. The server checks the
+    player owns a background before it can be equipped.
+  - Background list (name, image, source) managed from the dashboard,
+    so new ones can be added without an app update where possible.
+
+DECISIONS
+  - No free starter backgrounds: players have NO background until
+    they earn one (the slot stays empty / default look).
+  - NOT sold in the Shop for now (earn-only).
+  - Conqueror subscribers get an exclusive Conqueror background.
+    It may REPLACE the current star marking for Conqueror players
+    (the background itself shows they're a subscriber) - to confirm
+    when we see how the star is used in the newest app version.
+
+============================================================
+BUILD ORDER
+============================================================
+  0. HOTFIX: purchase exploits (server-side prices + level checks)
+     + P1 standalone fixes (password reset, Conqueror discount abuse,
+     Millionaire back button, Draw the Border Next button, mythic chest
+     re-open) + a quick patch for daily-chest avatars missing from
+     Owned (fully fixed later by the Passport Collection).
+     Everything merged into a feature is built with that feature.
+  1. Mainland outlines + missing shapes (Feature 9) - fixes a live bug
+     (the "?" shapes) and Daily Challenge / Compass Quiz depend on it
+  2. Economy config (game_config table, app config loader, dashboard
+     tab, server functions read config, server-side quiz rewards)
+  3. Quiz Difficulty (Easy / Medium / Hard, 6-answer Hard questions,
+     country difficulty table) - before quests and weekly, which use it
+  4. Daily Quests (replaces Daily Leaderboard + login reward)
+  5. Passport tab (Main | Stamps | Quests | Collection | Wonders
+     teaser) + stamp drops
+  6. Weekly Challenge + winners announcement
+  7. Daily Challenge (Palette, Zoom, Neighbours)
+  8. Compass Quiz
+  9. Events (after Economy config + server-side rewards)
+ 10. Notifications (after Daily Quests, Weekly and Events, which it
+     announces; local streak reminders could ship earlier)
+ 11. Avatar backgrounds (Feature 13) - the background slot + the
+     Conqueror background; needed before Wonders hands out backgrounds
+ 12. Wonders + endless level milestones (Feature 12)
+
+============================================================
+STILL OPEN
+============================================================
+  - Daily Quests Q3: ad-related and spend-gold quests, yes or no.
+  - Weekly W5: attempt limits.  W6: prizes.
+  - Compass Quiz: unlock condition (level, gold or quest).
+  - Daily Challenge: one guess vs several, rewards per question + the
+    unique reward, link to Daily Quests, streak / share.
+  - Wonders: questions W1-W10 (see Feature 12, WONDER ART & REVEAL
+    SYSTEM).
+
+============================================================
+LATER / NOT IN THIS UPDATE
+============================================================
+  - Monthly quest (Duolingo style)
+  - Stamp milestone quests (10/25/50 stamps, full continent)
+  - Hall of Fame (past weekly podiums)
+  - 1st-place crown on leaderboards
+  - Fanfare / drumroll / stamp sound effects
+  - Push notifications
+  - Difficulty levels for Compass Quiz
+
+============================================================
+PART B: YOUR NOTES, RECONCILED WITH THE FEATURES
+============================================================
+Every note is now in exactly one place:
+  B1. CONFLICTS - a note and a feature disagree; you decide.
+  B2. MERGED     - the note is now part of a feature (also listed
+                   under 'FROM YOUR NOTES' in that feature).
+  B3. STANDALONE - fixes that don't belong to any feature.
+Many notes (Gauntlet, potions, mythic chest, expedition, Draw the
+Border, pause menu, password reset) are about the newer build; they
+get confirmed once it's pushed.
+
+B1. CONFLICTS TO DECIDE
+------------------------
+  C1. Daily chest rule
+      Your note: the daily chest only after X daily quests are done.
+      Feature 1: the hard quest's chest IS the daily chest.
+      - A: chest opens after all 3 quests are done
+      - B: chest = reward of the hard quest (current plan)
+      - C: chest after any 2 of 3 quests
+      Suggestion: A or C: easier for weaker players than requiring the
+      hard quest, and it keeps all 3 quests relevant.
+
+  C2. Country prices x5 vs the Wonders unlock
+      Your note: countries x5, minimum 200 gold. Feature 12: Wonders
+      unlock needs every country owned. Buying all 250 goes from about
+      1.5M to about 7.5M gold.
+      - A: x5 and keep 'all countries' for Wonders (very long road)
+      - B: x5, but Wonders needs e.g. 200 of 250 countries
+      - C: a smaller increase (x2-x3)
+      Suggestion: Set the price in the dashboard (Feature 5) and pick
+      the multiplier after looking at real gold earned per day by active
+      players.
+
+  C3. Is buying gold with real money still needed?
+      Your note asks whether gold purchasing is needed. The plan assumes
+      it exists: editable gold per pack (F5), bonus-gold sales (F10),
+      and bought gold excluded from Weekly Gold Efficiency (F2).
+      - A: keep gold packs (rebalance amounts)
+      - B: remove gold packs; money goes to Conqueror, tickets and
+        chests
+      Suggestion: Decide before Economy config; if B, drop the related
+      bits from F2, F5 and F10.
+
+  C4. Too many multipliers stacking
+      Rewards can now be multiplied by difficulty (F7), event 2x (F10),
+      Conqueror 2x, the 'double next round' ad (notes) and potions
+      (notes, 'applied last'). Hard 1.25 x event 2 x Conqueror 2 x ad 2
+      x potion = 10x or more.
+      - A: all multiply, with a cap (e.g. max 5x before potions)
+      - B: some add instead of multiply (e.g. event + Conqueror = 3x,
+        not 4x)
+      - C: no cap
+      Suggestion: One fixed order on the server: base -> difficulty ->
+      event -> Conqueror -> ad bonus -> potion last, with a dashboard
+      cap.
+
+  C5. Two different 'watch an ad for double rewards'
+      The current build already asks for an ad when pressing Play Again
+      (double rewards). Your note adds a 'double rewards next round'
+      button on the summary.
+      - A: keep only the Play Again popup
+      - B: replace it with the summary button
+      - C: both
+      Suggestion: B: one clear button on the summary is less pushy than
+      a popup on Play Again.
+
+  C6. Millionaire: new question types
+      Your note: add Compass and Daily Challenge question types to
+      Millionaire. But Daily Challenge answers are typed and Compass
+      uses a dial; Millionaire is 4 answers.
+      - A: convert them to 4-answer versions inside Millionaire (e.g.
+        'Which flag has this palette?')
+      - B: only add types that are already multiple choice
+      Suggestion: A, after Compass Quiz and Daily Challenge ship.
+
+  C7. Flags as 5,000-gold collectibles
+      Your note: each flag costs 5,000 and is collected like avatars.
+      Today players pick their flag freely, and the flag shows next to
+      their name everywhere.
+      - A: everyone keeps their current flag + their own country free;
+        others cost 5,000
+      - B: all flags free to show, but 'collecting' them is a separate
+        collection
+      Suggestion: A, so nobody loses what they have.
+
+  C8. Existing challenges screen vs the new Weekly Challenge
+      Your notes mention 'challenges weekly/challenges' and wrong
+      placements, so the newer build seems to have a challenges screen
+      already. Feature 2 designs a new Weekly Challenge.
+      - A: Feature 2 replaces the existing challenges
+      - B: keep existing challenges and add Weekly next to them
+      Suggestion: A. The placement bug then becomes 'make sure the new
+      server ranking is correct'. Confirm once the newer build is
+      pushed.
+
+B2. MERGED INTO FEATURES
+------------------------
+  [F1 Daily Quests] Daily chest redesign: closed chest sits in the
+      centre of its glow; ticket amount from the chest follows the
+      ticket price (from config).
+  [F1 / F2 Daily Quests & Weekly] Show the Conqueror 2x XP and gold in
+      the new quests and weekly screens.
+  [F2 Weekly + Leaderboard] Leaderboard rework: format large XP numbers
+      (1.2M) so they fit.
+  [F3 Winners / F4 Passport / F12 Wonders] One shared 'share card' for
+      all share images (results, passport, podium, wonder) using the
+      correct app icon, bigger.
+  [F4 Passport] Profile/user menu moves behind the avatar in the
+      Passport header: shorter rows, smaller icons.
+  [F4 Passport] Collection must list avatars from every source (shop,
+      quests, daily chest, milestones, wonders). Fixes: chest avatars
+      missing from Owned.
+  [F4 Passport] Check the 'Game Master' quest icon when Quests move into
+      the Passport.
+  [F5 Economy config] Country price x5 / minimum 200 becomes a dashboard
+      value (see conflict C2).
+  [F5 Economy config] Mythic chest odds stored in config; the server
+      rolls with the same numbers the shop shows, so stated and real
+      chances can't differ.
+  [F5 Economy config] Potions included in server-side reward
+      calculation, applied last; same-tier XP potions stack.
+  [F5 Economy config] Mythic chest / gold pack rebalance and bulk-buy
+      tiers (x1 / x5 / x10) priced from the dashboard (see C3).
+  [F7 Difficulty (starting page)] Starting page shows a better quiz
+      description and the XP / gold per correct for each difficulty.
+  [F7 Difficulty] Gauntlet boss round uses the Hard-mode 6-answer layout
+      (orange / purple), with a smaller time penalty.
+  [F7 / F10 / F5 Quiz Summary] Summary redesign: one reward breakdown
+      (base, difficulty, event, Conqueror, ad, potion), faster count-up
+      like Millionaire, special effect for Conqueror / event bonuses,
+      stamp animation (F4). See C4 and C5.
+  [F9 Mainland outlines + shapes] Missing shapes, USA / New Zealand /
+      Russia fixes, the same shapes used in Learn, Antarctica from the
+      South Pole.
+  [F9 + Learn] Learn uses the new bundled shapes: slower zoom, move /
+      zoom the mini map; Learn button in every regular quiz except
+      Borders.
+  [F11 Notifications (Settings)] One Settings screen: sound effects
+      on/off + volume next to the notification switches.
+  [F6 / F8 then Millionaire] Millionaire gets new question types and
+      harder questions at higher levels (uses F7 country difficulty).
+      See C6.
+  [F4 / F13 Cosmetics] Flags as collectibles live in Passport >
+      Collection with avatars and backgrounds (see C7).
+
+B3. STANDALONE FIXES
+--------------------
+  (P1 = fix first, P2 = this update, P3 = nice to have)
+  --- Account & Conqueror ---
+  [P1 BUG] Password reset fails with "Auth session missing" after saving
+      the new password.
+  [P1 SECURITY] Conqueror 50% off first month: once per user, block
+      repeat use.
+
+  --- Sound ---
+  [P2 BUG] Sound effects lower other apps' audio (music in headphones).
+      Cause: the app never sets its audio mode; set it to mix with other
+      apps.
+
+  --- All Quizzes ---
+  [P2 QOL] Hide the bottom tab bar while a quiz is running.
+  [P3 QOL] Pause menu: center it.
+
+  --- Millionaire Quiz ---
+  [P1 BUG] "Back to quizzes" on the summary does nothing.
+  [P2 QOL] "Play again" message only when the player has 3 tickets or
+      fewer.
+  [P2 IMPROVE] "On fire" popup: remove the icon, redesign, explain that
+      taking the money gives no XP.
+  [P2 IMPROVE] Question ladder (prize levels) in a column on the right
+      side.
+
+  --- Nightmare Quiz ---
+  [P3 IMPROVE] Replace the darkness fade-in with a pixelated flag that
+      sharpens.
+
+  --- The Gauntlet ---
+  [P2 QOL] Bigger answer text.
+  [P2 ECONOMY] Remove multipliers; reward each level advanced instead.
+  [P2 IMPROVE] Better checkpoint popups.
+  [P2 QOL] "Shield acquired" as a light toast, not a popup.
+  [P3 IMPROVE] Better visual effects per stage.
+  [P3 QOL] Reword "X correct left".
+
+  --- Draw the Border Quiz ---
+  [P1 BUG] Next button doesn't fit on the screen.
+
+  --- Shop & Items ---
+  [P1 BUG] Mythic chest: can't open another without leaving the page
+      (bulk open fixes this too).
+  [P2 QOL] Mythic avatar icon: a silhouette instead of the question
+      mark.
+  [P3 QOL] Expedition upgrade: clearer display (maybe radio buttons).
+  [P3 QOL] Name them "Mythic gold potion" / "Mythic XP potion" in the
+      potions tab.
+
+  --- App Icon & Website ---
+  [P2 BUG] Android icon looks stretched on the phone (fine in the Play
+      Store); artwork padding is fine, check the launcher / legacy icon
+      on a device.
+  [P3 IMPROVE] SEO + GEO (AI search) for the app's web page.
+
+Totals: 8 conflicts, 19 merged notes, 23 standalone fixes.
