@@ -1,12 +1,12 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, Image, StyleSheet, Text, TouchableOpacity, View, ViewStyle } from 'react-native';
 import { CARD_PALETTES, PaletteName } from '../lib/cardStates';
+import { XpAmount, XpIcon } from './XpIcon';
 
 interface Props {
   title: string;
-  description: string;
   goldReward?: string;
-  goldRewardParts?: { amount: string; suffix?: string };
+  goldRewardParts?: { amount: string; xpAmount?: string; suffix?: string };
   xpReward?: string;
   emoji?: string;
   onPress: () => void;
@@ -21,9 +21,9 @@ interface Props {
   shouldBlink?: boolean;
 }
 
-export default function QuizCard({ title, description, goldReward, goldRewardParts, xpReward, emoji, onPress, style, iconNode, isLocked, cardState, costBadge, shouldBlink }: Props) {
-  const isNightmare = title === '???' || title.includes('Nightmare');
-  const palette = cardState && cardState !== 'normal' ? CARD_PALETTES[cardState] : null;
+export default function QuizCard({ title, goldReward, goldRewardParts, xpReward, emoji, onPress, style, iconNode, isLocked, cardState, costBadge, shouldBlink }: Props) {
+  const isNightmare = !isLocked && (title === '???' || title.toLowerCase().includes('nightmare'));
+  const palette = isLocked ? CARD_PALETTES.unique : cardState && cardState !== 'normal' ? CARD_PALETTES[cardState] : null;
 
   const glowOpacity = useRef(new Animated.Value(0)).current;
   const hasPlayedRef = useRef(false);
@@ -70,6 +70,7 @@ export default function QuizCard({ title, description, goldReward, goldRewardPar
           isLocked && { opacity: 0.6 },
           palette && { backgroundColor: palette.cardBg, borderColor: palette.cardBorder, borderWidth: 2 },
           style,
+          isLocked && { backgroundColor: CARD_PALETTES.unique.cardBg, borderColor: CARD_PALETTES.unique.cardBorder, borderWidth: 2, shadowOpacity: 0, elevation: 0 },
         ]}
         onPress={onPress}
         activeOpacity={isLocked ? 1 : 0.85}
@@ -99,13 +100,18 @@ export default function QuizCard({ title, description, goldReward, goldRewardPar
             </View>
           )}
         </View>
-        {description ? <Text style={styles.description}>{description}</Text> : null}
-        {!isLocked && (
+        {!isLocked && !!(goldRewardParts || goldReward || xpReward) && (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 2, flexWrap: 'wrap' }}>
             {goldRewardParts ? (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
                 <Text style={[styles.reward, isNightmare && { color: '#cc0000' }]}>{goldRewardParts.amount}</Text>
                 <Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 12, height: 12 }} resizeMode="contain" />
+                {!!goldRewardParts.xpAmount && (
+                  <>
+                    <Text style={[styles.reward, isNightmare && { color: '#cc0000' }]}>/</Text>
+                    <XpAmount amount={goldRewardParts.xpAmount} iconSize={13} textStyle={[styles.reward, isNightmare && { color: '#cc0000' }]} />
+                  </>
+                )}
                 {!!goldRewardParts.suffix && (
                   <Text style={[styles.reward, isNightmare && { color: '#cc0000' }]}>{goldRewardParts.suffix}</Text>
                 )}
@@ -117,14 +123,13 @@ export default function QuizCard({ title, description, goldReward, goldRewardPar
             )}
             {!!xpReward && (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-                <Image source={require('../../assets/avatars/lightning.png')} style={{ width: 12, height: 12 }} resizeMode="contain" />
                 <Text style={styles.xpReward}>{xpReward}</Text>
+                <XpIcon size={12} />
               </View>
             )}
           </View>
         )}
       </View>
-      <Text style={[styles.arrow, isNightmare && { color: '#880000' }]}>›</Text>
       </TouchableOpacity>
     </View>
   );
@@ -143,20 +148,18 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   left: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
+    width: 62,
+    height: 62,
+    borderRadius: 14,
     backgroundColor: '#0a0a2a',
     alignItems: 'center',
     justifyContent: 'center',
   },
   emoji: { fontSize: 26 },
-  body: { flex: 1, gap: 3 },
+  body: { flex: 1, gap: 3, justifyContent: 'center' },
   title: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
-  description: { color: '#aaa', fontSize: 13 },
   reward: { color: '#FFD700', fontSize: 13 },
   xpReward: { color: '#888', fontSize: 12 },
-  arrow: { color: '#555', fontSize: 24 },
   stateBadge: {
     alignSelf: 'flex-start',
     marginTop: 6,

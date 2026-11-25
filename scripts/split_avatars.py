@@ -30,6 +30,7 @@ Examples:
   python3 scripts/split_avatars.py a b c d e f --cols 3 --rows 2 --snippet
 """
 
+from __future__ import annotations
 import argparse
 import colorsys
 import sys
@@ -76,40 +77,81 @@ def _is_green_hue(r: int, g: int, b: int, hue_lo: float = 0.22, hue_hi: float = 
     return hue_lo <= h <= hue_hi and s >= min_sat and v >= min_val
 
 
+def _is_magenta_spectrum(r: int, g: int, b: int, spread: int = 50) -> bool:
+    """Return True if the pixel falls in the magenta spectrum (high R+B, low G)."""
+    return (r - g) > spread and (b - g) > spread and r > 120 and b > 120
+
+
 def remove_background(img: Image.Image, bg_color: tuple[int, int, int], threshold: int = 30) -> Image.Image:
     """
-    Two-pass background removal applied to the full image before splitting:
+    Three-pass background removal applied to the full image before splitting:
 
-    Pass 1 — Green-hue sweep (HSV):
-      Any pixel whose hue falls in the green band (covers all chroma-key green
-      variants: #00FF00, #00B140, #3BFF3B, etc.) is made fully transparent.
+    Pass 1 — Hue/spectrum sweep:
+      Green backgrounds: HSV green-hue sweep.
+      Magenta backgrounds: magenta spectrum sweep (high R+B, low G).
+      Covers all chroma-key variants and compression artifacts.
 
     Pass 2 — Euclidean distance from the sampled corner colour:
-      Catches any remaining background tones that aren't pure green
-      (e.g. slightly off-green, anti-aliased edges).  Feathers pixels in the
-      [threshold, 2×threshold] band for smooth edges.
+      Catches remaining background tones not caught by Pass 1.
+
+    Pass 3 — Edge expansion (multiple iterations):
+      Walks outward from already-transparent pixels and removes any
+      remaining fringe pixels that match the background spectrum.
+      Eliminates the thin outline that distance-only removal leaves behind.
     """
     img = img.convert("RGBA")
     pixels = img.load()
     w, h = img.size
     tr, tg, tb = bg_color
 
+    is_magenta_bg = _is_magenta_spectrum(tr, tg, tb, spread=30)
+    is_green_bg   = _is_green_hue(tr, tg, tb)
+
+    # ── Pass 1 + 2: full-image sweep ─────────────────────────────────────────
     for y in range(h):
         for x in range(w):
             r, g, b, a = pixels[x, y]
 
-            # Pass 1: green-hue sweep
-            if _is_green_hue(r, g, b):
+            if is_green_bg and _is_green_hue(r, g, b):
                 pixels[x, y] = (r, g, b, 0)
                 continue
 
-            # Pass 2: Euclidean distance from sampled bg colour
+            if is_magenta_bg and _is_magenta_spectrum(r, g, b):
+                pixels[x, y] = (r, g, b, 0)
+                continue
+
             dist = ((r - tr) ** 2 + (g - tg) ** 2 + (b - tb) ** 2) ** 0.5
             if dist <= threshold:
                 pixels[x, y] = (r, g, b, 0)
             elif dist <= threshold * 2:
                 alpha = int(255 * (dist - threshold) / threshold)
                 pixels[x, y] = (r, g, b, alpha)
+
+    # ── Pass 3: edge expansion — removes fringe pixels adjacent to transparent ─
+    neighbors = [(-1,0),(1,0),(0,-1),(0,1),(-1,-1),(1,-1),(-1,1),(1,1)]
+    for _ in range(6):
+        to_clear = []
+        for y in range(h):
+            for x in range(w):
+                r, g, b, a = pixels[x, y]
+                if a == 0:
+                    continue
+                spectrum_hit = (
+                    (is_magenta_bg and _is_magenta_spectrum(r, g, b, spread=30)) or
+                    (is_green_bg   and _is_green_hue(r, g, b))
+                )
+                dist = ((r - tr) ** 2 + (g - tg) ** 2 + (b - tb) ** 2) ** 0.5
+                if spectrum_hit or dist <= threshold * 3:
+                    for dx, dy in neighbors:
+                        nx, ny = x + dx, y + dy
+                        if 0 <= nx < w and 0 <= ny < h and pixels[nx, ny][3] < 128:
+                            to_clear.append((x, y))
+                            break
+        if not to_clear:
+            break
+        for x, y in to_clear:
+            r, g, b, _ = pixels[x, y]
+            pixels[x, y] = (r, g, b, 0)
 
     return img
 
@@ -125,7 +167,7 @@ def format_ratio(w: int, h: int) -> str:
 # ── Snippet generation ────────────────────────────────────────────────────────
 
 def print_snippet(names: list[str]):
-    print("\n── customAvatars.tsx snippet ─────────────────────────────────────────────\n")
+    print("\n-- customAvatars.tsx snippet ---------------------------------------------\n")
     print("  // Add to CUSTOM_AVATAR_COMPONENTS in app/lib/customAvatars.tsx:")
     print()
     for name in names:
@@ -138,7 +180,7 @@ def print_snippet(names: list[str]):
         key = f"png_{name}"
         label = name.replace("_", " ").title()
         print(f"  {{ key: '{key}', label: '{label}', culture: '', price: 1000, isPremium: true }},")
-    print("\n─────────────────────────────────────────────────────────────────────────\n")
+    print("\n-------------------------------------------------------------------------\n")
 
 
 # ── Image resolution ─────────────────────────────────────────────────────────
@@ -305,7 +347,7 @@ def main():
         cropped.save(out_path, "PNG")
         saved.append(out_path)
         tag = "transparent bg" if not parsed.no_rembg else "bg kept"
-        print(f"  ✓  png_{name}   →  {out_path.name}  ({tag})")
+        print(f"  OK  png_{name}  ->  {out_path.name}  ({tag})")
 
     # ── Optional snippet ──────────────────────────────────────────────────────
     if parsed.snippet:

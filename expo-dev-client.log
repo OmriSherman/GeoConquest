@@ -1,0 +1,51 @@
+env: load .env
+env: export EXPO_PUBLIC_SUPABASE_URL EXPO_PUBLIC_SUPABASE_ANON_KEY MONETAZATION_KEY EXPO_PUBLIC_ADMOB_APP_ID_ANDROID EXPO_PUBLIC_ADMOB_REWARDED_AD_UNIT_ID_ANDROID
+Starting project at C:\Users\Omri\Desktop\GeoConquest\GeoConquest
+Starting Metro Bundler
+Waiting on http://localhost:8081
+Logs for your project will appear below.
+Android .\index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android .\index.ts ░░░░░░░░░░░░░░░░  1.0% (1/1)
+Android .\index.ts ▓▓░░░░░░░░░░░░░░ 13.7% ( 26/173)
+Android .\index.ts ▓▓░░░░░░░░░░░░░░ 14.8% (123/435)
+Android .\index.ts ▓▓▓░░░░░░░░░░░░░ 20.6% (279/615)
+Android .\index.ts ▓▓▓▓░░░░░░░░░░░░ 27.7% (409/777)
+Android .\index.ts ▓▓▓▓▓▓▓▓░░░░░░░░ 52.1% (662/917)
+Android .\index.ts ▓▓▓▓▓▓▓▓▓░░░░░░░ 58.3% ( 829/1088)
+Android .\index.ts ▓▓▓▓▓▓▓▓▓▓▓░░░░░ 73.8% (1037/1228)
+Android .\index.ts ▓▓▓▓▓▓▓▓▓▓▓░░░░░ 74.0% (1192/1386)
+Android .\index.ts ▓▓▓▓▓▓▓▓▓▓▓▓░░░░ 76.1% (1307/1612)
+Android .\index.ts ▓▓▓▓▓▓▓▓▓▓▓▓░░░░ 76.1% (1516/1776)
+Android .\index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓░░░ 86.9% (1763/1905)
+Android .\index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 95.8% (1990/2033)
+Android Bundled 52142ms index.ts (2099 modules)
+ WARN  [expo-av]: Expo AV has been deprecated and will be removed in SDK 54. Use the `expo-audio` and `expo-video` packages to replace the required functionality.
+Android .\index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android Bundled 100ms index.ts (1 module)
+ WARN  [expo-av]: Expo AV has been deprecated and will be removed in SDK 54. Use the `expo-audio` and `expo-video` packages to replace the required functionality.
+ LOG  [Auth] Native redirectUri: geoconquest://auth/callback
+Android .\index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android Bundled 604ms index.ts (1 module)
+ WARN  [expo-av]: Expo AV has been deprecated and will be removed in SDK 54. Use the `expo-audio` and `expo-video` packages to replace the required functionality.
+ ERROR  [RN-IAP] Failed to initialize IAP connection: [Error: {"code":"init-connection","message":"Failed to initialize connection","responseCode":-1,"debugMessage":"Failed to initialize billing connection"}
+]
+ ERROR  [RN-IAP] [fetchProducts] Failed: [Error: dev.hyo.openiap.OpenIapError$NotPrepared: Billing client not ready
+	at dev.hyo.openiap.OpenIapModule$fetchProducts$1$1.invokeSuspend(OpenIapModule.kt:170)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:33)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:101)
+	at kotlinx.coroutines.internal.LimitedDispatcher$Worker.run(LimitedDispatcher.kt:113)
+	at kotlinx.coroutines.scheduling.TaskImpl.run(Tasks.kt:89)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler.runSafely(CoroutineScheduler.kt:589)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.executeTask(CoroutineScheduler.kt:823)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.runWorker(CoroutineScheduler.kt:720)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.run(CoroutineScheduler.kt:707)
+]
+Android .\index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android Bundled 697ms index.ts (1 module)
+ WARN  [expo-av]: Expo AV has been deprecated and will be removed in SDK 54. Use the `expo-audio` and `expo-video` packages to replace the required functionality.
+Android .\index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android Bundled 465ms index.ts (1 module)
+ WARN  [expo-av]: Expo AV has been deprecated and will be removed in SDK 54. Use the `expo-audio` and `expo-video` packages to replace the required functionality.
+Android .\index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android Bundled 93ms index.ts (1 module)
+ WARN  [expo-av]: Expo AV has been deprecated and will be removed in SDK 54. Use the `expo-audio` and `expo-video` packages to replace the required functionality.

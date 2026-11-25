@@ -1,9 +1,8 @@
 /**
  * CrateShopScreen — Gacha / Mystery Crate unboxing experience.
  *
- * Two crate tiers:
- *   Common (1,500 gold)  — lower-tier emoji avatars
- *   Legendary (5,000 gold) — elite emojis + all SVG avatars + faction flags
+ * Single crate tier:
+ *   Legendary (5,000 gold) — SVG avatars + faction flags
  *
  * Opening flow:
  *   1. Tap "Open" → client picks a weighted-random item from the pool.
@@ -16,6 +15,7 @@ import React, { useRef, useState } from 'react';
 import {
   Alert,
   Animated,
+  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -25,6 +25,7 @@ import {
 import * as Haptics from 'expo-haptics';
 import ConfettiCannon from 'react-native-confetti-cannon';
 import { useAuth } from '../context/AuthContext';
+import { t } from '../lib/i18n';
 import { supabase } from '../lib/supabase';
 import { playPurchasedItem, playVictory, playReject } from '../lib/audio';
 import AvatarDisplay from '../components/AvatarDisplay';
@@ -41,21 +42,8 @@ interface PoolItem {
   label: string;
 }
 
-const COMMON_POOL: PoolItem[] = [
-  { id: '🧛',   type: 'avatar', rarity: 'common', label: 'Vampire'  },
-  { id: '🧙‍♂️', type: 'avatar', rarity: 'common', label: 'Wizard'   },
-  { id: '🤖',   type: 'avatar', rarity: 'rare',   label: 'Robot'    },
-  { id: '🦸',   type: 'avatar', rarity: 'rare',   label: 'Hero'     },
-  { id: '👽',   type: 'avatar', rarity: 'rare',   label: 'Alien'    },
-  { id: '🥷',   type: 'avatar', rarity: 'epic',   label: 'Ninja'    },
-  { id: '👻',   type: 'avatar', rarity: 'epic',   label: 'Ghost'    },
-];
 
 const LEGENDARY_POOL: PoolItem[] = [
-  // Elite emoji
-  { id: '🐉',   type: 'avatar', rarity: 'epic',      label: 'Dragon'       },
-  { id: '🧜‍♀️', type: 'avatar', rarity: 'epic',      label: 'Mermaid'      },
-  { id: '👑',   type: 'avatar', rarity: 'legendary',  label: 'Monarch'      },
   // Cultural SVGs
   { id: 'svg_samurai',      type: 'avatar', rarity: 'rare',      label: 'Samurai'       },
   { id: 'svg_pharaoh',      type: 'avatar', rarity: 'rare',      label: 'Pharaoh'       },
@@ -113,19 +101,21 @@ const RARITY_COLOR: Record<Rarity, string> = {
   legendary: '#FFD700',
 };
 
-const RARITY_LABEL: Record<Rarity, string> = {
-  common:    'Common',
-  rare:      'Rare',
-  epic:      'Epic',
-  legendary: 'LEGENDARY',
-};
+function getRarityLabel(r: Rarity): string {
+  const map: Record<Rarity, string> = {
+    common: t('crateShop.common'),
+    rare: t('crateShop.rare'),
+    epic: t('crateShop.epic'),
+    legendary: t('crateShop.legendaryRarity'),
+  };
+  return map[r];
+}
 
 // ─── Crate configs ────────────────────────────────────────────────────────────
 
 interface CrateConfig {
   id: 'common' | 'legendary';
   label: string;
-  emoji: string;
   cost: number;
   description: string;
   pool: PoolItem[];
@@ -134,20 +124,10 @@ interface CrateConfig {
 
 const CRATES: CrateConfig[] = [
   {
-    id: 'common',
-    label: 'Common Crate',
-    emoji: '📦',
-    cost: 1500,
-    description: 'Contains premium emoji avatars. Chance at Ninja & Ghost.',
-    pool: COMMON_POOL,
-    glowColor: '#aaaaaa',
-  },
-  {
     id: 'legendary',
-    label: 'Legendary Crate',
-    emoji: '🎁',
+    label: '',
     cost: 5000,
-    description: 'All SVG avatars, elite emojis & faction flags. Chance at Legendary drops!',
+    description: '',
     pool: LEGENDARY_POOL,
     glowColor: '#FFD700',
   },
@@ -192,7 +172,7 @@ export default function CrateShopScreen() {
     if (!profile) return;
     if (gold < crate.cost) {
       playReject();
-      Alert.alert('Not enough gold', `You need 💰 ${crate.cost.toLocaleString()} gold.`);
+      Alert.alert(t('shop.notEnoughGold'), t('crateShop.notEnoughGold'));
       return;
     }
 
@@ -241,7 +221,7 @@ export default function CrateShopScreen() {
         }).start();
 
       } catch (err: any) {
-        Alert.alert('Error', err.message ?? 'Failed to open crate');
+        Alert.alert(t('crateShop.error'), err.message ?? 'Failed to open crate');
       } finally {
         setOpening(false);
       }
@@ -252,30 +232,28 @@ export default function CrateShopScreen() {
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Gold balance */}
       <View style={styles.goldRow}>
-        <Text style={styles.goldText}>💰 {gold.toLocaleString()}</Text>
+        <Image source={require('../../assets/avatars/gold_bag.png')} style={{ width: 18, height: 18 }} resizeMode="contain" />
+        <Text style={styles.goldText}>{gold.toLocaleString()}</Text>
       </View>
 
-      <Text style={styles.heading}>Mystery Crates</Text>
-      <Text style={styles.sub}>Open a crate for a random avatar or flag. Duplicates refund gold.</Text>
+      <Text style={styles.heading}>{t('crateShop.title')}</Text>
+      <Text style={styles.sub}>{t('crateShop.subtitle')}</Text>
 
       {/* Crate cards */}
       {CRATES.map((crate) => (
         <View key={crate.id} style={[styles.crateCard, { borderColor: crate.glowColor }]}>
-          <Animated.Text
-            style={[styles.crateEmoji, { transform: [{ translateX: reveal ? 0 : shakeAnim }] }]}
-          >
-            {crate.emoji}
-          </Animated.Text>
-          <Text style={[styles.crateLabel, { color: crate.glowColor }]}>{crate.label}</Text>
-          <Text style={styles.crateDesc}>{crate.description}</Text>
+          <Text style={[styles.crateLabel, { color: crate.glowColor }]}>{t('crateShop.legendary')}</Text>
+          <Text style={styles.crateDesc}>{t('crateShop.legendaryDesc')}</Text>
           <TouchableOpacity
             style={[styles.openBtn, { borderColor: crate.glowColor, opacity: opening ? 0.5 : 1 }]}
             onPress={() => openCrate(crate)}
             disabled={opening}
           >
-            <Text style={[styles.openBtnText, { color: crate.glowColor }]}>
-              Open — 💰 {crate.cost.toLocaleString()}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={[styles.openBtnText, { color: crate.glowColor }]}>{t('crateShop.open')} — </Text>
+              <Image source={require('../../assets/avatars/gold_bag.png')} style={{ width: 14, height: 14 }} resizeMode="contain" />
+              <Text style={[styles.openBtnText, { color: crate.glowColor }]}>{crate.cost.toLocaleString()}</Text>
+            </View>
           </TouchableOpacity>
         </View>
       ))}
@@ -284,7 +262,7 @@ export default function CrateShopScreen() {
       {reveal && (
         <Animated.View style={[styles.revealCard, { opacity: revealAnim, borderColor: RARITY_COLOR[reveal.item.rarity] }]}>
           <Text style={[styles.rarityLabel, { color: RARITY_COLOR[reveal.item.rarity] }]}>
-            {RARITY_LABEL[reveal.item.rarity]}
+            {getRarityLabel(reveal.item.rarity)}
           </Text>
 
           <View style={styles.revealAvatar}>
@@ -300,12 +278,12 @@ export default function CrateShopScreen() {
           {reveal.isDuplicate ? (
             <View style={styles.duplicateBadge}>
               <Text style={styles.duplicateText}>
-                Already owned — refunded 💰 {reveal.compensation?.toLocaleString()}
+                {t('crateShop.duplicateRefund', { gold: reveal.compensation?.toLocaleString() })}
               </Text>
             </View>
           ) : (
             <View style={styles.newBadge}>
-              <Text style={styles.newText}>New item unlocked!</Text>
+              <Text style={styles.newText}>{t('crateShop.newItemUnlocked')}</Text>
             </View>
           )}
         </Animated.View>
@@ -313,13 +291,13 @@ export default function CrateShopScreen() {
 
       {/* Rarity odds */}
       <View style={styles.oddsCard}>
-        <Text style={styles.oddsTitle}>Drop Rates</Text>
+        <Text style={styles.oddsTitle}>{t('crateShop.dropRates')}</Text>
         {(Object.entries(RARITY_WEIGHTS) as [Rarity, number][]).map(([r, w]) => {
           const total = Object.values(RARITY_WEIGHTS).reduce((a, b) => a + b, 0);
           const pct = ((w / total) * 100).toFixed(0);
           return (
             <View key={r} style={styles.oddsRow}>
-              <Text style={[styles.oddsRarity, { color: RARITY_COLOR[r] }]}>{RARITY_LABEL[r]}</Text>
+              <Text style={[styles.oddsRarity, { color: RARITY_COLOR[r] }]}>{getRarityLabel(r as Rarity)}</Text>
               <Text style={styles.oddsPct}>{pct}%</Text>
             </View>
           );
@@ -359,7 +337,6 @@ const styles = StyleSheet.create({
     gap: 10,
     borderWidth: 1.5,
   },
-  crateEmoji:  { fontSize: 60 },
   crateLabel:  { fontSize: 18, fontWeight: 'bold' },
   crateDesc:   { color: '#aaa', fontSize: 13, textAlign: 'center' },
   openBtn: {

@@ -3,16 +3,23 @@ import { Alert, Platform, Share } from 'react-native';
 import { Session, User } from '@supabase/supabase-js';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { supabase } from '../lib/supabase';
 import { Profile } from '../types';
+import type { ChestState } from '../lib/dailyChest';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ACHIEVEMENTS_DATA } from '../lib/achievementsData';
+import { STORE_NAME, STORE_URL } from '../lib/storeLinks';
+import { identifyUser as rcIdentifyUser, logoutUser as rcLogoutUser, hasActiveEntitlement } from '../lib/revenueCat';
+import { DEV_MODE, DEV_UNLOCKED_ITEM_IDS } from '../lib/devMode';
 
 // ─── Offline cache helpers ────────────────────────────────────────────────────
 
 export const PROFILE_CACHE_KEY = (uid: string) => `@geoquest/profile_cache_${uid}`;
 const MUTATIONS_KEY = (uid: string) => `@geoquest/pending_mutations_${uid}`;
 const NEXT_QUIZ_BOOST_KEY = (uid: string) => `@geoquest/next_quiz_boost_${uid}`;
+const DEV_CONQUEROR_KEY = '@geoquest/dev_conqueror_enabled';
+const DEV_INFINITE_MAPS_KEY = '@geoquest/dev_infinite_maps_enabled';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 type PendingMutation =
@@ -176,6 +183,7 @@ interface AuthContextValue {
   signUp: (email: string, password: string) => Promise<{ user: User | null; session: Session | null }>;
   signIn: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
+  signInWithApple: () => Promise<void>;
   signOut: () => Promise<void>;
   setUsername: (username: string, avatarEmoji?: string, avatarFlag?: string, country?: string | null, referralCode?: string | null) => Promise<void>;
   purchaseAvatarItem: (itemType: 'avatar' | 'flag', itemId: string, cost: number) => Promise<void>;
@@ -186,23 +194,38 @@ interface AuthContextValue {
   effectiveMaxTurns: number;
   dailyRewardAvailable: boolean;
   setDailyRewardAvailable: React.Dispatch<React.SetStateAction<boolean>>;
-  claimDailyReward: () => Promise<{ gold: number; tickets: number }>;
+  claimDailyReward: () => Promise<ChestState>;
+  refreshProfile: () => Promise<void>;
   addXP: (amount: number) => Promise<void>;
   addGold: (amount: number) => Promise<void>;
   incrementQuizCount: () => Promise<{ claimed: boolean; goldAwarded: number }>;
   shareReferralLink: () => Promise<void>;
   unlockedItems: Set<string>;
   refreshUnlockedItems: () => Promise<void>;
+  pendingAvatarNotification: boolean;
+  clearAvatarNotification: () => void;
   refreshQuestStatus: () => Promise<void>;
-  refreshProfile: () => Promise<void>;
   spendTicket: () => Promise<void>;
   addTickets: (amount: number) => Promise<void>;
   purchaseTicket: (cost: number) => Promise<void>;
   purchaseTickets: (amount: number, cost: number) => Promise<void>;
-  purchaseConqueror: (plan: 'unlimited' | 'monthly') => Promise<void>;
+  ticketAdsRemaining: number;
+  ticketAdReward: (claim?: boolean) => Promise<number>;
+  purchaseConqueror: (plan: 'unlimited' | 'monthly' | 'yearly') => Promise<void>;
+  devConquerorEnabled: boolean;
+  setDevConquerorEnabled: (enabled: boolean) => Promise<void>;
+  devInfiniteMapsEnabled: boolean;
+  setDevInfiniteMapsEnabled: (enabled: boolean) => Promise<void>;
   nextQuizBoostActive: boolean;
   setNextQuizBoostActive: (active: boolean) => Promise<void>;
   consumeNextQuizBoost: () => Promise<boolean>;
+  maps: number;
+  mapsNextRefillAt: Date | null;
+  mapsAdsUsedToday: number;
+  deductMap: () => Promise<boolean>;
+  refundMap: () => Promise<boolean>;
+  grantAdMap: () => Promise<void>;
+  syncMaps: () => Promise<void>;
 }
 
 // ─── Context ──────────────────────────────────────────────────────────────────
@@ -219,7 +242,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [disabledUpgrades, setDisabledUpgrades] = useState<Set<string>>(new Set());
   const [dailyRewardAvailable, setDailyRewardAvailable] = useState(false);
   const [unlockedItems, setUnlockedItems] = useState<Set<string>>(new Set());
+  const [pendingAvatarNotification, setPendingAvatarNotification] = useState(false);
   const [nextQuizBoostActive, setNextQuizBoostActiveState] = useState(false);
+  const [maps, setMaps] = useState(5);
+  const [ticketAdState, setTicketAdState] = useState({ remaining: 3, date: '' });
+  const ticketAdsRemaining = ticketAdState.date === new Date().toISOString().slice(0, 10) ? ticketAdState.remaining : 3;
+  const [mapsNextRefillAt, setMapsNextRefillAt] = useState<Date | null>(null);
+  const [devConquerorEnabled, setDevConquerorEnabledState] = useState(true);
+  const [devInfiniteMapsEnabled, setDevInfiniteMapsEnabledState] = useState(false);
 
   // ── Bootstrap ──────────────────────────────────────────────────────────────
   //
@@ -231,8 +261,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // We never call fetchProfile from getSession() — onAuthStateChange owns that.
 
   useEffect(() => {
+    if (DEV_MODE) {
+      AsyncStorage.getItem(DEV_CONQUEROR_KEY).then(value => {
+        if (value !== null) setDevConquerorEnabledState(value === '1');
+      });
+      AsyncStorage.getItem(DEV_INFINITE_MAPS_KEY).then(value => {
+        if (value !== null) setDevInfiniteMapsEnabledState(value === '1');
+      });
+    }
     AsyncStorage.getItem('@disabled_upgrades').then(val => {
-      if (val) setDisabledUpgrades(new Set(JSON.parse(val)));
+      if (DEV_MODE) setDisabledUpgrades(new Set());
+      else if (val) setDisabledUpgrades(new Set(JSON.parse(val)));
     });
 
     // 1. Check active session immediately purely from storage
@@ -268,10 +307,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const isGoogle = session.user.app_metadata?.provider === 'google';
       const userId = session.user.id;
 
+      rcIdentifyUser(userId).catch(() => {});
+
       fetchProfile(userId)
-        .then(() => { 
+        .then(() => {
           // Detect country if it's the very first Google login and we don't have one
-          if (isGoogle) return detectAndSetCountry(session.user); 
+          if (isGoogle) return detectAndSetCountry(session.user);
         })
         .catch((err) => console.warn('[Auth] Post-login profile error:', err))
         .finally(() => setLoading(false));
@@ -304,10 +345,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [profile?.id]);
 
+  useEffect(() => {
+    if (!DEV_MODE || !profile) return;
+    setProfile(prev => prev ? {
+      ...prev,
+      is_conquerer: devConquerorEnabled,
+      conqueror_plan: devConquerorEnabled ? 'unlimited' : null,
+    } : prev);
+  }, [devConquerorEnabled, profile?.id]);
+
   // ── Helpers ────────────────────────────────────────────────────────────────
 
+  function applyMapsFromProfile(p: Profile) {
+    const MAX_MAPS = 5;
+    const REFILL_MS = 2 * 60 * 60 * 1000;
+    let count = Math.min(Math.max(p.maps ?? MAX_MAPS, 0), MAX_MAPS);
+    let refillAt = p.maps_next_refill_at ? new Date(p.maps_next_refill_at).getTime() : null;
+    const now = Date.now();
+
+    while (count < MAX_MAPS && refillAt !== null && refillAt <= now) {
+      count++;
+      refillAt = refillAt + REFILL_MS;
+    }
+    if (count >= MAX_MAPS) refillAt = null;
+
+    setMaps(count);
+    setMapsNextRefillAt(refillAt ? new Date(refillAt) : null);
+  }
+
   function applyProfileToState(p: Profile) {
-    setProfile(p);
+    const devProfile = DEV_MODE
+      ? { ...p, gold_balance: 1_000_000_000, xp: 1_000_000, tickets: 1_000_000, max_quiz_turns: 30, is_conquerer: devConquerorEnabled, conqueror_plan: devConquerorEnabled ? 'unlimited' as const : null, mythic_chests: 7 }
+      : p;
+    setProfile(devProfile);
     if (p.last_reward_claim) {
       const lastDate = new Date(p.last_reward_claim).toISOString().split('T')[0];
       const today = new Date().toISOString().split('T')[0];
@@ -316,6 +386,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setDailyRewardAvailable(true);
     }
     setNeedsUsername(!p.has_onboarded);
+    applyMapsFromProfile(devProfile);
+  }
+
+  async function persistCachedProfilePatch(userId: string, patch: Partial<Profile>) {
+    try {
+      const raw = await AsyncStorage.getItem(PROFILE_CACHE_KEY(userId));
+      if (!raw) return;
+      const cached = JSON.parse(raw) as Profile;
+      await AsyncStorage.setItem(PROFILE_CACHE_KEY(userId), JSON.stringify({ ...cached, ...patch }));
+    } catch {}
+  }
+
+  async function syncProfileCurrencyState(userId: string, gold: number, tickets: number) {
+    setProfile(prev => prev ? { ...prev, gold_balance: gold, tickets } : prev);
+    await persistCachedProfilePatch(userId, { gold_balance: gold, tickets });
+  }
+
+  async function syncProfileGoldState(userId: string, gold: number, extraPatch?: Partial<Profile>) {
+    setProfile(prev => prev ? { ...prev, gold_balance: gold, ...extraPatch } : prev);
+    await persistCachedProfilePatch(userId, { gold_balance: gold, ...(extraPatch ?? {}) });
   }
 
   async function fetchProfile(userId: string) {
@@ -347,12 +437,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       applyProfileToState(p);
 
+      if (!DEV_MODE && p.is_conquerer) {
+        const { data: mythicData, error: mythicError } = await supabase.rpc('sync_mythic_chest_entitlement');
+        if (!mythicError && mythicData) {
+          setProfile(prev => prev ? {
+            ...prev,
+            mythic_chests: Number(mythicData.mythic_chests ?? prev.mythic_chests ?? 0),
+            mythic_month_key: mythicData.mythic_month_key ?? prev.mythic_month_key ?? null,
+            mythic_lifetime_bonus_claimed: Boolean(mythicData.mythic_lifetime_bonus_claimed ?? prev.mythic_lifetime_bonus_claimed),
+          } : prev);
+        }
+      }
+
+      // Sync RevenueCat entitlement → backend if out of sync
+      if (!p.is_conquerer) {
+        hasActiveEntitlement().then(async (active) => {
+          if (active) {
+            try { await purchaseConqueror('monthly'); } catch {}
+          }
+        }).catch(() => {});
+      }
+
       // Load unlocked items into cache
       supabase.from('user_unlocked_items').select('item_id').eq('user_id', userId).then(async (res) => {
         if (!res.error && res.data) {
           const unlockedSet = new Set(res.data.map((r: { item_id: string }) => r.item_id));
-          const reconciledSet = await reconcileQuestRewardAvatarOwnership(userId, unlockedSet);
-          setUnlockedItems(reconciledSet);
+          const reconciledSet = DEV_MODE ? unlockedSet : await reconcileQuestRewardAvatarOwnership(userId, unlockedSet);
+          setUnlockedItems(DEV_MODE ? new Set([...reconciledSet, ...DEV_UNLOCKED_ITEM_IDS]) : reconciledSet);
         }
       });
 
@@ -540,12 +651,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  async function signInWithApple() {
+    const credential = await AppleAuthentication.signInAsync({
+      requestedScopes: [
+        AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+        AppleAuthentication.AppleAuthenticationScope.EMAIL,
+      ],
+    });
+    if (!credential.identityToken) throw new Error('Apple Sign In did not return an identity token.');
+    const { error } = await supabase.auth.signInWithIdToken({
+      provider: 'apple',
+      token: credential.identityToken,
+    });
+    if (error) throw error;
+  }
+
   async function signOut() {
     try {
       if (profile?.id) {
         AsyncStorage.multiRemove([PROFILE_CACHE_KEY(profile.id), MUTATIONS_KEY(profile.id), NEXT_QUIZ_BOOST_KEY(profile.id)]).catch(() => {});
       }
       await supabase.auth.signOut();
+      await rcLogoutUser();
     } catch (error) {
       console.warn('Sign out warning:', error);
     } finally {
@@ -631,8 +758,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (error) throw error;
 
-    // Deduct gold locally + update unlock cache
-    setProfile(prev => prev ? { ...prev, gold_balance: prev.gold_balance - cost } : prev);
+    const { data: freshProfile, error: refreshError } = await supabase
+      .from('profiles')
+      .select('gold_balance, tickets')
+      .eq('id', profile.id)
+      .single();
+
+    if (!refreshError && freshProfile) {
+      await syncProfileCurrencyState(
+        profile.id,
+        Number((freshProfile as any).gold_balance ?? 0),
+        Number((freshProfile as any).tickets ?? profile.tickets ?? 0),
+      );
+    }
+
     setUnlockedItems(prev => new Set([...prev, itemId]));
   }
 
@@ -656,6 +795,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     // Unlock reward items if provided — always attempt, insert is idempotent (23505 = already owned)
+    let grantedAvatar = false;
     for (const item of rewardItems ?? []) {
       const { error: unlockError } = await supabase.from('user_unlocked_items').insert(
         { user_id: profile.id, item_id: item.itemId, item_type: item.type }
@@ -664,13 +804,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error(`Reward item could not be unlocked: ${unlockError.message}`);
       }
       setUnlockedItems(prev => new Set([...prev, item.itemId]));
+      if (item.type === 'avatar') grantedAvatar = true;
     }
+    if (grantedAvatar) setPendingAvatarNotification(true);
 
     // Grant ticket rewards — skip if already claimed (tickets were already granted)
     if (!alreadyClaimed && rewardTickets && rewardTickets > 0) {
-      const newTickets = (profile.tickets ?? 0) + rewardTickets;
-      await supabase.from('profiles').update({ tickets: newTickets }).eq('id', profile.id);
-      setProfile(prev => prev ? { ...prev, tickets: newTickets } : prev);
+      await applyProfileCurrencyDelta(0, rewardTickets);
     }
 
     // If it was already claimed and items were all already owned too, surface the error
@@ -694,172 +834,134 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw error;
     }
 
-    setProfile(prev => prev ? { ...prev, gold_balance: prev.gold_balance - cost, max_quiz_turns: newTurns } : prev);
+    const { data: freshProfile, error: refreshError } = await supabase
+      .from('profiles')
+      .select('gold_balance, tickets')
+      .eq('id', profile.id)
+      .single();
+
+    if (!refreshError && freshProfile) {
+      await syncProfileGoldState(profile.id, Number((freshProfile as any).gold_balance ?? 0), {
+        max_quiz_turns: newTurns,
+      });
+      return;
+    }
+
+    setProfile(prev => prev ? { ...prev, max_quiz_turns: newTurns } : prev);
   }
 
-  // Gold and tickets per cycle day — mirrors REWARDS_CYCLE in DailyRewardModal.tsx
-  const DAILY_GOLD_BY_DAY = [100, 150, 200, 250, 300, 400, 500];
-  const DAILY_TICKETS_BY_DAY = [1, 1, 2, 2, 3, 3, 5];
 
-  async function claimDailyReward(): Promise<{ gold: number; tickets: number }> {
-    if (!profile) return { gold: 0, tickets: 0 };
-    const rewardMultiplier = profile.is_conquerer ? 3 : 1;
+  async function applyProfileCurrencyDelta(goldDelta: number, ticketDelta: number): Promise<{ gold: number; tickets: number }> {
+    const userId = profile?.id ?? session?.user?.id;
+    if (!userId) return { gold: 0, tickets: 0 };
+    if (goldDelta === 0 && ticketDelta === 0) {
+      return { gold: profile?.gold_balance ?? 0, tickets: profile?.tickets ?? 0 };
+    }
 
-    const { data, error } = await supabase.rpc('claim_daily_reward');
+    const rpcResult = await supabase.rpc('apply_profile_currency_delta', {
+      p_gold_delta: goldDelta,
+      p_ticket_delta: ticketDelta,
+    });
 
-    // Network error (no DB error code) — claim locally and queue sync
-    if (error && !error.code) {
-      const prevStreak = shouldResetLoginStreak(profile.last_reward_claim ?? null)
-        ? 0
-        : (profile.login_streak ?? 0);
-      const newStreak = prevStreak + 1;
-      const cycleDay = ((newStreak - 1) % 7) + 1;
-      const gold = DAILY_GOLD_BY_DAY[cycleDay - 1] * rewardMultiplier;
-      const tickets = DAILY_TICKETS_BY_DAY[cycleDay - 1] * rewardMultiplier;
-      const claimedAt = new Date().toISOString();
-      const newGold = (profile.gold_balance ?? 0) + gold;
-      const newTickets = (profile.tickets ?? 0) + tickets;
-
-      setProfile(prev => prev ? {
-        ...prev,
-        gold_balance: newGold,
-        login_streak: newStreak,
-        last_reward_claim: claimedAt,
-        tickets: newTickets,
-      } : prev);
-      setDailyRewardAvailable(false);
-
-      // Update local cache so the offline state persists across restarts
-      const raw = await AsyncStorage.getItem(PROFILE_CACHE_KEY(profile.id));
-      if (raw) {
-        const cached = JSON.parse(raw);
-        AsyncStorage.setItem(PROFILE_CACHE_KEY(profile.id), JSON.stringify({
-          ...cached, gold_balance: newGold, login_streak: newStreak,
-          last_reward_claim: claimedAt, tickets: newTickets,
-        })).catch(() => {});
-      }
-
-      // Queue mutations for when we go back online
-      await enqueueMutation(profile.id, { type: 'add_gold', delta: gold });
-      await enqueueMutation(profile.id, { type: 'add_tickets', delta: tickets });
-      await enqueueMutation(profile.id, { type: 'daily_reward_sync', newStreak, claimedAt });
-
+    if (!rpcResult.error) {
+      const row = Array.isArray(rpcResult.data) ? rpcResult.data[0] : rpcResult.data;
+      const gold = Number((row as any)?.gold_balance ?? profile?.gold_balance ?? 0);
+      const tickets = Number((row as any)?.tickets ?? profile?.tickets ?? 0);
+      await syncProfileCurrencyState(userId, gold, tickets);
       return { gold, tickets };
     }
 
-    if (error) throw error;
-
-    if (data && data.length > 0) {
-      const { success, new_balance, new_streak, reward_amount } = data[0];
-      if (success) {
-        const cycleDay = ((new_streak as number - 1) % 7) + 1;
-        const baseTicketBonus = DAILY_TICKETS_BY_DAY[cycleDay - 1];
-        const ticketBonus = baseTicketBonus * rewardMultiplier;
-        const baseGoldReward = reward_amount as number;
-        const totalGoldReward = baseGoldReward * rewardMultiplier;
-        const extraGoldReward = totalGoldReward - baseGoldReward;
-        const newGoldBalance = (new_balance as number) + extraGoldReward;
-        const newTickets = (profile.tickets ?? 0) + ticketBonus;
-        await supabase.from('profiles').update({ gold_balance: newGoldBalance, tickets: newTickets }).eq('id', profile.id);
-        setProfile(prev => prev ? {
-          ...prev,
-          gold_balance: newGoldBalance,
-          login_streak: new_streak,
-          last_reward_claim: new Date().toISOString(),
-          tickets: newTickets,
-        } : prev);
-        setDailyRewardAvailable(false);
-        return { gold: totalGoldReward, tickets: ticketBonus };
-      }
-    }
-    return { gold: 0, tickets: 0 };
-  }
-
-  async function addGold(amount: number) {
-    const userId = profile?.id ?? session?.user?.id;
-    if (!userId || amount === 0) return;
-
-    // Optimistic local update
-    setProfile(prev => prev ? { ...prev, gold_balance: Math.max(0, (prev.gold_balance ?? 0) + amount) } : prev);
-
-    // Use server value as source of truth to avoid stale-client overwrites
     const { data: currentRow, error: readError } = await supabase
       .from('profiles')
-      .select('gold_balance')
+      .select('gold_balance, tickets')
       .eq('id', userId)
       .single();
 
-    if (readError) {
-      if (profile?.id) {
-        await enqueueMutation(profile.id, { type: 'add_gold', delta: amount });
-      }
-      return;
-    }
+    if (readError) throw rpcResult.error;
 
     const currentGold = Number((currentRow as any)?.gold_balance ?? 0);
-    const newBalance = Math.max(0, currentGold + amount);
+    const currentTickets = Number((currentRow as any)?.tickets ?? 0);
+    const gold = currentGold + goldDelta;
+    const tickets = currentTickets + ticketDelta;
 
-    const { error } = await supabase
+    if (gold < 0) throw new Error('Not enough gold.');
+    if (tickets < 0) throw new Error('Not enough tickets.');
+
+    const { error: updateError } = await supabase
       .from('profiles')
-      .update({ gold_balance: newBalance })
+      .update({ gold_balance: gold, tickets })
       .eq('id', userId);
 
-    if (error) {
-      if (profile?.id) {
-        await enqueueMutation(profile.id, { type: 'add_gold', delta: amount });
-        const raw = await AsyncStorage.getItem(PROFILE_CACHE_KEY(profile.id));
-        if (raw) {
-          const cached = JSON.parse(raw);
-          AsyncStorage.setItem(PROFILE_CACHE_KEY(profile.id), JSON.stringify({ ...cached, gold_balance: newBalance })).catch(() => {});
-        }
-      }
-      return;
-    }
+    if (updateError) throw updateError;
 
-    setProfile(prev => prev ? { ...prev, gold_balance: newBalance } : prev);
+    await syncProfileCurrencyState(userId, gold, tickets);
+    return { gold, tickets };
+  }
+
+  async function claimDailyReward(): Promise<ChestState> {
+    if (!profile) throw new Error('Sign in to open your daily chest.');
+    const { data, error } = await supabase.rpc('claim_daily_chest');
+    if (error) throw new Error('Could not open your chest. Check your connection and try again.');
+    if (!data) throw new Error('No chest response. Please try again.');
+    setDailyRewardAvailable(false);
+    // A refresh failure must never turn a committed grant into a failed claim.
+    await refreshProfile().catch(() => {});
+    await refreshUnlockedItems().catch(() => {});
+    return data as ChestState;
+  }
+
+  async function addGold(amount: number) {
+    if (amount === 0 || DEV_MODE) return;
+    await applyProfileCurrencyDelta(amount, 0);
   }
 
   async function spendTicket() {
-    if (!profile) return;
-    const newCount = Math.max(0, (profile.tickets ?? 0) - 1);
-    await supabase.from('profiles').update({ tickets: newCount }).eq('id', profile.id);
-    setProfile(prev => prev ? { ...prev, tickets: newCount } : prev);
+    if (!profile || DEV_MODE) return;
+    await applyProfileCurrencyDelta(0, -1);
   }
 
   async function addTickets(amount: number) {
     if (!profile || amount <= 0) return;
-    const newCount = (profile.tickets ?? 0) + amount;
-    await supabase.from('profiles').update({ tickets: newCount }).eq('id', profile.id);
-    setProfile(prev => prev ? { ...prev, tickets: newCount } : prev);
+    await applyProfileCurrencyDelta(0, amount);
   }
 
   async function purchaseTickets(amount: number, cost: number) {
-    if (!profile) return;
+    if (!profile || DEV_MODE) return;
     if ((profile.gold_balance ?? 0) < cost) throw new Error('Not enough gold.');
-    const newGold = profile.gold_balance - cost;
-    const newTickets = (profile.tickets ?? 0) + amount;
-    const { error } = await supabase
-      .from('profiles')
-      .update({ gold_balance: newGold, tickets: newTickets })
-      .eq('id', profile.id);
-    if (error) throw error;
-    setProfile(prev => prev ? { ...prev, gold_balance: newGold, tickets: newTickets } : prev);
+    await applyProfileCurrencyDelta(-cost, amount);
   }
 
   async function purchaseTicket(cost: number) {
-    if (!profile) return;
+    if (!profile || DEV_MODE) return;
     if ((profile.gold_balance ?? 0) < cost) throw new Error('Not enough gold.');
-    const newGold = profile.gold_balance - cost;
-    const newTickets = (profile.tickets ?? 0) + 1;
-    const { error } = await supabase
-      .from('profiles')
-      .update({ gold_balance: newGold, tickets: newTickets })
-      .eq('id', profile.id);
-    if (error) throw error;
-    setProfile(prev => prev ? { ...prev, gold_balance: newGold, tickets: newTickets } : prev);
+    await applyProfileCurrencyDelta(-cost, 1);
   }
 
-  async function purchaseConqueror(plan: 'unlimited' | 'monthly') {
+  async function ticketAdReward(claim = false): Promise<number> {
+    if (!profile) throw new Error('Sign in to earn tickets.');
+    if (DEV_MODE) {
+      if (claim && ticketAdsRemaining <= 0) throw new Error('You have claimed all 3 ad tickets today.');
+      const remaining = ticketAdsRemaining - (claim ? 1 : 0);
+      setTicketAdState({ remaining, date: new Date().toISOString().slice(0, 10) });
+      if (claim) setProfile(prev => prev ? { ...prev, tickets: (prev.tickets ?? 0) + 1 } : prev);
+      return remaining;
+    }
+    const { data, error } = await supabase.rpc('ticket_ad_reward', { p_claim: claim });
+    if (error) throw error;
+    setTicketAdState({ remaining: data.remaining, date: data.date });
+    if (claim) setProfile(prev => prev ? { ...prev, tickets: data.tickets } : prev);
+    return data.remaining;
+  }
+
+  useEffect(() => {
+    setTicketAdState({ remaining: 3, date: '' });
+    if (!profile?.id || DEV_MODE) return;
+    void ticketAdReward().catch(() => {});
+    const timer = setInterval(() => { void ticketAdReward().catch(() => {}); }, 60000);
+    return () => clearInterval(timer);
+  }, [profile?.id]);
+
+  async function purchaseConqueror(plan: 'unlimited' | 'monthly' | 'yearly') {
     if (!profile) throw new Error('Not authenticated');
 
     try {
@@ -872,15 +974,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (error) throw error;
       if (!data?.success) throw new Error(data?.error ?? 'Failed to activate subscription');
 
-      // Update profile locally
-      const updates: any = { is_conquerer: true };
-      const bonusGranted = !!data?.bonus_granted;
-      if (plan === 'unlimited' && bonusGranted) {
-        updates.gold_balance = (profile.gold_balance ?? 0) + 100000;
-        updates.tickets = (profile.tickets ?? 0) + 30;
-      }
+      const { data: freshProfile } = await supabase
+        .from('profiles')
+        .select('gold_balance, tickets, is_conquerer, conqueror_plan, conqueror_lifetime_bonus_claimed')
+        .eq('id', profile.id)
+        .single();
 
-      setProfile(prev => prev ? { ...prev, ...updates } : prev);
+      setProfile(prev => prev ? {
+        ...prev,
+        is_conquerer: true,
+        ...(freshProfile ?? {}),
+      } : prev);
+
+      const { data: mythicData } = await supabase.rpc('sync_mythic_chest_entitlement');
+      if (mythicData) {
+        setProfile(prev => prev ? {
+          ...prev,
+          mythic_chests: Number(mythicData.mythic_chests ?? prev.mythic_chests ?? 0),
+          mythic_monthly_chests: Number(mythicData.mythic_monthly_chests ?? prev.mythic_monthly_chests ?? 0),
+          mythic_bonus_chests: Number(mythicData.mythic_bonus_chests ?? prev.mythic_bonus_chests ?? 0),
+          mythic_monthly_opened: Number(mythicData.mythic_monthly_opened ?? prev.mythic_monthly_opened ?? 0),
+          mythic_month_key: mythicData.mythic_month_key ?? prev.mythic_month_key ?? null,
+          mythic_lifetime_bonus_claimed: Boolean(mythicData.mythic_lifetime_bonus_claimed ?? prev.mythic_lifetime_bonus_claimed),
+        } : prev);
+      }
     } catch (err: any) {
       throw new Error(err.message ?? 'Failed to activate Conqueror subscription');
     }
@@ -891,8 +1008,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data, error } = await supabase.from('user_unlocked_items').select('item_id').eq('user_id', profile.id);
     if (!error && data) {
       const unlockedSet = new Set(data.map((r: { item_id: string }) => r.item_id));
-      const reconciledSet = await reconcileQuestRewardAvatarOwnership(profile.id, unlockedSet);
-      setUnlockedItems(reconciledSet);
+      const reconciledSet = DEV_MODE ? unlockedSet : await reconcileQuestRewardAvatarOwnership(profile.id, unlockedSet);
+      setUnlockedItems(DEV_MODE ? new Set([...reconciledSet, ...DEV_UNLOCKED_ITEM_IDS]) : reconciledSet);
     }
   }
 
@@ -1025,7 +1142,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await Share.share({
         message:
           `Join me on GeoConquest! Use code ${code} when you sign up — we both get 1500 gold! 🌍\n\n` +
-          `Download on Google Play: https://play.google.com/store/apps/details?id=com.geoconquest.app\n\n` +
+          `Download on ${STORE_NAME}: ${STORE_URL}\n\n` +
           `Already installed? ${link}`,
       });
     } catch {}
@@ -1033,7 +1150,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function addXP(amount: number) {
     const userId = profile?.id ?? session?.user?.id;
-    if (!userId || amount <= 0) return;
+    if (!userId || amount <= 0 || DEV_MODE) return;
 
     // Optimistic local update
     setProfile(prev => prev ? { ...prev, xp: (prev.xp ?? 0) + amount } : prev);
@@ -1091,6 +1208,77 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return true;
   }
 
+  // ── Maps ───────────────────────────────────────────────────────────────────
+
+  async function syncMaps() {
+    if (!profile || DEV_MODE) return;
+    const { data, error } = await supabase.rpc('sync_maps_refill');
+    if (error || !data) return;
+    const count = Number((data as any).maps ?? maps);
+    const refillIso: string | null = (data as any).maps_next_refill_at ?? null;
+    setMaps(Math.min(count, 5));
+    setMapsNextRefillAt(refillIso ? new Date(refillIso) : null);
+    setProfile(prev => prev ? { ...prev, maps: count, maps_next_refill_at: refillIso } : prev);
+  }
+
+  async function deductMap(): Promise<boolean> {
+    if (!profile) return false;
+    if (profile.is_conquerer || devInfiniteMapsEnabled) return true;
+    if (DEV_MODE) {
+      const count = Math.max(0, maps - 1);
+      setMaps(count);
+      setProfile(prev => prev ? { ...prev, maps: count } : prev);
+      return true;
+    }
+    const { data, error } = await supabase.rpc('deduct_map');
+    if (error) throw error;
+    const count = Number((data as any).maps ?? 0);
+    const refillIso: string | null = (data as any).maps_next_refill_at ?? null;
+    setMaps(count);
+    setMapsNextRefillAt(refillIso ? new Date(refillIso) : null);
+    setProfile(prev => prev ? { ...prev, maps: count, maps_next_refill_at: refillIso } : prev);
+    return true;
+  }
+
+  async function refundMap(): Promise<boolean> {
+    if (!profile || devInfiniteMapsEnabled || profile.is_conquerer) return false;
+    if (DEV_MODE) {
+      const count = Math.min(5, maps + 1);
+      setMaps(count);
+      setProfile(prev => prev ? { ...prev, maps: count } : prev);
+      return true;
+    }
+    const { data, error } = await supabase.rpc('refund_map');
+    if (error || !data) return false;
+    const count = Number((data as any).maps ?? maps);
+    const refillIso: string | null = (data as any).maps_next_refill_at ?? null;
+    setMaps(Math.min(count, 5));
+    setMapsNextRefillAt(refillIso ? new Date(refillIso) : null);
+    setProfile(prev => prev ? { ...prev, maps: count, maps_next_refill_at: refillIso } : prev);
+    return Boolean((data as any).refunded);
+  }
+
+  async function grantAdMap() {
+    if (!profile || DEV_MODE) return;
+    const { data, error } = await supabase.rpc('grant_ad_map');
+    if (error) throw error;
+    const count = Number((data as any).maps ?? maps);
+    const refillIso: string | null = (data as any).maps_next_refill_at ?? null;
+    const adUsedAt: string | null = (data as any).ad_used_at ?? null;
+    const adCount = Number((data as any).ad_count ?? 0);
+    setMaps(Math.min(count, 5));
+    setMapsNextRefillAt(refillIso ? new Date(refillIso) : null);
+    setProfile(prev => prev ? { ...prev, maps: count, maps_next_refill_at: refillIso, maps_ad_used_at: adUsedAt, maps_ad_count: adCount } : prev);
+  }
+
+  const mapsAdsUsedToday = React.useMemo(() => {
+    const adDate = profile?.maps_ad_used_at;
+    if (!adDate) return 0;
+    const today = new Date().toISOString().split('T')[0];
+    if (adDate.split('T')[0] !== today) return 0;
+    return profile?.maps_ad_count ?? 0;
+  }, [profile?.maps_ad_used_at, profile?.maps_ad_count]);
+
   // ── Render ─────────────────────────────────────────────────────────────────
   async function toggleUpgrade(id: string) {
     const newSet = new Set(disabledUpgrades);
@@ -1098,6 +1286,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     else newSet.add(id);
     setDisabledUpgrades(newSet);
     await AsyncStorage.setItem('@disabled_upgrades', JSON.stringify([...newSet]));
+  }
+
+  async function setDevConquerorEnabled(enabled: boolean) {
+    if (!DEV_MODE) return;
+    setDevConquerorEnabledState(enabled);
+    setProfile(prev => prev ? {
+      ...prev,
+      is_conquerer: enabled,
+      conqueror_plan: enabled ? 'unlimited' : null,
+    } : prev);
+    await AsyncStorage.setItem(DEV_CONQUEROR_KEY, enabled ? '1' : '0');
+  }
+
+  async function setDevInfiniteMapsEnabled(enabled: boolean) {
+    if (!DEV_MODE) return;
+    setDevInfiniteMapsEnabledState(enabled);
+    await AsyncStorage.setItem(DEV_INFINITE_MAPS_KEY, enabled ? '1' : '0');
   }
 
   // Define effectiveMaxTurns
@@ -1121,6 +1326,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signUp,
         signIn,
         signInWithGoogle,
+        signInWithApple,
         signOut,
         setUsername: setUsernameAction,
         purchaseAvatarItem,
@@ -1132,22 +1338,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         dailyRewardAvailable,
         setDailyRewardAvailable,
         claimDailyReward,
+        refreshProfile,
         addXP,
         addGold,
         incrementQuizCount,
         shareReferralLink,
         unlockedItems,
+        pendingAvatarNotification,
+        clearAvatarNotification: () => setPendingAvatarNotification(false),
         refreshUnlockedItems,
         refreshQuestStatus,
-        refreshProfile,
         spendTicket,
         addTickets,
         purchaseTicket,
         purchaseTickets,
+        ticketAdsRemaining,
+        ticketAdReward,
         purchaseConqueror,
+        devConquerorEnabled,
+        setDevConquerorEnabled,
+        devInfiniteMapsEnabled,
+        setDevInfiniteMapsEnabled,
         nextQuizBoostActive,
         setNextQuizBoostActive,
         consumeNextQuizBoost,
+        maps,
+        mapsNextRefillAt,
+        mapsAdsUsedToday,
+        deductMap,
+        refundMap,
+        grantAdMap,
+        syncMaps,
       }}
     >
       {children}

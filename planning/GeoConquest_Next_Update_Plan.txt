@@ -824,7 +824,8 @@ OPTIONS ON THE TABLE
 USER'S DIRECTION: "WONDERS" (pigments + paintings)
   - After level 300 + owning every country, the world map is replaced
     by a new stage: a painting of a world wonder, in ~10 colours
-    ("pigments"), starting grey.
+    ("pigments"), starting empty (UPDATED: locked colours are hidden,
+    not grey - see WONDER ART & REVEAL SYSTEM below).
   - Each pigment is earned, then applied: that colour fills in on the
     painting. All pigments -> wonder complete -> next wonder.
   - Path A, Mega Quest: a list of requirements turned in together,
@@ -890,6 +891,234 @@ ENDLESS LEVEL MILESTONES (DECIDED)
   - Milestone rewards live in a dashboard table: you can assign an
     avatar / background to any future milestone whenever you have one
     ready; milestones with nothing assigned pay gold by default.
+
+WONDER ART & REVEAL SYSTEM  (ASSETS + DATA BUILT, SCREEN NOT BUILT YET)
+  Changes to the design above (DECIDED):
+  - Locked colours are HIDDEN (transparent), not grey. A wonder starts
+    as an empty card and the finished picture is a surprise.
+  - Each pigment unlocks a RANDOM colour of that wonder (not chosen by
+    the player, not one fixed order for everybody).
+
+  Art rules (DECIDED)
+  - One image per wonder: 1600x1200 with EXACTLY 10 colours (no
+    blending, no anti-aliasing). Pixel-art style, drawn by a script, so
+    it is our own art (no copyright problem).
+  - Keep the subject in the centre (about 75% wide, 80% tall): the card
+    crops the sides on narrow phones.
+  - Not every colour has to be a meaningful step; some reveal little.
+
+  Where it shows (DECIDED)
+  - The wonder takes the same space as the world map card on Home:
+    260 high, width = screen width - 66 (about 294-364 on phones),
+    shown "cover" (fills the card, crops a little).
+
+  How it works (BUILT)
+  - Files per wonder, in assets/wonders/<id>/:
+      final.png                 hand-made master, the source of truth
+      layer_0.webp ... layer_9  one transparent 800x600 lossless WebP
+                                per colour. Layers never overlap, so
+                                they stack in any order.
+  - scripts/wonders/build_layers.py turns final.png into the 10 layers
+    and generates app/lib/wondersData.ts (needed because the app
+    bundler only accepts literal require() calls). It refuses an image
+    that is not exactly 1600x1200 with 10 colours.
+  - scripts/wonders/wonders.json lists the wonders (id, name, country).
+  - app/lib/wonderReveal.ts: pickNextLayer(unlocked) returns a random
+    colour the player does not have yet (null when all 10 are done).
+  - Size: about 190 KB per wonder (master + layers), so 10 wonders are
+    under 2 MB. Memory: about 19 MB, only while all 10 layers of one
+    wonder are on screen.
+  - To add a wonder: put final.png in assets/wonders/<id>/, add a line
+    to wonders.json, run:  python3 -I scripts/wonders/build_layers.py
+  - Built: ALL 10 wonders (art + layers + wondersData.ts), about 2.1 MB in
+    total. Great Pyramid of Giza, Taj Mahal, Great Wall of China, Machu
+    Picchu, Petra, Colosseum, Christ the Redeemer, Angkor Wat, Ha Long Bay,
+    Victoria Falls. Art scripts are in scripts/wonders/art/ (one per wonder).
+
+  The 10 wonders (AGREED; ALL 10 ARE DRAWN; the plan launches with 5) -
+  drawn in this order, each with its own mood so the set doesn't repeat:
+     1 Great Pyramid of Giza  Egypt      golden-hour sunset   
+     2 Taj Mahal              India      pre-dawn, reflecting pool
+     3 Great Wall of China    China      misty blue-green dawn
+     4 Machu Picchu           Peru       sunrise, green terraces, mist
+     5 Petra (the Treasury)   Jordan     red canyon, beam of sun
+     6 Colosseum              Italy      blue-hour dusk, glowing arches
+     7 Christ the Redeemer    Brazil     above the clouds, Rio lights
+     8 Angkor Wat             Cambodia   sunrise over a lotus pond
+     9 Ha Long Bay            Vietnam    golden sunset, karst towers, red-sailed junks
+    10 Victoria Falls         Zambia/Zimbabwe  falls + rainbow in the spray (tagged
+                              Zambia; border: owner = whoever holds Zambia,
+                              or a special case)
+  Chichen Itza was swapped out: it is another stepped pyramid (too close
+  to Giza). Uluru replaced it first but was dropped after the art review;
+  Ha Long Bay (Vietnam) took its place. No Oceania wonder for now.
+  Easiest / most recognisable, good launch picks: Taj Mahal, Christ the
+  Redeemer, Angkor Wat, Ha Long Bay, + Great Wall or Machu Picchu (see W4).
+
+  ------------------------------------------------------------------
+  BACKGROUND: WHAT WAS DONE AND HOW THE LAYERS WORK
+  (written so someone new can pick up the Wonders screen from here)
+  ------------------------------------------------------------------
+  THE IDEA IN ONE PARAGRAPH
+    Once a player owns the whole world map, the map card on Home is
+    replaced by a wonder: a pixel-art picture made of exactly 10
+    colours that starts EMPTY. Each pigment the player earns (from a
+    mega quest) switches on ONE random colour of that picture, until
+    all 10 are on and the wonder is complete. Colours that are not
+    unlocked yet are simply not drawn, so the card background shows
+    through and the finished picture stays a surprise.
+
+  HOW THE ART WAS MADE
+    - The "exactly 10 colours" rule is what makes the reveal work: each
+      colour is one pigment. An AI image generator can't guarantee that
+      (it blends shades), so every picture is DRAWN BY A SCRIPT onto a
+      canvas where each pixel is a number 0-9 pointing at a 10-colour
+      palette. Shading and gradients use ordered (Bayer) dithering
+      between palette colours instead of blending, so no extra colour
+      can ever appear.
+    - The canvas is 800x600, saved at 1600x1200 by exact 2x scaling
+      ("nearest neighbour"), so pixels stay crisp. The shared drawing
+      kit is scripts/wonders/art/pixkit.py; each wonder has its own
+      script (scripts/wonders/art/<wonder>.py) with its own palette.
+    - The kit REFUSES to save an image that is not exactly 1600x1200
+      with exactly 10 colours.
+    - Each wonder was reviewed with the owner and revised until
+      approved (examples: Machu Picchu was rebuilt twice so the ruins
+      read as walled compounds with gabled houses; the Colosseum got
+      street-level perspective and more shading; Christ the Redeemer
+      got proper sleeves, a walkway and balustrades; Angkor Wat got a
+      stepped terrace so its central tower no longer floats; Uluru was
+      dropped and replaced by Ha Long Bay).
+    - Reference photos from the owner were used ONLY as a guide for
+      layout and detail. Nothing is traced or copied from photos, so
+      all art is our own (the plan requires no copyrighted art).
+    - Every script is reproducible: running it again gives the same
+      PNG, byte for byte (checked for each approved image).
+
+  WHY LAYERS (the decision)
+    Two ways to show "N colours unlocked" were compared:
+      A) Pre-rendered frames: step_01 ... step_10, each showing the
+         first N colours in a FIXED order. About 0.28 MB per wonder,
+         but every player sees the same order, and a different order
+         would need a different set of frames.
+      B) One transparent image per colour ("layers"): the app stacks
+         the layers the player has unlocked, in ANY order. About
+         70-90 KB for the layers (plus the ~100 KB master) per wonder.
+    B was chosen: it allows a random order per player (and later
+    "pick one of two colours" or player choice) without making new art,
+    and it is smaller. Layers are 800x600 (not 1600x1200) because that
+    is the resolution the art is drawn at, and it keeps memory low:
+    10 full-size layers would decode to ~77 MB, 800x600 layers ~19 MB.
+
+  WHAT A LAYER IS
+    - layer_i.webp holds ONLY the pixels of colour i, fully opaque in
+      that colour, fully transparent everywhere else.
+    - Every pixel of the picture belongs to exactly one colour, so the
+      10 layers NEVER OVERLAP and stacking order does not matter.
+    - Stacking all 10 gives back the final image exactly. This was
+      verified for all 10 wonders (every layer set rebuilds its master
+      pixel for pixel, and the layers cover every pixel).
+    - Layer numbers 0-9 follow the palette sorted by RGB value, and
+      wondersData.ts lists each wonder's palette in that same order.
+    - Format: lossless WebP (supported on Android, and on iOS 14+),
+      so colours are never altered by compression.
+
+  HOW THE APP SHOULD USE IT (to be built)
+    1. Per player and wonder, store WHICH colours are unlocked: a set
+       of layer numbers, i.e. a bitmask 0-1023 (bit i = layer i).
+    2. The wonder card is the same size as the world map card (260
+       high, width = screen - 66), with the card's dark background.
+    3. Render one <Image> per UNLOCKED layer, absolutely stacked, all
+       filling the card ("cover" fit). Do not mount locked layers
+       (saves memory, and a hidden layer must never be visible).
+    4. When a colour unlocks, fade ONLY that new layer in (opacity 0
+       to 1). The rest of the picture does not change. A "6/10
+       colours" label sits on the card.
+    5. Pick the colour with pickNextLayer(unlockedList) from
+       app/lib/wonderReveal.ts (uniform random among locked colours;
+       returns null when all are unlocked). It takes a random function
+       so the SERVER can use it with its own random source.
+    6. The random pick and the saved unlock should happen on the
+       server (like the gold fix) so a player cannot re-roll or fake
+       it. The app only shows the result.
+    7. When all 10 are unlocked, show the full picture, give the
+       completion rewards (Feature 12) and the wonder becomes an
+       avatar background (Feature 13), reusing final.png.
+    Test the scaling on a real phone: the layers are 800x600 and are
+    scaled up, so check that pixels stay crisp and not blurry.
+
+  HOW IT FITS THE REST OF FEATURE 12
+    - Unlock: level 100 AND every country owned (DECIDED earlier).
+    - A pigment = one mega quest (pigments come from mega quests only).
+      10 colours per wonder means 10 mega quests per wonder (see W5).
+    - Wonders launch with 5 of the 10 drawn; the rest can be added
+      later without new art (see W4).
+
+  FILES AND COMMANDS
+    assets/wonders/<id>/final.png       the picture (source of truth)
+    assets/wonders/<id>/layer_0..9.webp  generated layers
+    scripts/wonders/wonders.json        id, name, country per wonder
+    scripts/wonders/art/pixkit.py       shared drawing kit
+    scripts/wonders/art/<wonder>.py     one drawing script per wonder
+    scripts/wonders/build_layers.py     final.png -> layers + data file
+    app/lib/wondersData.ts              GENERATED list for the app
+    app/lib/wonderReveal.ts             pickNextLayer()
+    - Redraw a wonder:  python3 scripts/wonders/art/<wonder>.py
+          assets/wonders/<id>/final.png
+    - Rebuild layers and the data file (all wonders):
+          python3 -I scripts/wonders/build_layers.py
+    - NEVER edit the layers or wondersData.ts by hand: they are
+      overwritten by the build. Change the script, redraw, rebuild.
+    - Add a wonder: new script + final.png + a line in wonders.json,
+      then rebuild. The build checks size and the 10-colour rule.
+
+  NOT BUILT / NOT CHECKED YET
+    - The screen, the saving of progress and the server function.
+    - The app itself was not launched here, so wondersData.ts has not
+      been bundled by Metro yet (it is plain require() calls on WebP
+      files, which the bundler supports).
+    - Faint colours (very dark ones close to the card background)
+      have not been checked for every wonder (see W3).
+
+  QUESTIONS TO DECIDE BEFORE BUILDING THE SCREEN
+   W1. Applying a pigment: does the random colour appear immediately on
+       mega quest turn-in, or does the player tap "apply" (the plan says
+       "earned, then applied")? A tap gives a moment and a place for the
+       reveal animation. [Suggestion: tap to apply, short animation.]
+   W2. Where the random pick happens: on the server, like the gold fix,
+       so nobody can re-roll or fake it; the app only shows the result.
+       [Suggestion: yes. Table user_wonders (user_id, wonder_id,
+       unlocked colours as a bitmask 0-1023, completed_at) plus a server
+       function grant_pigment(wonder_id) that picks a random locked
+       colour in one step.]
+   W3. Faint colours: in the Giza art the darkest navy and dark brown
+       are almost invisible on the dark card, so unlocking them looks
+       like nothing happened. Accepted for now. Options later: a
+       slightly lighter backdrop for the wonder card (about #16162E), or
+       the random pick avoids two faint colours in a row. Check each new
+       wonder for this.
+   W4. Which 5 of the 10 candidates launch, and in what order (easiest
+       or best-looking first)? Add an Oceania wonder?
+   W5. Exactly 10 mega quests per wonder (1 pigment each)? How the cost
+       grows from the first wonder to the later ones.
+   W6. Finished wonder as an avatar background (Feature 13): the
+       background crop (shape / ratio) is needed to check that each
+       wonder still looks right cropped. The share image (the shared
+       share card, F3) can reuse final.png.
+   W7. Locked teaser in the Passport Wonders tab: the plan says "greyed
+       / silhouetted", but locked colours are now hidden. Show an empty
+       card with the wonder name, a darkened final image, or an outline?
+   W8. After a wonder is finished: a gallery of finished wonders in the
+       Wonders tab, and what the card shows between finishing one and
+       starting the next.
+   W9. Reveal animation for a newly unlocked colour (fade in only that
+       layer, maybe a short flash) and a "6/10 colours" label on the
+       card.
+  W10. Changing a wonder's colours after launch: layer numbers follow the
+       sorted palette, so re-colouring a wonder would make players' saved
+       unlocks point to different colours. Either FREEZE each wonder's
+       art once it ships, or save the unlocked colours by hex code (or
+       an art version number) instead of by layer number.
 
 ------------------------------------------------------------
 FEATURE 13: AVATAR BACKGROUNDS  (DESIGNED)
@@ -966,6 +1195,8 @@ STILL OPEN
   - Compass Quiz: unlock condition (level, gold or quest).
   - Daily Challenge: one guess vs several, rewards per question + the
     unique reward, link to Daily Quests, streak / share.
+  - Wonders: questions W1-W10 (see Feature 12, WONDER ART & REVEAL
+    SYSTEM).
 
 ============================================================
 LATER / NOT IN THIS UPDATE

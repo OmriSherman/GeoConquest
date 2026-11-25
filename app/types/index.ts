@@ -14,12 +14,24 @@ export interface Profile {
   login_streak?: number;
   last_reward_claim?: string;
   is_conquerer?: boolean;
+  conqueror_plan?: 'unlimited' | 'monthly' | 'yearly' | null;
+  mythic_chests?: number;
+  mythic_monthly_chests?: number;
+  mythic_bonus_chests?: number;
+  mythic_monthly_opened?: number;
+  mythic_dust?: number;
+  mythic_month_key?: string | null;
+  mythic_lifetime_bonus_claimed?: boolean;
   tickets?: number;
   quiz_count?: number;
   referred_by?: string | null;
   referral_bonus_claimed?: boolean;
   completed_speed_detective?: boolean;
   completed_ground_invasion?: boolean;
+  maps?: number;
+  maps_next_refill_at?: string | null;
+  maps_ad_used_at?: string | null;
+  maps_ad_count?: number;
   created_at: string;
 }
 
@@ -62,7 +74,7 @@ export interface OwnedCountry {
 
 // ─── Quiz ─────────────────────────────────────────────────────────────────────
 
-export type QuizType = 'flag' | 'shape' | 'borders' | 'millionaire' | 'capitals' | 'nightmare' | 'trail';
+export type QuizType = 'flag' | 'shape' | 'borders' | 'millionaire' | 'capitals' | 'nightmare' | 'trail' | 'gauntlet' | 'draw';
 
 export interface QuizResult {
   id: string;
@@ -77,6 +89,7 @@ export interface QuizQuestion {
   country: Country;
   options: Country[]; // 4 options, includes correct answer
   correctIndex: number;
+  mode?: 'standard' | 'reverse';
 }
 
 export interface QuizSession {
@@ -99,6 +112,8 @@ export interface LeaderboardEntry {
   owned_area?: number;   // km²
   conquest_pct?: number; // % of Earth's land area owned
   is_conquerer?: boolean;
+  quiz_count?: number;
+  avatar_count?: number;
 }
 
 // ─── Navigation ───────────────────────────────────────────────────────────────
@@ -108,6 +123,7 @@ export type RootStackParamList = {
   ChooseUsername: undefined;
   Main: undefined;
   Premium: undefined;
+  MythicChest: undefined;
 };
 
 export type AuthStackParamList = {
@@ -132,6 +148,8 @@ export type QuizStackParamList = {
   TrailQuiz: undefined;
   MillionaireQuiz: undefined;
   NightmareQuiz: undefined;
+  Gauntlet: undefined;
+  BorderDrawQuiz: undefined;
   QuizResults: {
     score: number;
     total: number;
@@ -139,12 +157,18 @@ export type QuizStackParamList = {
     quizType: QuizType;
     quizMode?: 'standard' | 'easy';
     elapsedSeconds?: number;
+    rewardMultiplier?: number;
+    tierAccent?: string;
+    tierLabel?: string;
+    tierBg?: string;
+    millionairePowerUpsUsed?: boolean;
+    xpOverride?: number;
   };
 };
 
 // ─── Millionaire Quiz ─────────────────────────────────────────────────────────
 
-export type MillionaireQuestionType = 'flag' | 'shape' | 'capital' | 'border_yes' | 'border_no' | 'area_largest';
+export type MillionaireQuestionType = 'flag' | 'shape' | 'capital' | 'capital_reverse' | 'flag_reverse' | 'shape_reverse' | 'border_yes' | 'border_no' | 'area_largest';
 
 export interface MillionaireQuestion {
   type: MillionaireQuestionType;
@@ -176,4 +200,6 @@ export const GOLD_REWARDS: Record<QuizType, number> = {
   trail: 22,
   millionaire: 25, // base; scales per level
   nightmare: 50000,
+  gauntlet: 0,    // per-round gold is calculated dynamically in GauntletScreen
+  draw: 0,        // per-question gold calculated dynamically based on drawing accuracy
 };

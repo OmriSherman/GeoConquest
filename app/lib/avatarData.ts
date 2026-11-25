@@ -1,3 +1,4 @@
+import { CHEST_AVATARS } from './dailyChest';
 // ─── Avatar Characters ────────────────────────────────────────────────────────
 
 export interface AvatarOption {
@@ -34,9 +35,11 @@ export interface CustomAvatarOption {
     isPremiumSubscription?: boolean; // Requires active Conqueror's Pass subscription
     questOnly?: boolean;   // Cannot be purchased — only earned via quest rewards
     cosmetic?: boolean;    // Not shown in shop — app-managed unlock only (e.g. quest rewards, internal use)
+    mythicBonus?: 'gold' | 'xp'; // Fixed per avatar so the bonus is varied, not rerolled per player
 }
 
 export const CUSTOM_AVATARS: CustomAvatarOption[] = [
+    ...CHEST_AVATARS.map(a => ({ key: a.id, label: a.name, culture: 'Daily Chest', price: a.price, isPremium: true, cosmetic: true, collection: `${a.tier === 3 ? 'Silver' : a.tier === 4 ? 'Gold' : a.tier === 5 ? 'Royal' : 'Legendary'} Chest` })),
 
     // ── Explorer Collection (free / onboarding) ───────────────────────────────
     { key: 'png_explorer_male',   label: 'Explorer',     culture: 'Explorer Collection', price: 0, isPremium: false },
@@ -84,8 +87,10 @@ export const CUSTOM_AVATARS: CustomAvatarOption[] = [
     { key: 'png_vorvir', label: 'VorVir', culture: '', price: 4000, isPremium: true },
 
     // ── Shop-only originals ───────────────────────────────────────────────────
-    { key: 'png_piga', label: 'Piga', culture: '', price: 3500, isPremium: true, isPremiumSubscription: true },
-    { key: 'png_cheezus', label: 'Cheezus', culture: '', price: 10000, isPremium: true, requiresLevel: 50 },
+    { key: 'png_piga',          label: 'Piga',          culture: '', price: 3500,  isPremium: true, isPremiumSubscription: true },
+    { key: 'png_cheezus',       label: 'Cheezus',       culture: '', price: 10000, isPremium: true, requiresLevel: 50 },
+    { key: 'png_lich',          label: 'The Lich',      culture: '', price: 10000, isPremium: true, requiresLevel: 50 },
+    { key: 'png_plague_doctor', label: 'Plague Doctor', culture: '', price: 5000,  isPremium: true, requiresLevel: 25 },
 
     // ── Meme / Misc ───────────────────────────────────────────────────────────
     { key: 'png_smart_bulb', label: 'Smart Bulb', culture: '', price: 3000, isPremium: true },
@@ -117,7 +122,9 @@ export const CUSTOM_AVATARS: CustomAvatarOption[] = [
     { key: 'png_grim_reaper', label: 'Grim Reaper', culture: '', price: 3000, isPremium: true, requiresLevel: 20 },
 
     // ── Meme / Internet ───────────────────────────────────────────────────────
-    { key: 'png_npc', label: 'NPC', culture: '', price: 5000, isPremium: true, requiresLevel: 30 },
+    { key: 'png_npc',             label: 'NPC',             culture: '', price: 5000,  isPremium: true, requiresLevel: 30 },
+    { key: 'png_doge',            label: 'Doge',            culture: '', price: 50000, isPremium: true, requiresLevel: 30 },
+    { key: 'png_shocked_hamster', label: 'Shocked Hamster', culture: '', price: 2000,  isPremium: true, requiresLevel: 10 },
 
     // ── Cursed ────────────────────────────────────────────────────────────────
     { key: 'png_voodoo_doll',   label: 'Voodoo Doll',   culture: '', price: 2000, isPremium: true, requiresLevel: 10 },
@@ -147,10 +154,46 @@ export const CUSTOM_AVATARS: CustomAvatarOption[] = [
     { key: 'png_triboi',     label: 'Triboi',   culture: '', price: 0, isPremium: false, questOnly: true },
 
     // ── Endgame ───────────────────────────────────────────────────────────────
+    { key: 'png_void_eye',          label: 'Void Eye',          culture: '', price: 0, isPremium: false, questOnly: true },
+    { key: 'png_beast_mark',        label: 'Beast Mark',        culture: '', price: 0, isPremium: false, questOnly: true },
     { key: 'png_divine_high_king',  label: 'Divine High King',  culture: '', price: 0, isPremium: false, questOnly: true },
     { key: 'png_divine_high_queen', label: 'Divine High Queen', culture: '', price: 0, isPremium: false, questOnly: true },
     { key: 'png_cosmic_armor', label: 'Cosmic Armor', culture: '', price: 1000000, isPremium: true, requiresLevel: 100 },
     { key: 'png_world_ender',  label: 'World Ender',  culture: '', price: 0, isPremium: false, questOnly: true },
+
+    // ── Transcendent — level 150-300 exclusive quest rewards ──────────────────
+    { key: 'png_void_herald',     label: 'Void Herald',     culture: '', price: 0, isPremium: false, questOnly: true },
+    { key: 'png_atlas_titan',     label: 'Atlas Titan',     culture: '', price: 0, isPremium: false, questOnly: true },
+    { key: 'png_eternal_emperor', label: 'Eternal Emperor', culture: '', price: 0, isPremium: false, questOnly: true },
+    { key: 'png_void_ascendant',  label: 'Void Ascendant',  culture: '', price: 0, isPremium: false, questOnly: true },
+
+    // ── Gauntlet Quiz batch ───────────────────────────────────────────────────
+    { key: 'png_crucible',        label: 'Crucible',        culture: '', price: 0,     isPremium: false, cosmetic: true },
+    { key: 'png_penguin_admiral', label: 'Penguin Admiral', culture: '', price: 1500,  isPremium: true,  requiresLevel: 18 },
+    { key: 'png_bear_berserker',  label: 'Bear Berserker',  culture: '', price: 2000,  isPremium: true,  requiresLevel: 30 },
+    { key: 'png_doom_paladin',    label: 'Doom Paladin',    culture: '', price: 0,     isPremium: false, questOnly: true },
+    { key: 'png_siege_lord',      label: 'Siege Lord',      culture: '', price: 10000, isPremium: true,  requiresLevel: 120 },
+    { key: 'png_sorceress',       label: 'Sorceress',       culture: '', price: 10000, isPremium: true,  requiresLevel: 90 },
+    { key: 'png_farewell',        label: 'Farewell',        culture: '', price: 4000,  isPremium: true,  requiresLevel: 45 },
+    { key: 'png_cold_judgment',   label: 'Cold Judgment',   culture: '', price: 12000, isPremium: true,  requiresLevel: 140 },
+
+    // ── Mythic Chest avatars ─────────────────────────────────────────────────
+    { key: 'png_worldbreaker_empress', label: 'Worldbreaker Empress', culture: 'Mythic Chest', price: 0, isPremium: true, cosmetic: true, mythicBonus: 'gold' },
+    { key: 'png_storm_navigator',      label: 'Storm Navigator',      culture: 'Mythic Chest', price: 0, isPremium: true, cosmetic: true, mythicBonus: 'xp' },
+    { key: 'png_mapless_heroine',      label: 'Mapless Heroine',      culture: 'Mythic Chest', price: 0, isPremium: true, cosmetic: true, mythicBonus: 'gold' },
+    { key: 'png_mapless_hero',         label: 'Mapless Hero',         culture: 'Mythic Chest', price: 0, isPremium: true, cosmetic: true, mythicBonus: 'xp' },
+    { key: 'png_longitude_ronin',      label: 'Longitude Ronin',      culture: 'Mythic Chest', price: 0, isPremium: true, cosmetic: true, mythicBonus: 'gold' },
+    { key: 'png_meridian_oracle',      label: 'Meridian Oracle',      culture: 'Mythic Chest', price: 0, isPremium: true, cosmetic: true, mythicBonus: 'xp' },
+    { key: 'png_border_phantom',       label: 'Border Phantom',       culture: 'Mythic Chest', price: 0, isPremium: true, cosmetic: true, mythicBonus: 'gold' },
+    { key: 'png_cosmic_pigeon',        label: 'Cosmic Pigeon',         culture: 'Mythic Chest', price: 0, isPremium: true, cosmetic: true, mythicBonus: 'xp' },
+    { key: 'png_globe_eater',          label: 'Globe Eater',           culture: 'Mythic Chest', price: 0, isPremium: true, cosmetic: true, mythicBonus: 'gold' },
+    { key: 'png_conquest_frog',        label: 'Conquest Frog',         culture: 'Mythic Chest', price: 0, isPremium: true, cosmetic: true, mythicBonus: 'xp' },
+
+    // ── Meme collection ─────────────────────────────────────────────────────
+    { key: 'png_meme_emperor',          label: 'Meme Emperor',          culture: 'Internet Legends', price: 6500, isPremium: true, cosmetic: false },
+    { key: 'png_gigachad_cartographer', label: 'Gigachad Cartographer',  culture: 'Internet Legends', price: 7500, isPremium: true, cosmetic: false },
+    { key: 'png_surprised_explorer',    label: 'Surprised Explorer',    culture: 'Internet Legends', price: 5500, isPremium: true, cosmetic: false },
+    { key: 'png_wojak_wanderer',        label: 'Wojak Wanderer',        culture: 'Internet Legends', price: 5000, isPremium: true, cosmetic: false },
 
 ];
 
@@ -203,6 +246,19 @@ export interface FlagOption {
 }
 
 export const FLAG_OPTIONS: FlagOption[] = [
+    // ── Emoji keyboard flags (shop-only) ─────────────────────────────────────
+    { emoji: '🏳️', label: 'White Flag', category: 'symbol', price: 300, isPremium: true },
+    { emoji: '🏴', label: 'Black Flag', category: 'symbol', price: 300, isPremium: true },
+    { emoji: '🚩', label: 'Red Flag', category: 'symbol', price: 500, isPremium: true },
+    { emoji: '🏁', label: 'Checkered Flag', category: 'symbol', price: 500, isPremium: true },
+    { emoji: '🎌', label: 'Crossed Flags', category: 'symbol', price: 500, isPremium: true },
+    { emoji: '🏴‍☠️', label: 'Pirate Flag', category: 'fun', price: 1000, isPremium: true },
+    { emoji: '🏳️‍🌈', label: 'Rainbow Pride', category: 'symbol', price: 1000, isPremium: true },
+    { emoji: '🏳️‍⚧️', label: 'Transgender Pride', category: 'symbol', price: 1000, isPremium: true },
+    { emoji: '🏴󠁧󠁢󠁥󠁮󠁧󠁿', label: 'England', category: 'symbol', price: 1000, isPremium: true },
+    { emoji: '🏴󠁧󠁢󠁳󠁣󠁴󠁿', label: 'Scotland', category: 'symbol', price: 1000, isPremium: true },
+    { emoji: '🏴󠁧󠁢󠁷󠁬󠁳󠁿', label: 'Wales', category: 'symbol', price: 1000, isPremium: true },
+
     // ── All World Country Flags (all free, shown in onboarding) ──────────
     // Africa (54)
     { emoji: '🇩🇿', label: 'Algeria', category: 'country', price: 0, isPremium: false },
@@ -410,6 +466,74 @@ export const FLAG_OPTIONS: FlagOption[] = [
     { emoji: '🇹🇴', label: 'Tonga', category: 'country', price: 0, isPremium: false },
     { emoji: '🇹🇻', label: 'Tuvalu', category: 'country', price: 0, isPremium: false },
     { emoji: '🇻🇺', label: 'Vanuatu', category: 'country', price: 0, isPremium: false },
+
+    // ── Territories, Dependencies & Special Flags ─────────────────────────
+    // Africa & Atlantic
+    { emoji: '🇦🇨', label: 'Ascension Island', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇸🇭', label: 'St. Helena', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇹🇦', label: 'Tristan da Cunha', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇾🇹', label: 'Mayotte', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇷🇪', label: 'Réunion', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇪🇭', label: 'Western Sahara', category: 'country', price: 0, isPremium: false },
+    // Europe
+    { emoji: '🇦🇽', label: 'Åland Islands', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇫🇴', label: 'Faroe Islands', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇬🇬', label: 'Guernsey', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇬🇮', label: 'Gibraltar', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇮🇨', label: 'Canary Islands', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇮🇲', label: 'Isle of Man', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇯🇪', label: 'Jersey', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇸🇯', label: 'Svalbard & Jan Mayen', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇪🇦', label: 'Ceuta & Melilla', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇩🇬', label: 'Diego Garcia', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇪🇺', label: 'European Union', category: 'symbol', price: 1200, isPremium: false },
+    // Asia & Pacific
+    { emoji: '🇭🇰', label: 'Hong Kong SAR', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇲🇴', label: 'Macao SAR', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇹🇱', label: 'Timor-Leste', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇮🇴', label: 'British Indian Ocean Territory', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇨🇨', label: 'Cocos (Keeling) Islands', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇨🇽', label: 'Christmas Island', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇳🇫', label: 'Norfolk Island', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇳🇨', label: 'New Caledonia', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇵🇫', label: 'French Polynesia', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇼🇫', label: 'Wallis & Futuna', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇳🇺', label: 'Niue', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇹🇰', label: 'Tokelau', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇵🇳', label: 'Pitcairn Islands', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇨🇰', label: 'Cook Islands', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇬🇺', label: 'Guam', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇲🇵', label: 'Northern Mariana Islands', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇦🇸', label: 'American Samoa', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇭🇲', label: 'Heard & McDonald Islands', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇬🇸', label: 'South Georgia & South Sandwich Islands', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇹🇫', label: 'French Southern Territories', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇧🇻', label: 'Bouvet Island', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇺🇲', label: 'US Outlying Islands', category: 'country', price: 0, isPremium: false },
+    // Americas & Caribbean
+    { emoji: '🇵🇷', label: 'Puerto Rico', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇻🇮', label: 'US Virgin Islands', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇻🇬', label: 'British Virgin Islands', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇰🇾', label: 'Cayman Islands', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇧🇲', label: 'Bermuda', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇦🇮', label: 'Anguilla', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇲🇸', label: 'Montserrat', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇹🇨', label: 'Turks & Caicos Islands', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇦🇼', label: 'Aruba', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇨🇼', label: 'Curaçao', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇸🇽', label: 'Sint Maarten', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇧🇶', label: 'Caribbean Netherlands', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇧🇱', label: 'St. Barthélemy', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇲🇫', label: 'St. Martin', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇬🇵', label: 'Guadeloupe', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇲🇶', label: 'Martinique', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇬🇫', label: 'French Guiana', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇵🇲', label: 'St. Pierre & Miquelon', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇫🇰', label: 'Falkland Islands', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇬🇱', label: 'Greenland', category: 'country', price: 0, isPremium: false },
+    { emoji: '🇨🇵', label: 'Clipperton Island', category: 'country', price: 0, isPremium: false },
+    // Special / Supranational
+    { emoji: '🇺🇳', label: 'United Nations', category: 'symbol', price: 1500, isPremium: false },
 ];
 
 // ─── Profanity filter ─────────────────────────────────────────────────────────

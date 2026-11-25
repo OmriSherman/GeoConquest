@@ -5,6 +5,7 @@
  */
 
 import { ImageSourcePropType } from 'react-native';
+import { CHEST_AVATARS } from './dailyChest';
 
 export interface SpriteSheet {
   source: ImageSourcePropType;
@@ -31,6 +32,7 @@ export function isSpriteSheet(entry: CustomAvatarEntry): entry is SpriteSheet {
 const MONKEY_AR = 938 / 1536; // ≈ 0.611
 
 export const CUSTOM_AVATAR_COMPONENTS: Record<string, CustomAvatarEntry> = {
+  ...Object.fromEntries(CHEST_AVATARS.map(a => [a.id, a.image])),
   // Frog Collection
   svg_froga: require('../../assets/avatars/avatar_1.png'),
   svg_froglord: require('../../assets/avatars/avatar_2.png'),
@@ -87,7 +89,9 @@ export const CUSTOM_AVATAR_COMPONENTS: Record<string, CustomAvatarEntry> = {
   png_conqueror: require('../../assets/avatars/conqueror.png'),
 
   // Smart Bulb (avatar shop)
-  png_smart_bulb: require('../../assets/avatars/smart_bulb.png'),
+  png_smart_bulb:    require('../../assets/avatars/smart_bulb.png'),
+  png_lich:          require('../../assets/avatars/lich.png'),
+  png_plague_doctor: require('../../assets/avatars/plague_doctor.png'),
 
   // Explorer Collection (default onboarding avatars)
   png_explorer_male:   require('../../assets/avatars/explorer_male.png'),
@@ -136,7 +140,9 @@ export const CUSTOM_AVATAR_COMPONENTS: Record<string, CustomAvatarEntry> = {
   png_grim_reaper: require('../../assets/avatars/grim_reaper.png'),
 
   // Meme / Internet
-  png_npc: require('../../assets/avatars/npc.png'),
+  png_npc:             require('../../assets/avatars/npc.png'),
+  png_doge:            require('../../assets/avatars/doge.png'),
+  png_shocked_hamster: require('../../assets/avatars/shocked_hamster.png'),
 
   // Cursed
   png_voodoo_doll:   require('../../assets/avatars/voodoo_doll.png'),
@@ -159,12 +165,45 @@ export const CUSTOM_AVATAR_COMPONENTS: Record<string, CustomAvatarEntry> = {
   png_cat_knight:           require('../../assets/avatars/cat_knight.png'),
 
   // Endgame
+  png_void_eye:     require('../../assets/avatars/void_eye.png'),
   png_cosmic_armor: require('../../assets/avatars/cosmic_armor.png'),
   png_world_ender:  require('../../assets/avatars/world_ender.png'),
+
+  // Transcendent — level 150-300 quest rewards
+  png_void_herald:      require('../../assets/avatars/void_herald.png'),
+  png_atlas_titan:      require('../../assets/avatars/atlas_titan.png'),
+  png_eternal_emperor:  require('../../assets/avatars/eternal_emperor.png'),
+  png_void_ascendant:   require('../../assets/avatars/void_ascendant.png'),
+
+  // Conflict Quiz / Gauntlet batch
+  png_crucible:       require('../../assets/avatars/crucible.png'),
+  png_penguin_admiral: require('../../assets/avatars/penguin_admiral.png'),
+  png_bear_berserker: require('../../assets/avatars/bear_berserker.png'),
+  png_doom_paladin:   require('../../assets/avatars/doom_paladin.png'),
+  png_siege_lord:     require('../../assets/avatars/siege_lord.png'),
+  png_sorceress:      require('../../assets/avatars/sorceress.png'),
+  png_farewell:       require('../../assets/avatars/farewell.png'),
+  png_cold_judgment:  require('../../assets/avatars/cold_judgment.png'),
 
   // Internal use — Nightmare Quiz screens
   png_demon_hand:      require('../../assets/avatars/demon_hand.png'),
   png_evil_vanquished: require('../../assets/avatars/evil_vanquished.png'),
+
+  // Mythic Chest avatars
+  png_worldbreaker_empress: require('../../assets/avatars/worldbreaker_empress.png'),
+  png_storm_navigator:      require('../../assets/avatars/storm_navigator.png'),
+  png_mapless_heroine:      require('../../assets/avatars/mapless_heroine.png'),
+  png_mapless_hero:         require('../../assets/avatars/mapless_hero.png'),
+  png_longitude_ronin:      require('../../assets/avatars/longitude_ronin.png'),
+  png_meridian_oracle:      require('../../assets/avatars/meridian_oracle.png'),
+  png_border_phantom:       require('../../assets/avatars/border_phantom.png'),
+  png_cosmic_pigeon:        require('../../assets/avatars/cosmic_pigeon.png'),
+  png_globe_eater:          require('../../assets/avatars/globe_eater.png'),
+  png_conquest_frog:        require('../../assets/avatars/conquest_frog.png'),
+  png_meme_emperor:         require('../../assets/avatars/meme_emperor.png'),
+  png_gigachad_cartographer: require('../../assets/avatars/gigachad_cartographer.png'),
+  png_surprised_explorer:   require('../../assets/avatars/surprised_explorer.png'),
+  png_wojak_wanderer:       require('../../assets/avatars/wojak_wanderer.png'),
 };
 
 

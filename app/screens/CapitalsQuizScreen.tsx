@@ -4,7 +4,6 @@ import {
   Animated,
   Image,
   Modal,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -18,15 +17,19 @@ import { QuizStackParamList, QuizQuestion, Country, cca2ToFlagEmoji } from '../t
 import { buildCapitalsQuizQuestions, fetchCountries, getOfflineFullCountries, getCca3ToCca2Map } from '../lib/countryData';
 import { useGame } from '../context/GameContext';
 import AnswerButton from '../components/AnswerButton';
+import EarningsStrip from '../components/EarningsStrip';
 import WorldMapView from '../components/WorldMapView';
 import { playDingStreak, playWrong, playTextToSpeech } from '../lib/audio';
 import HeatStreakBadge from '../components/HeatStreakBadge';
 import { useAuth } from '../context/AuthContext';
+import AvatarDisplay from '../components/AvatarDisplay';
+import QuitConfirmModal from '../components/QuitConfirmModal';
 import * as Speech from 'expo-speech';
-import { filterQuizCountries } from '../lib/quizCountryFilters';
+import { t } from '../lib/i18n';
 
 const GOLD_PER_CORRECT = 18;
 const AUTO_ADVANCE_DELAY_MS = 2500;
+const ANSWER_COLORS = ['#4FC3F7', '#F44336', '#FFD700', '#4CAF50'];
 
 type Props = {
   navigation: StackNavigationProp<QuizStackParamList, 'CapitalsQuiz'>;
@@ -44,6 +47,9 @@ export default function CapitalsQuizScreen({ navigation }: Props) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [score, setScore] = useState(0);
   const [goldEarned, setGoldEarned] = useState(0);
+  const [goldDelta, setGoldDelta] = useState(0);
+  const [animTrigger, setAnimTrigger] = useState(0);
+  const [answeredCount, setAnsweredCount] = useState(0);
   const [buttonStates, setButtonStates] = useState<AnswerState[]>([
     'default', 'default', 'default', 'default',
   ]);
@@ -53,6 +59,13 @@ export default function CapitalsQuizScreen({ navigation }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [showInfoModal, setShowInfoModal] = useState(false);
   const [infoCountry, setInfoCountry] = useState<Country | null>(null);
+  const [ready, setReady] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const readyRef = useRef(false);
+  readyRef.current = ready;
+  const allowLeaveRef = useRef(false);
+  const [showQuitModal, setShowQuitModal] = useState(false);
+  const onConfirmQuitRef = useRef<(() => void) | null>(null);
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const currentIndexRef = useRef(0);
@@ -79,7 +92,7 @@ export default function CapitalsQuizScreen({ navigation }: Props) {
             throw new Error('OFFLINE_NO_PREMIUM');
           }
         }
-        const q = buildCapitalsQuizQuestions(filterQuizCountries(countries), TOTAL_QUESTIONS);
+        const q = buildCapitalsQuizQuestions(countries, TOTAL_QUESTIONS, { reverseFirst: true });
         setQuestions(q);
         questionsRef.current = q;
       } catch (e: any) {
@@ -88,10 +101,6 @@ export default function CapitalsQuizScreen({ navigation }: Props) {
           : (e.message ?? 'Failed to load countries'));
       } finally {
         setLoading(false);
-        quizStartRef.current = Date.now();
-        elapsedIntervalRef.current = setInterval(() => {
-          setElapsedSec(Math.floor((Date.now() - quizStartRef.current) / 1000));
-        }, 1000);
       }
     })();
 
@@ -111,8 +120,44 @@ export default function CapitalsQuizScreen({ navigation }: Props) {
     }, [])
   );
 
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+      if (allowLeaveRef.current || !readyRef.current) return;
+      e.preventDefault();
+      onConfirmQuitRef.current = () => {
+        Speech.stop();
+        if (autoAdvanceTimer.current) clearTimeout(autoAdvanceTimer.current);
+        if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current);
+        allowLeaveRef.current = true;
+        navigation.dispatch(e.data.action);
+      };
+      setShowQuitModal(true);
+    });
+    return unsubscribe;
+  }, [navigation]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      const parent = navigation.getParent();
+      if (!parent) return;
+      const unsubscribe = (parent as any).addListener('tabPress', (e: any) => {
+        if (!readyRef.current) return;
+        e.preventDefault();
+        onConfirmQuitRef.current = () => {
+          Speech.stop();
+          if (autoAdvanceTimer.current) clearTimeout(autoAdvanceTimer.current);
+          if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current);
+          allowLeaveRef.current = true;
+          navigation.popToTop();
+        };
+        setShowQuitModal(true);
+      });
+      return unsubscribe;
+    }, [navigation])
+  );
+
   function handleAnswer(selectedIndex: number) {
-    if (answered) return;
+    if (answered || paused) return;
     setAnswered(true);
 
     const question = questionsRef.current[currentIndexRef.current];
@@ -138,6 +183,8 @@ export default function CapitalsQuizScreen({ navigation }: Props) {
       goldRef.current += totalEarned;
       setScore(scoreRef.current);
       setGoldEarned(goldRef.current);
+      setGoldDelta(totalEarned);
+      setAnimTrigger(prev => prev + 1);
       addGold(totalEarned);
     } else {
       comboRef.current = 0;
@@ -146,11 +193,13 @@ export default function CapitalsQuizScreen({ navigation }: Props) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
 
+    setAnsweredCount(c => c + 1);
+
     autoAdvanceTimer.current = setTimeout(advanceQuestion, AUTO_ADVANCE_DELAY_MS);
   }
 
   function skipToNext() {
-    if (!answered) return;
+    if (!answered || paused) return;
     if (showInfoModal) return;
     if (autoAdvanceTimer.current) {
       clearTimeout(autoAdvanceTimer.current);
@@ -169,6 +218,7 @@ export default function CapitalsQuizScreen({ navigation }: Props) {
     if (nextIndex >= TOTAL_QUESTIONS) {
       Speech.stop();
       if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current);
+      allowLeaveRef.current = true;
       navigation.replace('QuizResults', {
         score: scoreRef.current,
         total: TOTAL_QUESTIONS,
@@ -219,7 +269,7 @@ export default function CapitalsQuizScreen({ navigation }: Props) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#FFD700" />
-        <Text style={styles.loadingText}>Loading capitals…</Text>
+        <Text style={styles.loadingText}>{t('capitalsQuiz.loading')}</Text>
       </View>
     );
   }
@@ -229,89 +279,155 @@ export default function CapitalsQuizScreen({ navigation }: Props) {
       return (
         <View style={styles.centered}>
           <Text style={{ fontSize: 40, marginBottom: 12 }}>📡</Text>
-          <Text style={[styles.errorText, { color: '#FFD700', fontWeight: 'bold' }]}>You're Offline</Text>
+          <Text style={[styles.errorText, { color: '#FFD700', fontWeight: 'bold' }]}>{t('quizCommon.offline.title')}</Text>
           <Text style={[styles.errorText, { color: '#aaa', fontSize: 14, marginTop: 8 }]}>
-            Upgrade to Conqueror's Pass to play all quizzes without an internet connection.
+            {t('quizCommon.offline.body')}
           </Text>
           <TouchableOpacity
             onPress={() => navigation.getParent()?.navigate('Premium')}
             style={{ marginTop: 20, backgroundColor: '#7B2FBE', paddingHorizontal: 28, paddingVertical: 12, borderRadius: 12 }}
           >
-            <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>Upgrade</Text>
+            <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>{t('quizCommon.offline.upgrade')}</Text>
           </TouchableOpacity>
         </View>
       );
     }
     return (
       <View style={styles.centered}>
-        <Text style={styles.errorText}>{error ?? 'No questions available'}</Text>
+        <Text style={styles.errorText}>{error ?? t('quizCommon.noQuestions')}</Text>
+      </View>
+    );
+  }
+
+  if (!ready) {
+    return (
+      <View style={styles.readyContainer}>
+        <Image source={require('../../assets/avatars/building.png')} style={{ width: 80, height: 80, marginBottom: 20 }} resizeMode="contain" />
+        <Text style={styles.readyTitle}>{t('nav.capitalsQuiz').toUpperCase()}</Text>
+        <Text style={styles.readySubtitle}>{t('capitalsQuiz.subtitle')}</Text>
+        <TouchableOpacity
+          style={styles.readyBtn}
+          onPress={() => {
+            quizStartRef.current = Date.now();
+            elapsedIntervalRef.current = setInterval(() => {
+              setElapsedSec(Math.floor((Date.now() - quizStartRef.current) / 1000));
+            }, 1000);
+            setReady(true);
+          }}
+        >
+          <Text style={styles.readyBtnText}>{t('quizCommon.letsGo')}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.readyBackLink}>
+          <Text style={styles.readyBackLinkText}>{t('quizCommon.goBack')}</Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
   const question = questions[currentIndex];
+  const isReverseQuestion = question.mode === 'reverse';
 
   return (
     <TouchableWithoutFeedback onPress={skipToNext}>
       <View style={styles.container}>
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
+        {paused && (
+          <View style={[StyleSheet.absoluteFill, styles.pauseOverlay]}>
+            <Image source={require('../../assets/avatars/stop_it.png')} style={styles.pauseStopIt} resizeMode="contain" />
+            <Text style={styles.pauseTitle}>{t('quizCommon.paused')}</Text>
+            <TouchableOpacity style={styles.resumeBtn} onPress={() => setPaused(false)}>
+              <Text style={styles.resumeBtnText}>{t('quizCommon.resume')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => { if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current); Speech.stop(); allowLeaveRef.current = true; navigation.goBack(); }}>
+              <Text style={styles.quitText}>{t('quizCommon.quit')}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
           <View style={styles.header}>
             <Text style={styles.progress}>
               {currentIndex + 1} / {TOTAL_QUESTIONS}
             </Text>
             <View style={styles.progressBarWrapper}>
-              <View style={[styles.scoreFill, { width: `${((currentIndex) / TOTAL_QUESTIONS) * 100}%` as any }]} />
+              <View style={styles.progressBarTrack}>
+                <View style={[styles.scoreFill, { width: `${((currentIndex) / TOTAL_QUESTIONS) * 100}%` as any }]} />
+              </View>
+              {profile?.avatar_emoji ? (
+                <View style={[styles.progressAvatarWrap, { left: `${((currentIndex) / TOTAL_QUESTIONS) * 100}%` as any }]}>
+                  <AvatarDisplay avatarId={profile.avatar_emoji} avatarFlag={profile.avatar_flag ?? undefined} size={22} isConqueror={profile.is_conquerer ?? false} />
+                </View>
+              ) : null}
             </View>
             <Text style={styles.timerText}>⏱ {String(Math.floor(elapsedSec / 60)).padStart(2, '0')}:{String(elapsedSec % 60).padStart(2, '0')}</Text>
-            <HeatStreakBadge combo={currentCombo} />
+            <TouchableOpacity onPress={() => { if (!answered) { if (autoAdvanceTimer.current) { clearTimeout(autoAdvanceTimer.current); autoAdvanceTimer.current = null; } Speech.stop(); setPaused(true); } }} style={styles.pauseBtn}>
+              <View style={styles.pauseIconBar} />
+              <View style={styles.pauseIconBar} />
+            </TouchableOpacity>
           </View>
 
-          <Animated.View style={[styles.questionArea, { opacity: fadeAnim }]}>
-            <View style={styles.questionCard}>
-              <View style={styles.capitalQuestionTextRow}>
-                <Text style={[styles.questionCardText, { flex: 1 }]}>
-                  Which country has{' '}
-                  <Text style={styles.capitalHighlight}>{question.country.capital}</Text>
-                  {' '}as its capital?
-                </Text>
-                <TouchableOpacity
-                  style={styles.speakerBtn}
-                  onPress={() => {
-                    playTextToSpeech(question.country.capital || '');
-                  }}
-                >
-                  <Text style={styles.speakerEmoji}>🔊</Text>
-                </TouchableOpacity>
+          <EarningsStrip
+            goldTotal={goldEarned}
+            goldDelta={goldDelta}
+            animTrigger={animTrigger}
+            accuracy={answeredCount > 0 ? Math.round((score / answeredCount) * 100) : null}
+            combo={currentCombo}
+          />
+
+          <Animated.View style={[styles.quizBody, { opacity: fadeAnim }]}>
+            <View style={styles.questionCenter}>
+              <View style={styles.questionCard}>
+                <View style={styles.capitalQuestionTextRow}>
+                  <Text style={[styles.questionCardText, { flex: 1 }]}>
+                    {isReverseQuestion ? (
+                      <>
+                        What is the capital of{' '}
+                        <Text style={styles.capitalHighlight}>{question.country.name}</Text>?
+                      </>
+                    ) : (
+                      <>
+                        Which country has{' '}
+                        <Text style={styles.capitalHighlight}>{question.country.capital}</Text>
+                        {' '}as its capital?
+                      </>
+                    )}
+                  </Text>
+                  <TouchableOpacity
+                    style={[styles.speakerBtn, isReverseQuestion && styles.speakerBtnHidden]}
+                    onPress={() => {
+                      if (!isReverseQuestion) playTextToSpeech(question.country.capital || '');
+                    }}
+                    disabled={isReverseQuestion}
+                  >
+                    <Text style={styles.speakerEmoji}>🔊</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {answered && (
+                  <TouchableOpacity style={styles.infoBadge} onPress={openCountryInfo}>
+                    <Text style={styles.infoBadgeIcon}>ℹ️</Text>
+                    <Text style={styles.infoBadgeText}>{t('quizCommon.learn')}</Text>
+                  </TouchableOpacity>
+                )}
               </View>
-              
-              {answered && (
-                <TouchableOpacity style={styles.infoBadge} onPress={openCountryInfo}>
-                  <Text style={styles.infoBadgeIcon}>ℹ️</Text>
-                  <Text style={styles.infoBadgeText}>Learn</Text>
-                </TouchableOpacity>
-              )}
             </View>
 
-            <View style={styles.answers}>
-              {question.options.map((option, i) => (
-                <AnswerButton
-                  key={`${currentIndex}-${option.cca2}`}
-                  label={option.name}
-                  state={buttonStates[i]}
-                  onPress={() => handleAnswer(i)}
-                />
-              ))}
-            </View>
+            <View style={styles.answersSection}>
+              <View style={styles.answers}>
+                {question.options.map((option, i) => (
+                  <AnswerButton
+                    key={`${currentIndex}-${option.cca2}`}
+                    label={isReverseQuestion ? option.capital : option.name}
+                    style={[styles.answerGridButton, buttonStates[i] === 'default' && { borderColor: ANSWER_COLORS[i % ANSWER_COLORS.length] }]}
+                    state={buttonStates[i]}
+                    onPress={() => handleAnswer(i)}
+                  />
+                ))}
+              </View>
 
-            {answered && (
-              <Text style={styles.tapHint}>Tap anywhere to continue →</Text>
-            )}
-            
+              <Text style={[styles.tapHint, { opacity: answered ? 1 : 0 }]}>
+                {t('quizCommon.tapToContinue')}
+              </Text>
+            </View>
           </Animated.View>
-        </ScrollView>
 
         <Modal
           visible={showInfoModal}
@@ -341,25 +457,25 @@ export default function CapitalsQuizScreen({ navigation }: Props) {
 
                   <View style={styles.factsGrid}>
                     <View style={styles.factItem}>
-                      <Text style={styles.factLabel}>Capital</Text>
-                      <Text style={styles.factValue}>{infoCountry.capital || 'N/A'}</Text>
+                      <Text style={styles.factLabel}>{t('infoModal.capital')}</Text>
+                      <Text style={styles.factValue}>{infoCountry.capital || t('infoModal.na')}</Text>
                     </View>
                     <View style={styles.factItem}>
-                      <Text style={styles.factLabel}>Region</Text>
+                      <Text style={styles.factLabel}>{t('infoModal.region')}</Text>
                       <Text style={styles.factValue}>{infoCountry.region}</Text>
                     </View>
                     <View style={styles.factItem}>
-                      <Text style={styles.factLabel}>Population</Text>
+                      <Text style={styles.factLabel}>{t('infoModal.population')}</Text>
                       <Text style={styles.factValue}>{infoCountry.population.toLocaleString()}</Text>
                     </View>
                     <View style={styles.factItem}>
-                      <Text style={styles.factLabel}>Area</Text>
+                      <Text style={styles.factLabel}>{t('infoModal.area')}</Text>
                       <Text style={styles.factValue}>{infoCountry.area.toLocaleString()} km²</Text>
                     </View>
                   </View>
 
                   <View style={styles.neighborsSection}>
-                    <Text style={styles.factLabel}>Neighbors</Text>
+                    <Text style={styles.factLabel}>{t('infoModal.neighbors')}</Text>
                     {infoCountry.borders.length > 0 ? (
                       <View style={styles.neighborsRow}>
                         {infoCountry.borders.map((cca3Code) => {
@@ -373,18 +489,24 @@ export default function CapitalsQuizScreen({ navigation }: Props) {
                         })}
                       </View>
                     ) : (
-                      <Text style={styles.factValue}>🏝️ Island nation</Text>
+                      <Text style={styles.factValue}>{t('infoModal.islandNation')}</Text>
                     )}
                   </View>
 
                   <TouchableOpacity style={styles.closeButton} onPress={closeInfoAndContinue}>
-                    <Text style={styles.closeButtonText}>Got it!</Text>
+                    <Text style={styles.closeButtonText}>{t('infoModal.gotIt')}</Text>
                   </TouchableOpacity>
                 </>
               )}
             </View>
           </View>
         </Modal>
+
+        <QuitConfirmModal
+          visible={showQuitModal}
+          onStay={() => { setShowQuitModal(false); onConfirmQuitRef.current = null; }}
+          onQuit={() => { setShowQuitModal(false); onConfirmQuitRef.current?.(); onConfirmQuitRef.current = null; }}
+        />
       </View>
     </TouchableWithoutFeedback>
   );
@@ -393,6 +515,24 @@ export default function CapitalsQuizScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0a0a1a' },
   scrollContent: { flexGrow: 1, paddingBottom: 20 },
+  earningsStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    gap: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#151530',
+  },
+  earningsItem: { flexDirection: 'row', alignItems: 'baseline', gap: 3 },
+  earningsGoldText: { color: '#FFD700', fontSize: 16, fontWeight: 'bold' },
+  earningsScoreText: { color: '#4CAF50', fontSize: 16, fontWeight: 'bold' },
+  earningsLabel: { color: '#666', fontSize: 13 },
+  earningsDivider: { width: 1, height: 16, backgroundColor: '#2a2a4e' },
+  quizBody: { flex: 1 },
+  questionCenter: { flex: 1, justifyContent: 'center', paddingHorizontal: 20, paddingTop: 8, paddingBottom: 28 },
+  answersSection: { paddingHorizontal: 20, paddingBottom: 20 },
   centered: {
     flex: 1,
     backgroundColor: '#0a0a1a',
@@ -412,7 +552,9 @@ const styles = StyleSheet.create({
   },
   progress: { color: '#aaa', fontSize: 14, fontWeight: '600' },
   timerText: { color: '#aaa', fontSize: 13, fontWeight: '600' },
-  progressBarWrapper: { flex: 1, height: 4, backgroundColor: '#1a1a2e', borderRadius: 2, overflow: 'hidden' },
+  progressBarWrapper: { flex: 1, height: 22, justifyContent: 'center' },
+  progressBarTrack: { height: 4, backgroundColor: '#1a1a2e', borderRadius: 2, overflow: 'hidden' },
+  progressAvatarWrap: { position: 'absolute', transform: [{ translateX: -11 }] },
   comboBadge: {
     backgroundColor: '#3a0000',
     paddingHorizontal: 8,
@@ -443,10 +585,10 @@ const styles = StyleSheet.create({
   },
   questionCardText: {
     color: '#fff',
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '600',
     textAlign: 'center',
-    lineHeight: 28,
+    lineHeight: 30,
   },
   capitalHighlight: {
     color: '#FFD700',
@@ -460,6 +602,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  speakerBtnHidden: { opacity: 0, width: 0 },
   speakerEmoji: {
     fontSize: 20,
   },
@@ -483,7 +626,8 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: 'bold',
   },
-  answers: { gap: 8 },
+  answers: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  answerGridButton: { width: '48%', minHeight: 84, marginVertical: 0, paddingHorizontal: 10 },
   tapHint: {
     color: '#555',
     fontSize: 12,
@@ -543,4 +687,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   closeButtonText: { color: '#0a0a1a', fontWeight: 'bold', fontSize: 16 },
+
+  backBtn: { color: '#555', fontSize: 16, fontWeight: 'bold', padding: 4 },
+  pauseBtn: { flexDirection: 'row', gap: 3, alignItems: 'center', padding: 6 },
+  pauseIconBar: { width: 4, height: 14, backgroundColor: '#FFD700', borderRadius: 2 },
+  pauseOverlay: { backgroundColor: '#0a0a1a', justifyContent: 'flex-start', alignItems: 'center', paddingTop: 100, zIndex: 100 },
+  pauseTitle: { color: '#FFD700', fontSize: 32, fontWeight: 'bold', letterSpacing: 4, marginBottom: 20, marginTop: 20 },
+  resumeBtn: { borderWidth: 2, borderColor: '#FFD700', paddingHorizontal: 36, paddingVertical: 13, borderRadius: 14 },
+  resumeBtnText: { color: '#FFD700', fontSize: 16, fontWeight: 'bold', letterSpacing: 1 },
+  quitText: { color: '#555', fontSize: 14, fontWeight: '600', marginTop: 28 },
+  pauseStopIt: { width: 140, height: 140, marginBottom: 12 },
+
+  readyContainer: { flex: 1, backgroundColor: '#0a0a1a', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
+  readyTitle: { color: '#FFD700', fontSize: 28, fontWeight: 'bold', letterSpacing: 3, marginBottom: 12 },
+  readySubtitle: { color: '#888', fontSize: 14, textAlign: 'center', lineHeight: 22, marginBottom: 40 },
+  readyBtn: { backgroundColor: '#FFD700', paddingHorizontal: 40, paddingVertical: 15, borderRadius: 14 },
+  readyBtnText: { color: '#0a0a1a', fontSize: 16, fontWeight: 'bold', letterSpacing: 1.5 },
+  readyBackLink: { marginTop: 20 },
+  readyBackLinkText: { color: '#555', fontSize: 14 },
 });
