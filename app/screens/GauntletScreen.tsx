@@ -30,6 +30,7 @@ import { Country, QuizStackParamList } from '../types';
 import TierBackground, { TierLabel } from '../components/TierBackground';
 import { t } from '../lib/i18n';
 import { filterQuizCountries } from '../lib/quizCountryFilters';
+import { addQuizTabGuard } from '../lib/quizTabGuard';
 
 type Props = {
   navigation: StackNavigationProp<QuizStackParamList, 'Gauntlet'>;
@@ -84,6 +85,17 @@ const TIERS = [
   { minScore:  0, label: 'DANGER',   accent: '#4D96FF', bg: '#02040e', cardBg: '#00091c', btnBorder: '#4D96FF40' },
 ];
 
+const TIER_ART: Record<string, any> = {
+  DANGER: require('../../assets/gauntlet/gauntlet_danger.png'),
+  PERIL: require('../../assets/gauntlet/gauntlet_peril.png'),
+  ABYSS: require('../../assets/gauntlet/gauntlet_abyss.png'),
+  VOID: require('../../assets/gauntlet/gauntlet_void.png'),
+  HELL: require('../../assets/gauntlet/gauntlet_hell.png'),
+  INFERNO: require('../../assets/gauntlet/gauntlet_inferno.png'),
+  OBLIVION: require('../../assets/gauntlet/gauntlet_oblivion.png'),
+  ETERNITY: require('../../assets/gauntlet/gauntlet_eternity.png'),
+};
+
 function getTier(score: number) {
   return TIERS.find(tier => score >= tier.minScore) ?? TIERS[TIERS.length - 1];
 }
@@ -113,7 +125,12 @@ function isBossRound(round: number): boolean {
 }
 
 function goldForRound(_round: number, _boss: boolean): number {
-  return 25;
+  return 10;
+}
+
+// Bonus for advancing a phase: 100 x phase number (10 correct -> 100, 20 -> 200, ... 40 -> 400).
+function phaseBonus(score: number): number {
+  return score > 0 && score <= FINAL_PHASE_SCORE && score % PHASE_STEP === 0 ? (score / PHASE_STEP) * 100 : 0;
 }
 
 const PHASE_STEP = 10;
@@ -393,6 +410,7 @@ export default function GauntletScreen({ navigation }: Props) {
   const [shields, setShields] = useState(0);
   const [goldPopText, setGoldPopText] = useState('');
   const [tierFlashLabel, setTierFlashLabel] = useState<string | null>(null);
+  const [tierFlashBonus, setTierFlashBonus] = useState(0);
   const [milestoneLabel, setMilestoneLabel] = useState<string | null>(null);
   const [milestoneScore, setMilestoneScore] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -442,6 +460,7 @@ export default function GauntletScreen({ navigation }: Props) {
   const answerFade = useRef(new Animated.Value(1)).current;
   const tierFlashScale = useRef(new Animated.Value(0.4)).current;
   const milestoneScaleAnim = useRef(new Animated.Value(0.5)).current;
+  const ringAnim = useRef(new Animated.Value(0)).current; // expanding shockwave ring for milestones / stage changes
   const burstAnim = useRef(new Animated.Value(0)).current;
   const shieldAcquireAnim = useRef(new Animated.Value(0)).current;
   const shieldAcquireScale = useRef(new Animated.Value(0.5)).current;
@@ -616,14 +635,16 @@ export default function GauntletScreen({ navigation }: Props) {
     React.useCallback(() => {
       const parent = navigation.getParent();
       if (!parent) return;
-      const unsubscribe = (parent as any).addListener('tabPress', (e: any) => {
+      const unsubscribe = addQuizTabGuard((e) => {
         if (!isPlayingRef.current) return;
         e.preventDefault();
+        const tappedTab = e.tabName; // go there after confirming
         onConfirmQuitRef.current = () => {
           timerAnimRef.current?.stop();
           urgencyTimersRef.current.forEach(t => clearTimeout(t));
           allowLeaveRef.current = true;
           navigation.popToTop();
+          if (tappedTab && tappedTab !== 'Quizzes') (parent as any).navigate(tappedTab);
         };
         setShowQuitModal(true);
       });
@@ -697,8 +718,16 @@ export default function GauntletScreen({ navigation }: Props) {
     ]).start();
   }
 
-  function triggerTierFlash(label: string) {
+  function fireRing() {
+    ringAnim.setValue(0);
+    Animated.timing(ringAnim, { toValue: 1, duration: 900, useNativeDriver: true }).start();
+  }
+
+  function triggerTierFlash(label: string, bonus = 0) {
+    fireRing();
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     setTierFlashLabel(label);
+    setTierFlashBonus(bonus);
     tierFlashAnim.setValue(0);
     tierFlashScale.setValue(0.35);
     Animated.parallel([
@@ -711,6 +740,8 @@ export default function GauntletScreen({ navigation }: Props) {
   }
 
   function triggerMilestoneFlash(scoreStr: string, mScore: number) {
+    fireRing();
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setMilestoneLabel(scoreStr);
     setMilestoneScore(mScore);
     milestoneFlashAnim.setValue(0);
@@ -727,14 +758,14 @@ export default function GauntletScreen({ navigation }: Props) {
   function triggerShieldAcquireFlash() {
     setShowShieldAcquire(true);
     shieldAcquireAnim.setValue(0);
-    shieldAcquireScale.setValue(0.5);
+    shieldAcquireScale.setValue(0.9);
     Animated.parallel([
       Animated.timing(shieldAcquireAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
       Animated.spring(shieldAcquireScale, { toValue: 1, friction: 5, tension: 100, useNativeDriver: true }),
     ]).start();
     setTimeout(() => {
       Animated.timing(shieldAcquireAnim, { toValue: 0, duration: 400, useNativeDriver: true }).start(() => setShowShieldAcquire(false));
-    }, 1200);
+    }, 1000);
   }
 
   // ── Round lifecycle ────────────────────────────────────────────────────────
@@ -756,7 +787,7 @@ export default function GauntletScreen({ navigation }: Props) {
       dragScale.setValue(1);
       setBtnStates(['default', 'default', 'default', 'default']);
 
-      Animated.timing(answerFade, { toValue: 1, duration: 220, delay: 60, useNativeDriver: false }).start(() => {
+      Animated.timing(answerFade, { toValue: 1, duration: 220, delay: 60, useNativeDriver: true }).start(() => {
         answeredRef.current = false;
       });
 
@@ -795,7 +826,8 @@ export default function GauntletScreen({ navigation }: Props) {
       playDingStreak(newScore);
       triggerCorrectEffects();
 
-      setGoldPopText(`+${q.gold}`);
+      const reward = q.gold + phaseBonus(newScore);
+      setGoldPopText(`+${reward}`);
       goldPopAnim.setValue(1);
       Animated.timing(goldPopAnim, { toValue: 0, duration: 900, useNativeDriver: true }).start();
 
@@ -813,13 +845,13 @@ export default function GauntletScreen({ navigation }: Props) {
       if (wasTierChange) {
         prevTierLabelRef.current = newTierLabel;
         playGauntletTier();
-        triggerTierFlash(newTierLabel);
+        triggerTierFlash(newTierLabel, phaseBonus(newScore));
       } else if (isMilestone) {
         triggerMilestoneFlash(`${newScore}`, newScore);
       }
 
-      totalGoldEarnedRef.current += q.gold;
-      addGold(q.gold);
+      totalGoldEarnedRef.current += reward;
+      addGold(reward);
 
       const nextDelay = wasTierChange ? 2900 : isMilestone ? 1600 : (newScore >= 25 ? 500 : newScore >= 10 ? 650 : 800);
       queueNextRound(nextDelay);
@@ -1105,35 +1137,51 @@ export default function GauntletScreen({ navigation }: Props) {
           pointerEvents="none"
           style={[StyleSheet.absoluteFill, styles.tierFlashOverlay, { opacity: tierFlashAnim, backgroundColor: tier.accent + '18' }]}
         >
-          <Animated.View style={[styles.tierFlashCard, { borderColor: tier.accent + '55', transform: [{ scale: tierFlashScale }] }]}>
+          <Animated.View style={[styles.ring, { borderColor: tier.accent, opacity: ringAnim.interpolate({ inputRange: [0, 1], outputRange: [0.9, 0] }), transform: [{ scale: ringAnim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 3] }) }] }]} />
+          <Animated.View renderToHardwareTextureAndroid shouldRasterizeIOS style={[styles.tierFlashCard, { borderColor: tier.accent + '55', transform: [{ scale: tierFlashScale }] }]}>
+            <Image source={TIER_ART[tierFlashLabel]} style={styles.tierFlashArt} resizeMode="contain" />
             <Text style={styles.tierFlashWelcome}>{t('gauntlet.welcomeTo')}</Text>
             <View style={[styles.tierFlashDivider, { backgroundColor: tier.accent + '66' }]} />
             <Text style={[styles.tierFlashText, { color: tier.accent }]}>{tierFlashLabel}</Text>
             {TIER_DESC_KEYS[tierFlashLabel] !== undefined && (
               <Text style={[styles.tierFlashDesc, { color: tier.accent + 'cc' }]}>{getTierDescription(tierFlashLabel)}</Text>
             )}
+            {tierFlashBonus > 0 && (
+              <View style={styles.tierFlashBonus}>
+                <Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 18, height: 18 }} resizeMode="contain" />
+                <Text style={styles.tierFlashBonusText}>+{tierFlashBonus}</Text>
+              </View>
+            )}
           </Animated.View>
         </Animated.View>
       )}
 
       {milestoneLabel !== null && (
-        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.milestoneOverlay, { opacity: milestoneFlashAnim }]}>
-          <Animated.View style={[styles.milestoneInner, { transform: [{ scale: milestoneScaleAnim }] }]}>
-            <Image source={require('../../assets/avatars/flame.png')} style={{ width: 40, height: 40 }} resizeMode="contain" />
-            <Text style={styles.milestoneScoreText}>{milestoneLabel}</Text>
-            <Text style={styles.milestoneTagline}>{getMilestoneTagline(milestoneScore)}</Text>
+        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.milestoneOverlay, { opacity: milestoneFlashAnim, backgroundColor: tier.bg + 'e6' }]}>
+          <Animated.View style={[styles.ring, { borderColor: tier.accent, opacity: ringAnim.interpolate({ inputRange: [0, 1], outputRange: [0.9, 0] }), transform: [{ scale: ringAnim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 2.8] }) }] }]} />
+          <Animated.View renderToHardwareTextureAndroid shouldRasterizeIOS style={[styles.milestoneInner, { transform: [{ scale: milestoneScaleAnim }] }]}>
+            <Image source={require('../../assets/avatars/flame.png')} style={{ width: 64, height: 64 }} resizeMode="contain" />
+            <Text style={[styles.milestoneScoreText, { color: tier.accent, textShadowColor: tier.accent, textShadowRadius: 12 }]}>{milestoneLabel}</Text>
+            <Text style={styles.milestoneLabel}>{t('gauntlet.inARow')}</Text>
+            <View style={[styles.tierFlashDivider, { backgroundColor: tier.accent + '88', width: 90 }]} />
+            <Text style={[styles.milestoneTagline, { color: tier.accent }]}>{getMilestoneTagline(milestoneScore)}</Text>
           </Animated.View>
         </Animated.View>
       )}
 
       {showShieldAcquire && (
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.shieldAcquireOverlay, { opacity: shieldAcquireAnim }]}>
-          <Animated.View style={[styles.shieldAcquireInner, { transform: [{ scale: shieldAcquireScale }] }]}>
-            <Image source={require('../../assets/gauntlet/gauntlet_danger.png')} style={{ width: 48, height: 48 }} resizeMode="contain" />
+          <Animated.View renderToHardwareTextureAndroid style={[styles.shieldAcquireInner, { transform: [{ scale: shieldAcquireScale }] }]}>
+            <Image source={require('../../assets/gauntlet/gauntlet_danger.png')} style={{ width: 20, height: 20 }} resizeMode="contain" />
             <Text style={[styles.shieldAcquireText, { color: tier.accent }]}>{t('gauntlet.shieldAcquired')}</Text>
           </Animated.View>
         </Animated.View>
       )}
+
+      {/* Pre-decode the stage art so the first stage popup doesn't hitch */}
+      <View pointerEvents="none" style={{ position: 'absolute', width: 1, height: 1, opacity: 0.01 }}>
+        {Object.values(TIER_ART).map((src, i) => <Image key={i} source={src} style={{ width: 1, height: 1 }} />)}
+      </View>
 
       {/* ── Burst particles ──────────────────────────────────────────────────── */}
       {BURST_ANGLES.map((angle, i) => {
@@ -1282,7 +1330,7 @@ const styles = StyleSheet.create({
   answerCorrect:  { backgroundColor: '#0d1f18', borderColor: '#00cc66' },
   answerWrong:    { backgroundColor: '#2e0808', borderColor: '#ff4444' },
   answerDisabled: { backgroundColor: '#0c0c0c', borderColor: '#1a1a1a' },
-  answerText:         { color: '#ddd', fontSize: 14, fontWeight: '600', textAlign: 'center' },
+  answerText:         { color: '#ddd', fontSize: 17, fontWeight: '600', textAlign: 'center' },
   answerTextCorrect:  { color: '#00cc66' },
   answerTextWrong:    { color: '#ff4444' },
   answerTextDisabled: { color: '#333' },
@@ -1302,9 +1350,9 @@ const styles = StyleSheet.create({
   shieldOverlayInner: { alignItems: 'center', gap: 10, backgroundColor: '#001a20ee', paddingHorizontal: 28, paddingVertical: 20, borderRadius: 16, borderWidth: 1, borderColor: '#00ccff55' },
   shieldOverlayText: { color: '#00ccff', fontSize: 18, fontWeight: 'bold', letterSpacing: 2 },
 
-  shieldAcquireOverlay: { justifyContent: 'center', alignItems: 'center' },
-  shieldAcquireInner: { alignItems: 'center', gap: 10, backgroundColor: '#001a20ee', paddingHorizontal: 28, paddingVertical: 20, borderRadius: 16, borderWidth: 1, borderColor: '#00ccff55' },
-  shieldAcquireText: { fontSize: 18, fontWeight: 'bold', letterSpacing: 2 },
+  shieldAcquireOverlay: { justifyContent: 'center', alignItems: 'center' }, // light pill, centered
+  shieldAcquireInner: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#001a20dd', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#00ccff55' },
+  shieldAcquireText: { fontSize: 12, fontWeight: 'bold', letterSpacing: 1.5 },
 
   tierFlashOverlay: { justifyContent: 'center', alignItems: 'center', backgroundColor: '#000000ee' },
   tierFlashCard: {
@@ -1317,14 +1365,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   tierFlashWelcome: { color: '#ffffff88', fontSize: 12, fontWeight: '700', letterSpacing: 5 },
+  tierFlashArt: { width: 96, height: 96 },
+  tierFlashBonus: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6, backgroundColor: '#ffd70018', borderWidth: 1, borderColor: '#ffd70055', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 5 },
+  tierFlashBonusText: { color: '#ffd700', fontSize: 18, fontWeight: 'bold' },
   tierFlashDivider: { width: 60, height: 1, borderRadius: 1 },
   tierFlashText: { fontSize: 40, fontWeight: 'bold', letterSpacing: 6 },
   tierFlashDesc: { fontSize: 14, fontWeight: '600', letterSpacing: 1.5, marginTop: 2 },
 
   milestoneOverlay: { justifyContent: 'center', alignItems: 'center', backgroundColor: '#000000dd' },
-  milestoneInner: { alignItems: 'center', gap: 8, backgroundColor: '#1a0e00ee', paddingHorizontal: 44, paddingVertical: 32, borderRadius: 24, borderWidth: 1, borderColor: '#ffd70055' },
-  milestoneScoreText: { color: '#ffd700', fontSize: 72, fontWeight: 'bold', lineHeight: 76 },
-  milestoneTagline: { color: '#ffd700aa', fontSize: 13, fontWeight: '700', letterSpacing: 3 },
+  ring: { position: 'absolute', width: 220, height: 220, borderRadius: 110, borderWidth: 3 },
+  milestoneInner: { alignItems: 'center', gap: 6 },
+  milestoneLabel: { color: '#ffffffaa', fontSize: 12, fontWeight: '700', letterSpacing: 4 },
+  milestoneScoreText: { color: '#ffd700', fontSize: 96, fontWeight: 'bold', lineHeight: 100 },
+  milestoneTagline: { color: '#ffd700aa', fontSize: 15, fontWeight: '800', letterSpacing: 3, textAlign: 'center' },
 
   // ── Ready screen ──────────────────────────────────────────────────────────
   readyTitle:    { color: '#fff', fontSize: 28, fontWeight: 'bold', letterSpacing: 3, marginBottom: 10 },
@@ -1337,7 +1390,7 @@ const styles = StyleSheet.create({
   // ── Pause ─────────────────────────────────────────────────────────────────
   pauseBtn:     { flexDirection: 'row', gap: 3, alignItems: 'center', padding: 6, marginRight: 4 },
   pauseIconBar: { width: 4, height: 14, backgroundColor: '#FFD700', borderRadius: 2 },
-  pauseOverlay: { backgroundColor: '#0a0a1a', justifyContent: 'flex-start', alignItems: 'center', paddingTop: 60, zIndex: 100, gap: 6 },
+  pauseOverlay: { backgroundColor: '#0a0a1a', justifyContent: 'center', alignItems: 'center', zIndex: 100, gap: 6 },
   pauseStopIt:  { width: 140, height: 140, marginBottom: 4 },
   pauseTitle:   { fontSize: 34, fontWeight: 'bold', letterSpacing: 5, marginBottom: 16 },
   resumeBtn:    { borderWidth: 2, paddingHorizontal: 40, paddingVertical: 14, borderRadius: 14 },

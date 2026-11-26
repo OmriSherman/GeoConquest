@@ -26,6 +26,7 @@ import AvatarDisplay from '../components/AvatarDisplay';
 import QuitConfirmModal from '../components/QuitConfirmModal';
 import * as Speech from 'expo-speech';
 import { t } from '../lib/i18n';
+import { addQuizTabGuard } from '../lib/quizTabGuard';
 
 const GOLD_PER_CORRECT = 18;
 const AUTO_ADVANCE_DELAY_MS = 2500;
@@ -140,15 +141,17 @@ export default function CapitalsQuizScreen({ navigation }: Props) {
     React.useCallback(() => {
       const parent = navigation.getParent();
       if (!parent) return;
-      const unsubscribe = (parent as any).addListener('tabPress', (e: any) => {
+      const unsubscribe = addQuizTabGuard((e) => {
         if (!readyRef.current) return;
         e.preventDefault();
+        const tappedTab = e.tabName; // go there after confirming
         onConfirmQuitRef.current = () => {
           Speech.stop();
           if (autoAdvanceTimer.current) clearTimeout(autoAdvanceTimer.current);
           if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current);
           allowLeaveRef.current = true;
           navigation.popToTop();
+          if (tappedTab && tappedTab !== 'Quizzes') (parent as any).navigate(tappedTab);
         };
         setShowQuitModal(true);
       });
@@ -691,7 +694,7 @@ const styles = StyleSheet.create({
   backBtn: { color: '#555', fontSize: 16, fontWeight: 'bold', padding: 4 },
   pauseBtn: { flexDirection: 'row', gap: 3, alignItems: 'center', padding: 6 },
   pauseIconBar: { width: 4, height: 14, backgroundColor: '#FFD700', borderRadius: 2 },
-  pauseOverlay: { backgroundColor: '#0a0a1a', justifyContent: 'flex-start', alignItems: 'center', paddingTop: 100, zIndex: 100 },
+  pauseOverlay: { backgroundColor: '#0a0a1a', justifyContent: 'center', alignItems: 'center', zIndex: 100 },
   pauseTitle: { color: '#FFD700', fontSize: 32, fontWeight: 'bold', letterSpacing: 4, marginBottom: 20, marginTop: 20 },
   resumeBtn: { borderWidth: 2, borderColor: '#FFD700', paddingHorizontal: 36, paddingVertical: 13, borderRadius: 14 },
   resumeBtnText: { color: '#FFD700', fontSize: 16, fontWeight: 'bold', letterSpacing: 1 },

@@ -35,6 +35,7 @@ const IMG_BORDER = require('../../assets/avatars/border_drawing_quiz.png');
 const IMG_SKULL = require('../../assets/avatars/skull.png');
 
 import worldAtlas from '../assets/map/countries-50m.json';
+import { addQuizTabGuard } from '../lib/quizTabGuard';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -59,6 +60,23 @@ interface DrawPair { countryA: Country; countryB: Country; }
 type Props = { navigation: StackNavigationProp<QuizStackParamList, 'BorderDrawQuiz'>; };
 
 // ─── Geo helpers ──────────────────────────────────────────────────────────────
+
+// topojson hands back one line per arc, so join lines that share an endpoint to
+// count the separate pieces of a border (e.g. USA-Canada: Alaska + mainland).
+function countBorderParts(lines: number[][][]): number {
+  const parent = lines.map((_, i) => i);
+  const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  const owner = new Map<string, number>();
+  lines.forEach((line, i) => {
+    for (const pt of [line[0], line[line.length - 1]]) {
+      const key = pt.join(',');
+      const other = owner.get(key);
+      if (other === undefined) owner.set(key, i);
+      else parent[find(i)] = find(other);
+    }
+  });
+  return new Set(lines.map((_, i) => find(i))).size;
+}
 
 function buildCombinedData(cca2A: string, cca2B: string, cw: number, ch: number) {
   const numA = A2_TO_NUM[cca2A];
@@ -89,6 +107,8 @@ function buildCombinedData(cca2A: string, cca2B: string, cw: number, ch: number)
 
   const borderPoints: [number, number][] = [];
   const sharedGeoAny = sharedGeo as any;
+  const borderLines: number[][][] = sharedGeoAny?.type === 'LineString' ? [sharedGeoAny.coordinates]
+    : sharedGeoAny?.type === 'MultiLineString' ? sharedGeoAny.coordinates : [];
   if (sharedGeoAny?.coordinates?.length) {
     const flatten = (line: number[][]) => line.forEach((c) => {
       const pt = projection(c as [number, number]);
@@ -103,6 +123,7 @@ function buildCombinedData(cca2A: string, cca2B: string, cw: number, ch: number)
     pathB: pathGen(featB) ?? '',
     borderSvgPath: borderPoints.length ? (pathGen(sharedGeo as any) ?? null) : null,
     borderPoints,
+    borderParts: borderLines.length ? countBorderParts(borderLines) : 0,
   };
 }
 
@@ -234,10 +255,11 @@ export default function BorderDrawQuizScreen({ navigation }: Props) {
   const [qIndex, setQIndex] = useState(0);
   const [submitted, setSubmitted] = useState(false);
   const [rating, setRating] = useState<Rating | null>(null);
-  const [userPoints, setUserPoints] = useState<[number, number][]>([]);
+  const [strokes, setStrokes] = useState<[number, number][][]>([]);
   const [paused, setPaused] = useState(false);
   const [showQuitModal, setShowQuitModal] = useState(false);
   const [canvasWidth, setCanvasWidth] = useState(320);
+  const [canvasHeight, setCanvasHeight] = useState(CANVAS_HEIGHT);
   const [totalGold, setTotalGold] = useState(0);
   const [totalXP, setTotalXP] = useState(0);
   const [goldRatings, setGoldRatings] = useState(0); // questions rated top-3 tier
@@ -267,12 +289,14 @@ export default function BorderDrawQuizScreen({ navigation }: Props) {
     React.useCallback(() => {
       const parent = navigation.getParent();
       if (!parent) return;
-      const unsubscribe = (parent as any).addListener('tabPress', (e: any) => {
+      const unsubscribe = addQuizTabGuard((e) => {
         if (phase !== 'quiz') return;
         e.preventDefault();
+        const tappedTab = e.tabName; // go there after confirming
         onConfirmQuitRef.current = () => {
           allowLeaveRef.current = true;
           navigation.popToTop();
+          if (tappedTab && tappedTab !== 'Quizzes') (parent as any).navigate(tappedTab);
         };
         setShowQuitModal(true);
       });
@@ -299,11 +323,13 @@ export default function BorderDrawQuizScreen({ navigation }: Props) {
       onMoveShouldSetPanResponder: () => true,
       onPanResponderGrant: (evt) => {
         const { locationX, locationY } = evt.nativeEvent;
-        setUserPoints([[locationX, locationY]]);
+        setStrokes((all) => [...all, [[locationX, locationY]]]);
       },
       onPanResponderMove: (evt) => {
         const { locationX, locationY } = evt.nativeEvent;
-        setUserPoints((pts) => [...pts, [locationX, locationY]]);
+        setStrokes((all) => all.length
+          ? [...all.slice(0, -1), [...all[all.length - 1], [locationX, locationY]]]
+          : all);
       },
     })
   ).current;
@@ -311,9 +337,9 @@ export default function BorderDrawQuizScreen({ navigation }: Props) {
   function handleSubmit() {
     if (submitted) return;
     const pair = pairs[qIndex];
-    const data = buildCombinedData(pair.countryA.cca2, pair.countryB.cca2, canvasWidth, CANVAS_HEIGHT);
-    const diagonal = Math.sqrt(canvasWidth ** 2 + CANVAS_HEIGHT ** 2);
-    const r = data ? scoreStroke(userPoints, data.borderPoints, diagonal) : 'miss';
+    const data = buildCombinedData(pair.countryA.cca2, pair.countryB.cca2, canvasWidth, canvasHeight);
+    const diagonal = Math.sqrt(canvasWidth ** 2 + canvasHeight ** 2);
+    const r = data ? scoreStroke(strokes.flat(), data.borderPoints, diagonal) : 'miss';
     const gold = RATING_GOLD[r];
 
     const xp = Math.round(gold / 2);
@@ -352,7 +378,7 @@ export default function BorderDrawQuizScreen({ navigation }: Props) {
     setQIndex(nextIndex);
     setSubmitted(false);
     setRating(null);
-    setUserPoints([]);
+    setStrokes([]);
   }
 
   function confirmQuit() {
@@ -404,8 +430,9 @@ export default function BorderDrawQuizScreen({ navigation }: Props) {
 
   // ─── Quiz phase ─────────────────────────────────────────────────────────────
   const pair = pairs[qIndex];
-  const geoData = buildCombinedData(pair.countryA.cca2, pair.countryB.cca2, canvasWidth, CANVAS_HEIGHT);
-  const userStrokePath = ptsToPath(userPoints);
+  const geoData = buildCombinedData(pair.countryA.cca2, pair.countryB.cca2, canvasWidth, canvasHeight);
+  const userStrokePath = strokes.map(ptsToPath).join(' ');
+  const pointCount = strokes.reduce((n, st) => n + st.length, 0);
 
   return (
     <View style={styles.container}>
@@ -464,13 +491,19 @@ export default function BorderDrawQuizScreen({ navigation }: Props) {
       <Text style={styles.prompt}>
         {submitted ? t('drawQuiz.revealPrompt') : t('drawQuiz.drawPrompt')}
       </Text>
+      {!submitted && geoData && geoData.borderParts > 1 ? (
+        <Text style={styles.partsHint}>{t('drawQuiz.borderParts', { n: geoData.borderParts })}</Text>
+      ) : null}
 
       {/* Canvas */}
       <View
         style={styles.canvasWrapper}
-        onLayout={(e) => setCanvasWidth(e.nativeEvent.layout.width)}
+        onLayout={(e) => {
+          setCanvasWidth(e.nativeEvent.layout.width);
+          setCanvasHeight(e.nativeEvent.layout.height);
+        }}
       >
-        <Svg width={canvasWidth} height={CANVAS_HEIGHT}>
+        <Svg width={canvasWidth} height={canvasHeight}>
           {geoData?.pathA && geoData?.pathB ? (
             <SvgPath d={`${geoData.pathA} ${geoData.pathB}`} fill="#FFD700" stroke="none" fillRule="nonzero" />
           ) : null}
@@ -531,16 +564,16 @@ export default function BorderDrawQuizScreen({ navigation }: Props) {
         {!submitted ? (
           <>
             <TouchableOpacity
-              style={[styles.clearBtn, userPoints.length === 0 && { opacity: 0.3 }]}
-              onPress={() => setUserPoints([])}
-              disabled={userPoints.length === 0}
+              style={[styles.clearBtn, pointCount === 0 && { opacity: 0.3 }]}
+              onPress={() => setStrokes([])}
+              disabled={pointCount === 0}
             >
               <Text style={styles.clearBtnText}>{t('drawQuiz.clear')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.submitBtn, userPoints.length < 3 && { opacity: 0.4 }]}
+              style={[styles.submitBtn, pointCount < 3 && { opacity: 0.4 }]}
               onPress={handleSubmit}
-              disabled={userPoints.length < 3}
+              disabled={pointCount < 3}
             >
               <Text style={styles.submitBtnText}>{t('drawQuiz.submit')}</Text>
             </TouchableOpacity>
@@ -579,7 +612,7 @@ const styles = StyleSheet.create({
   goldText: { color: '#FFD700', fontWeight: 'bold', fontSize: 14 },
   pauseBtn: { flexDirection: 'row', gap: 3, alignItems: 'center', padding: 6 },
   pauseIconBar: { width: 4, height: 14, backgroundColor: '#FFD700', borderRadius: 2 },
-  pauseOverlay: { backgroundColor: '#0a0a1a', justifyContent: 'flex-start', alignItems: 'center', paddingTop: 60, zIndex: 100 },
+  pauseOverlay: { backgroundColor: '#0a0a1a', justifyContent: 'center', alignItems: 'center', zIndex: 100 },
   pauseStopIt: { width: 140, height: 140, marginBottom: 12 },
   pauseTitle: { color: '#FFD700', fontSize: 32, fontWeight: 'bold', letterSpacing: 4, marginBottom: 20, marginTop: 20 },
   resumeBtn: { backgroundColor: '#FFD700', paddingHorizontal: 42, paddingVertical: 14, borderRadius: 14 },
@@ -593,11 +626,13 @@ const styles = StyleSheet.create({
   dividerLine: { width: 1, height: 18, backgroundColor: '#2a2a4e' },
   vsIcon: { width: 24, height: 24 },
 
-  prompt: { color: '#888', fontSize: 14, textAlign: 'center', marginBottom: 12, paddingHorizontal: 20 },
+  prompt: { color: '#888', fontSize: 14, textAlign: 'center', marginBottom: 10, paddingHorizontal: 20 },
 
   canvasWrapper: {
     marginHorizontal: 16,
-    height: CANVAS_HEIGHT,
+    flex: 1,
+    minHeight: 160,
+    maxHeight: 420,
     backgroundColor: '#111128',
     borderRadius: 16,
     borderWidth: 1,
@@ -627,7 +662,8 @@ const styles = StyleSheet.create({
   legend: { flexDirection: 'row', justifyContent: 'center', gap: 20, paddingTop: 8 },
   legendItem: { color: '#666', fontSize: 12 },
 
-  actions: { flexDirection: 'row', paddingHorizontal: 20, paddingTop: 16, gap: 12 },
+  actions: { flexDirection: 'row', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 20, gap: 12 },
+  partsHint: { color: '#FFA500', fontSize: 13, fontWeight: '600', textAlign: 'center', marginTop: -6, marginBottom: 10, paddingHorizontal: 20 },
   clearBtn: { flex: 1, borderWidth: 1, borderColor: '#333', borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
   clearBtnText: { color: '#888', fontWeight: 'bold', fontSize: 15 },
   submitBtn: { flex: 2, backgroundColor: '#FFD700', borderRadius: 12, paddingVertical: 14, alignItems: 'center' },

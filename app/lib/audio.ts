@@ -3,7 +3,7 @@
  */
 
 import * as Speech from 'expo-speech';
-import { Audio } from 'expo-av';
+import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 import { getLocale } from './i18n';
 
 // ── Real SFX files (expo-av) ────────────────────────────────────────────────
@@ -94,6 +94,10 @@ export async function initAudio() {
     audioModePromise = Audio.setAudioModeAsync({
       playsInSilentModeIOS: true,
       staysActiveInBackground: false,
+      // Let the player's own music/podcast keep playing under our effects
+      // (the default iOS mode pauses other apps' audio).
+      interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
+      interruptionModeAndroid: InterruptionModeAndroid.DuckOthers, // ponytail: expo-av has no true mix on Android, ducking only lasts as long as an effect
       shouldDuckAndroid: true,
       playThroughEarpieceAndroid: false,
     });
@@ -146,6 +150,11 @@ export function playReject() {
 /** Purchase / cash-in coin jingle (synthesised fallback) */
 export function playPurchase() {
   return playSfx(require('../assets/sfx/purchase.wav'));
+}
+
+/** Gold leaving the player: the purchase jingle played backwards */
+export function playGoldLoss() {
+  return playSfx(require('../assets/sfx/gold_loss.wav'));
 }
 
 /** Victory fanfare (quiz complete, achievement claimed) */

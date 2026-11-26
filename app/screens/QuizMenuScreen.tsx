@@ -100,7 +100,7 @@ const QUIZZES = [
 
 export default function QuizMenuScreen({ navigation }: Props) {
   const { ticketAdsRemaining, ticketAdReward } = useAuth();
-  const { disabledUpgrades, unlockedItems, profile, purchaseTicket, purchaseTickets, maps, mapsNextRefillAt, mapsAdsUsedToday, deductMap, grantAdMap, syncMaps, devConquerorEnabled, setDevConquerorEnabled, devInfiniteMapsEnabled, setDevInfiniteMapsEnabled } = useAuth();
+  const { disabledUpgrades, unlockedItems, profile, purchaseTicket, purchaseTickets, maps, mapsNextRefillAt, mapsAdsUsedToday, deductMap, grantAdMap, syncMaps, devConquerorEnabled, setDevConquerorEnabled, devInfiniteMapsEnabled, setDevInfiniteMapsEnabled, devOwnAllItems, setDevOwnAllItems } = useAuth();
   const { showAlert } = useAlert();
   const { showToast } = useToast();
   const { questHighlightId } = useGame();
@@ -339,6 +339,15 @@ export default function QuizMenuScreen({ navigation }: Props) {
           style={{ padding: 12, marginBottom: 8, borderRadius: 12, borderWidth: 1, borderColor: '#c084fc', backgroundColor: '#1a0a2e' }}
         >
           <Text style={{ color: '#d8b4fe', textAlign: 'center', fontWeight: '700' }}>DEV · Conqueror {devConquerorEnabled ? 'enabled' : 'disabled'} — tap to toggle</Text>
+        </TouchableOpacity>}
+        {DEV_MODE && <TouchableOpacity
+          accessibilityRole="switch"
+          accessibilityState={{ checked: devOwnAllItems }}
+          accessibilityLabel="Toggle owning all avatars and items"
+          onPress={() => void setDevOwnAllItems(!devOwnAllItems)}
+          style={{ padding: 12, marginBottom: 8, borderRadius: 12, borderWidth: 1, borderColor: '#f6d365', backgroundColor: '#1f1a08' }}
+        >
+          <Text style={{ color: '#f6d365', textAlign: 'center', fontWeight: '700' }}>DEV · {devOwnAllItems ? 'Own ALL avatars — tap for defaults only' : 'Defaults only — tap to own ALL avatars'}</Text>
         </TouchableOpacity>}
         {DEV_MODE && <TouchableOpacity
           accessibilityRole="switch"

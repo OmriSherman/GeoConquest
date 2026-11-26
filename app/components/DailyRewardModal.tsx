@@ -21,6 +21,12 @@ function chestLabel(name: string) {
   return t('dailyChest.chestLabel', { tier: tierName(name), defaultValue: `${name} Chest` });
 }
 
+// Mythic chest potions (+200%) get their own name so they're told apart from regular ones.
+function potionName(kind: ChestRewardKind, boost = 50) {
+  if (boost >= 200 && (kind === 'xp_potion' || kind === 'gold_potion')) return t(kind === 'xp_potion' ? 'mythicChest.rewards.xpPotion' : 'mythicChest.rewards.goldPotion');
+  return rewardDisplayName(kind);
+}
+
 function rewardDisplayName(kind: ChestRewardKind) {
   return t(`dailyChest.rewardNames.${kind}`, { defaultValue: REWARD_NAMES[kind] });
 }
@@ -271,14 +277,14 @@ export default function DailyRewardModal({ inventoryRequest = 0, onShopPotions }
         {active.length === 0 && <Text style={styles.subtitle}>{t('dailyChest.noActivePotions')}</Text>}
         {active.map(p => <View key={`${p.kind}:${p.boost_percent}`} style={styles.inventoryRow}>
           <Image source={(p.boost_percent ?? 50) >= 200 ? MYTHIC_REWARD_IMAGES[p.kind] : REWARD_IMAGES[p.kind]} style={styles.inventoryIcon} resizeMode="contain" />
-          <View style={{ flex: 1 }}><Text style={styles.hubTitle}>{rewardDisplayName(p.kind)}</Text><Text style={styles.small}>{t('dailyChest.potionUsesLeft', { boost: p.boost_percent ?? 50, n: p.remaining })}</Text></View>
+          <View style={{ flex: 1 }}><Text style={styles.hubTitle}>{potionName(p.kind, p.boost_percent)}</Text><Text style={styles.small}>{t('dailyChest.potionUsesLeft', { boost: p.boost_percent ?? 50, n: p.remaining })}</Text></View>
         </View>)}
         <Text style={styles.oddsTitle}>{t('dailyChest.storedPotions')}</Text>
         {potions.length === 0 && <View style={styles.empty}><Image source={REWARD_IMAGES.xp_potion} style={styles.rewardImage} resizeMode="contain" /><Text style={styles.subtitle}>{t('dailyChest.emptyPotions')}</Text></View>}
         {onShopPotions && <TouchableOpacity accessibilityRole="button" style={[styles.activateButton, { marginTop: 12 }]} onPress={() => { setInventoryVisible(false); onShopPotions(); }}><Text style={styles.primaryText}>{t('dailyChest.buyRegularPotions')}</Text></TouchableOpacity>}
         {potions.map(p => { const boost = p.boost_percent ?? 50; return <View key={`${p.kind}:${p.duration}`} style={styles.inventoryRow}>
-          <Image source={boost >= 200 ? MYTHIC_REWARD_IMAGES[p.kind] : REWARD_IMAGES[p.kind]} style={styles.inventoryIcon} resizeMode="contain" /><View style={{ flex: 1 }}><Text style={styles.hubTitle}>{rewardDisplayName(p.kind)} ×{p.quantity}</Text><Text style={styles.small}>+{boost}% · {quizCount(p.duration)}</Text></View>
-          <TouchableOpacity accessibilityRole="button" accessibilityLabel={t('dailyChest.accessibility.activatePotion', { name: rewardDisplayName(p.kind), n: p.duration })} disabled={activating} onPress={() => void activate(p)} style={[styles.activateButton, activating && { opacity: 0.45 }]}><Text style={styles.primaryText}>{t('dailyChest.use')}</Text></TouchableOpacity>
+          <Image source={boost >= 200 ? MYTHIC_REWARD_IMAGES[p.kind] : REWARD_IMAGES[p.kind]} style={styles.inventoryIcon} resizeMode="contain" /><View style={{ flex: 1 }}><Text style={styles.hubTitle}>{potionName(p.kind, boost)} ×{p.quantity}</Text><Text style={styles.small}>+{boost}% · {quizCount(p.duration)}</Text></View>
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel={t('dailyChest.accessibility.activatePotion', { name: potionName(p.kind, boost), n: p.duration })} disabled={activating} onPress={() => void activate(p)} style={[styles.activateButton, activating && { opacity: 0.45 }]}><Text style={styles.primaryText}>{t('dailyChest.use')}</Text></TouchableOpacity>
         </View>; })}
         {!!inventoryError && <TouchableOpacity accessibilityRole="button" onPress={() => { setInventoryError(''); void loadPotions(); }}><Text style={styles.error}>{inventoryError}</Text></TouchableOpacity>}
       </ScrollView></View></View>

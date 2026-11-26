@@ -163,6 +163,7 @@ export type QuizStackParamList = {
     tierBg?: string;
     millionairePowerUpsUsed?: boolean;
     xpOverride?: number;
+    penaltyPercent?: number; // Nightmare loss: % of gold taken (1-10)
   };
 };
 

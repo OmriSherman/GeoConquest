@@ -19,6 +19,7 @@ export const PROFILE_CACHE_KEY = (uid: string) => `@geoquest/profile_cache_${uid
 const MUTATIONS_KEY = (uid: string) => `@geoquest/pending_mutations_${uid}`;
 const NEXT_QUIZ_BOOST_KEY = (uid: string) => `@geoquest/next_quiz_boost_${uid}`;
 const DEV_CONQUEROR_KEY = '@geoquest/dev_conqueror_enabled';
+const DEV_OWN_ALL_KEY = '@geoquest/dev_own_all_items';
 const DEV_INFINITE_MAPS_KEY = '@geoquest/dev_infinite_maps_enabled';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -190,6 +191,7 @@ interface AuthContextValue {
   claimAchievement: (achievementId: string, rewardGold: number, rewardItems?: { type: 'avatar' | 'flag' | 'item'; itemId: string }[], rewardTickets?: number) => Promise<void>;
   purchaseQuizUpgrade: (newTurns: number, cost: number) => Promise<void>;
   disabledUpgrades: Set<string>;
+  selectExpedition: (turns: 10 | 20 | 30) => Promise<void>;
   toggleUpgrade: (id: string) => Promise<void>;
   effectiveMaxTurns: number;
   dailyRewardAvailable: boolean;
@@ -216,6 +218,8 @@ interface AuthContextValue {
   setDevConquerorEnabled: (enabled: boolean) => Promise<void>;
   devInfiniteMapsEnabled: boolean;
   setDevInfiniteMapsEnabled: (enabled: boolean) => Promise<void>;
+  devOwnAllItems: boolean;
+  setDevOwnAllItems: (enabled: boolean) => Promise<void>;
   nextQuizBoostActive: boolean;
   setNextQuizBoostActive: (active: boolean) => Promise<void>;
   consumeNextQuizBoost: () => Promise<boolean>;
@@ -241,7 +245,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [needsUsername, setNeedsUsername] = useState(false);
   const [disabledUpgrades, setDisabledUpgrades] = useState<Set<string>>(new Set());
   const [dailyRewardAvailable, setDailyRewardAvailable] = useState(false);
-  const [unlockedItems, setUnlockedItems] = useState<Set<string>>(new Set());
+  const [unlockedItemsRaw, setUnlockedItems] = useState<Set<string>>(new Set());
   const [pendingAvatarNotification, setPendingAvatarNotification] = useState(false);
   const [nextQuizBoostActive, setNextQuizBoostActiveState] = useState(false);
   const [maps, setMaps] = useState(5);
@@ -250,6 +254,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [mapsNextRefillAt, setMapsNextRefillAt] = useState<Date | null>(null);
   const [devConquerorEnabled, setDevConquerorEnabledState] = useState(true);
   const [devInfiniteMapsEnabled, setDevInfiniteMapsEnabledState] = useState(false);
+  const [devOwnAllItems, setDevOwnAllItemsState] = useState(true);
+  // DEV: 'own all' unlocks every item; otherwise only real items + upgrades (so every mode stays playable).
+  const unlockedItems = React.useMemo(() => {
+    if (!DEV_MODE) return unlockedItemsRaw;
+    const ids = devOwnAllItems ? DEV_UNLOCKED_ITEM_IDS : [...DEV_UNLOCKED_ITEM_IDS].filter(id => id.startsWith('upgrade_'));
+    return new Set([...unlockedItemsRaw, ...ids]);
+  }, [unlockedItemsRaw, devOwnAllItems]);
 
   // ── Bootstrap ──────────────────────────────────────────────────────────────
   //
@@ -264,6 +275,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (DEV_MODE) {
       AsyncStorage.getItem(DEV_CONQUEROR_KEY).then(value => {
         if (value !== null) setDevConquerorEnabledState(value === '1');
+      });
+      AsyncStorage.getItem(DEV_OWN_ALL_KEY).then(value => {
+        if (value !== null) setDevOwnAllItemsState(value === '1');
       });
       AsyncStorage.getItem(DEV_INFINITE_MAPS_KEY).then(value => {
         if (value !== null) setDevInfiniteMapsEnabledState(value === '1');
@@ -463,7 +477,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!res.error && res.data) {
           const unlockedSet = new Set(res.data.map((r: { item_id: string }) => r.item_id));
           const reconciledSet = DEV_MODE ? unlockedSet : await reconcileQuestRewardAvatarOwnership(userId, unlockedSet);
-          setUnlockedItems(DEV_MODE ? new Set([...reconciledSet, ...DEV_UNLOCKED_ITEM_IDS]) : reconciledSet);
+          setUnlockedItems(reconciledSet);
         }
       });
 
@@ -1009,7 +1023,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!error && data) {
       const unlockedSet = new Set(data.map((r: { item_id: string }) => r.item_id));
       const reconciledSet = DEV_MODE ? unlockedSet : await reconcileQuestRewardAvatarOwnership(profile.id, unlockedSet);
-      setUnlockedItems(DEV_MODE ? new Set([...reconciledSet, ...DEV_UNLOCKED_ITEM_IDS]) : reconciledSet);
+      setUnlockedItems(reconciledSet);
     }
   }
 
@@ -1280,6 +1294,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [profile?.maps_ad_used_at, profile?.maps_ad_count]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
+  // Radio-style pick of the active expedition size (owned tiers only take effect via effectiveMaxTurns).
+  async function selectExpedition(turns: 10 | 20 | 30) {
+    const next = new Set(disabledUpgrades);
+    if (turns >= 20) next.delete('upgrade_level_2'); else next.add('upgrade_level_2');
+    if (turns >= 30) next.delete('upgrade_level_3'); else next.add('upgrade_level_3');
+    setDisabledUpgrades(next);
+    await AsyncStorage.setItem('@disabled_upgrades', JSON.stringify([...next]));
+  }
+
   async function toggleUpgrade(id: string) {
     const newSet = new Set(disabledUpgrades);
     if (newSet.has(id)) newSet.delete(id);
@@ -1297,6 +1320,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       conqueror_plan: enabled ? 'unlimited' : null,
     } : prev);
     await AsyncStorage.setItem(DEV_CONQUEROR_KEY, enabled ? '1' : '0');
+  }
+
+  async function setDevOwnAllItems(enabled: boolean) {
+    if (!DEV_MODE) return;
+    setDevOwnAllItemsState(enabled);
+    await AsyncStorage.setItem(DEV_OWN_ALL_KEY, enabled ? '1' : '0');
   }
 
   async function setDevInfiniteMapsEnabled(enabled: boolean) {
@@ -1335,6 +1364,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         disabledUpgrades,
         toggleUpgrade,
         effectiveMaxTurns,
+        selectExpedition,
         dailyRewardAvailable,
         setDailyRewardAvailable,
         claimDailyReward,
@@ -1359,6 +1389,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setDevConquerorEnabled,
         devInfiniteMapsEnabled,
         setDevInfiniteMapsEnabled,
+        devOwnAllItems,
+        setDevOwnAllItems,
         nextQuizBoostActive,
         setNextQuizBoostActive,
         consumeNextQuizBoost,

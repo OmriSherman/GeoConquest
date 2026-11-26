@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
+  Easing,
   Image,
   Modal,
   ScrollView,
@@ -13,6 +14,7 @@ import {
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import ConfettiCannon from 'react-native-confetti-cannon';
+import HellBackground from '../components/HellBackground';
 import { useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import {
@@ -26,13 +28,13 @@ import { useAuth } from '../context/AuthContext';
 import AnswerButton from '../components/AnswerButton';
 import QuitConfirmModal from '../components/QuitConfirmModal';
 import CountryShapeView from '../components/CountryShapeView';
-import { playDing, playWrong, playTick, playTextToSpeech, playDiceRoll, playMillionaireSwap } from '../lib/audio';
+import { playDing, playWrong, playTick, playTextToSpeech, playDiceRoll, playMillionaireSwap, playGoldLoss } from '../lib/audio';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Speech from 'expo-speech';
 import { filterQuizCountries } from '../lib/quizCountryFilters';
 import { t } from '../lib/i18n';
+import { addQuizTabGuard } from '../lib/quizTabGuard';
 
-const NIGHTMARE_LOSS_KEY = 'nightmare_loss_count';
 
 const AUTO_ADVANCE_DELAY_MS = 2500;
 const BASE_TIMER = 11;
@@ -104,6 +106,12 @@ export default function NightmareQuizScreen({ navigation }: Props) {
   const [displayOrder, setDisplayOrder] = useState([0, 1, 2, 3]);
   const [phantomIndex, setPhantomIndex] = useState<number | null>(null);
   const blindCover = useRef(new Animated.Value(0)).current;
+  // Flags: three stacked copies (heavy blur / light blur / sharp) cross-fade on the native thread = smooth sharpening.
+  const blindProg = useRef(new Animated.Value(1)).current;
+  const [blindFlag, setBlindFlag] = useState(false);
+  const penaltyFade = useRef(new Animated.Value(0)).current;
+  const penaltyDiceFade = useRef(new Animated.Value(0)).current;
+  const [penaltyRoll, setPenaltyRoll] = useState<{ shown: number; final: boolean } | null>(null);
   const blindTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shuffleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const phantomShowRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -165,6 +173,9 @@ export default function NightmareQuizScreen({ navigation }: Props) {
     if (phantomShowRef.current) { clearTimeout(phantomShowRef.current); phantomShowRef.current = null; }
     if (phantomClearRef.current) { clearTimeout(phantomClearRef.current); phantomClearRef.current = null; }
     if (curseRevealTimerRef.current) { clearTimeout(curseRevealTimerRef.current); curseRevealTimerRef.current = null; }
+    blindProg.stopAnimation();
+    blindProg.setValue(1);
+    setBlindFlag(false);
   }
 
   function applyNewCurse(question: MillionaireQuestion) {
@@ -187,8 +198,14 @@ export default function NightmareQuizScreen({ navigation }: Props) {
       setShowCurseReveal(false);
 
       if (curse === 'blind') {
-        blindCover.setValue(1);
-        Animated.timing(blindCover, { toValue: 0, duration: 6500, useNativeDriver: true }).start();
+        if (question.type === 'flag') {
+          setBlindFlag(true);
+          blindProg.setValue(0);
+          Animated.timing(blindProg, { toValue: 1, duration: 6500, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
+        } else {
+          blindCover.setValue(1);
+          Animated.timing(blindCover, { toValue: 0, duration: 6500, useNativeDriver: true }).start();
+        }
       }
       if (curse === 'shuffle') {
         shuffleTimerRef.current = setInterval(() => {
@@ -210,18 +227,49 @@ export default function NightmareQuizScreen({ navigation }: Props) {
     }, 2000);
   }
 
+  // Loss penalty: a dice roll picks 1-10% of the player's current gold.
   async function endGameWithLoss() {
     if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current);
-    const stored = await AsyncStorage.getItem(NIGHTMARE_LOSS_KEY);
-    const lossCount = parseInt(stored ?? '0', 10);
-    const toll = 200 + lossCount * 20;
-    await AsyncStorage.setItem(NIGHTMARE_LOSS_KEY, String(lossCount + 1));
-    await addGold(-toll);
+    const gold = Math.max(0, profile?.gold_balance ?? 0);
+    const pct = 1 + Math.floor(Math.random() * 10);
+    const toll = Math.floor((gold * pct) / 100);
+
+    // 1s fade to black, 1s fade in of just the cube, then it rolls through many numbers and lands
+    const wait = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+    await wait(1000); // beat on the wrong answer before the fade
+    penaltyFade.setValue(0);
+    penaltyDiceFade.setValue(0);
+    setPenaltyRoll({ shown: 1, final: false });
+    await new Promise<void>(resolve => Animated.timing(penaltyFade, { toValue: 1, duration: 1000, useNativeDriver: true }).start(() => resolve()));
+    Animated.timing(penaltyDiceFade, { toValue: 1, duration: 1000, useNativeDriver: true }).start();
+    await wait(1000);
+
+    const ROLL_MS = 2800;
+    diceSpinAnim.setValue(0);
+    Animated.timing(diceSpinAnim, { toValue: 1, duration: ROLL_MS, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+    playDiceRoll();
+    // Numbers flicker fast, then slow down like a slot machine before landing
+    let last = 0;
+    for (let t = 0; t < ROLL_MS; ) {
+      let n = 1 + Math.floor(Math.random() * 10);
+      if (n === last) n = (n % 10) + 1;
+      last = n;
+      setPenaltyRoll({ shown: n, final: false });
+      const d = 45 + Math.pow(t / ROLL_MS, 2) * 260;
+      await wait(d);
+      t += d;
+    }
+    setPenaltyRoll({ shown: pct, final: true });
+    void playGoldLoss();
+    await wait(1800);
+
+    if (toll > 0) await addGold(-toll);
     allowLeaveRef.current = true;
     navigation.replace('QuizResults', {
       score: currentIndexRef.current,
       total: TOTAL_QUESTIONS,
       goldEarned: -toll,
+      penaltyPercent: pct,
       quizType: 'nightmare',
       elapsedSeconds: Math.floor((Date.now() - quizStartRef.current) / 1000),
     });
@@ -247,14 +295,6 @@ export default function NightmareQuizScreen({ navigation }: Props) {
     if (!profile?.id) return;
     (async () => {
       try {
-        const stored = await AsyncStorage.getItem(NIGHTMARE_LOSS_KEY);
-        const lossCount = parseInt(stored ?? '0', 10);
-        const toll = 200 + lossCount * 20;
-        if ((profile.gold_balance ?? 0) < toll) {
-          setError(`You need at least ${toll.toLocaleString()} gold to enter Nightmare (penalty on failure).`);
-          return;
-        }
-
         const countries = filterQuizCountries(await fetchCountries());
         setAllCountries(countries);
         const q = buildNightmareQuestions(countries);
@@ -368,9 +408,10 @@ export default function NightmareQuizScreen({ navigation }: Props) {
     React.useCallback(() => {
       const parent = navigation.getParent();
       if (!parent) return;
-      const unsubscribe = (parent as any).addListener('tabPress', (e: any) => {
+      const unsubscribe = addQuizTabGuard((e) => {
         if (!readyRef.current) return;
         e.preventDefault();
+        const tappedTab = e.tabName; // go there after confirming
         onConfirmQuitRef.current = () => {
           stopTimer();
           Speech.stop();
@@ -378,6 +419,7 @@ export default function NightmareQuizScreen({ navigation }: Props) {
           if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current);
           allowLeaveRef.current = true;
           navigation.popToTop();
+          if (tappedTab && tappedTab !== 'Quizzes') (parent as any).navigate(tappedTab);
         };
         setShowQuitModal(true);
       });
@@ -470,6 +512,7 @@ export default function NightmareQuizScreen({ navigation }: Props) {
   if (loading) {
     return (
       <View style={styles.centered}>
+        <HellBackground />
         <ActivityIndicator size="large" color="#FFD700" />
         <Text style={styles.loadingText}>{t('nightmareQuiz.loadingChallenge')}</Text>
       </View>
@@ -489,7 +532,8 @@ export default function NightmareQuizScreen({ navigation }: Props) {
   if (!ready) {
     return (
       <View style={styles.readyContainer}>
-        <Image source={require('../../assets/avatars/demon_hand.png')} style={{ width: 80, height: 80, marginBottom: 20, transform: [{ rotate: '180deg' }] }} resizeMode="contain" />
+        <HellBackground withBase={false} opacity={0.85} />
+        <Image source={require('../../assets/avatars/demon_hand.png')} style={{ width: 170, height: 170, marginBottom: 20, transform: [{ rotate: '180deg' }] }} resizeMode="contain" />
         <Text style={styles.readyTitle}>{t('nav.nightmareQuiz').toUpperCase()}</Text>
         <Text style={styles.readySubtitle}>{t('nightmareQuiz.readySubtitle')}</Text>
         <TouchableOpacity
@@ -527,6 +571,8 @@ export default function NightmareQuizScreen({ navigation }: Props) {
   return (
     <View style={styles.shakeWrapper}>
     <Animated.View style={[styles.container, { backgroundColor: bgColor, transform: [{ translateX: shakeAnim }] }]}>
+      {/* Hellfire behind the questions: faint so text stays readable */}
+      <HellBackground withBase={false} opacity={0.5} />
       {/* Pulsing vignette — grows from Q1 to Q10 */}
       <Animated.View
         pointerEvents="none"
@@ -536,6 +582,7 @@ export default function NightmareQuizScreen({ navigation }: Props) {
       {/* Curse reveal overlay */}
       {showCurseReveal && (
         <View style={[StyleSheet.absoluteFill, styles.curseRevealOverlay]}>
+          <HellBackground />
           <View style={styles.diceStack}>
             <Image source={require('../../assets/avatars/demons_gamble.png')} style={styles.diceBackground} resizeMode="contain" />
             <Animated.Image
@@ -550,6 +597,22 @@ export default function NightmareQuizScreen({ navigation }: Props) {
           </Text>
           <Text style={styles.curseRevealDesc}>{getCurseReveal(currentCurse)}</Text>
         </View>
+      )}
+
+      {/* Loss penalty dice roll: black screen, just the cube, then the penalty */}
+      {penaltyRoll && (
+        <Animated.View style={[StyleSheet.absoluteFill, styles.penaltyOverlay, { opacity: penaltyFade }]}>
+          <HellBackground />
+          <Animated.View style={{ opacity: penaltyDiceFade, alignItems: 'center' }}>
+            <Animated.Image
+              source={require('../../assets/avatars/cursed_dice.png')}
+              style={[styles.diceForeground, { width: 130, height: 130, marginTop: 0 }, { transform: [{ rotate: diceRotation }] }]}
+              resizeMode="contain"
+            />
+            <Text style={styles.penaltyRollNumber}>{penaltyRoll.shown}%</Text>
+            <Text style={styles.curseRevealDesc}>{penaltyRoll.final ? t('nightmareQuiz.penaltyTaken', { pct: penaltyRoll.shown }) : ' '}</Text>
+          </Animated.View>
+        </Animated.View>
       )}
 
       {/* Pause overlay */}
@@ -607,14 +670,27 @@ export default function NightmareQuizScreen({ navigation }: Props) {
             {/* Flag image — rotated for nightmare difficulty */}
             {question.type === 'flag' && question.flagUrl && (
               <View style={styles.flagContainer}>
-                <Image
-                  source={{ uri: question.flagUrl }}
-                  style={[
-                    styles.flag,
-                    question.rotation ? { transform: [{ rotate: `${question.rotation}deg` }] } : undefined,
-                  ]}
-                  resizeMode="contain"
-                />
+                {(() => {
+                  const flagStyle = [styles.flag, question.rotation ? { transform: [{ rotate: `${question.rotation}deg` }] } : undefined];
+                  return (
+                    <>
+                      {blindFlag && <Image source={{ uri: question.flagUrl }} blurRadius={30} style={[flagStyle, StyleSheet.absoluteFill, { margin: 8, width: undefined, height: undefined }]} resizeMode="contain" />}
+                      {blindFlag && (
+                        <Animated.Image
+                          source={{ uri: question.flagUrl }}
+                          blurRadius={10}
+                          style={[flagStyle, StyleSheet.absoluteFill, { margin: 8, width: undefined, height: undefined, opacity: blindProg.interpolate({ inputRange: [0, 0.5], outputRange: [0, 1], extrapolate: 'clamp' }) }]}
+                          resizeMode="contain"
+                        />
+                      )}
+                      <Animated.Image
+                        source={{ uri: question.flagUrl }}
+                        style={[flagStyle, blindFlag && { opacity: blindProg.interpolate({ inputRange: [0.4, 1], outputRange: [0, 1], extrapolate: 'clamp' }) }]}
+                        resizeMode="contain"
+                      />
+                    </>
+                  );
+                })()}
               </View>
             )}
 
@@ -816,10 +892,11 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
   },
   curseRevealOverlay: {
-    backgroundColor: 'rgba(5, 0, 0, 0.97)',
+    backgroundColor: '#140000',
     zIndex: 200,
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
+    paddingTop: '12%',
     gap: 10,
   },
   diceStack: {
@@ -840,6 +917,8 @@ const styles = StyleSheet.create({
     height: 56,
     marginTop: 100,
   },
+  penaltyOverlay: { backgroundColor: '#000', justifyContent: 'flex-start', alignItems: 'center', paddingTop: '16%', zIndex: 200 }, // dice sits high so the flames don't hide the number
+  penaltyRollNumber: { color: '#ff3b2f', textShadowColor: '#ff4500', textShadowRadius: 14, fontSize: 64, fontWeight: 'bold', marginVertical: 6 },
   curseRevealLabel: {
     color: '#555',
     fontSize: 11,
@@ -1051,14 +1130,14 @@ const styles = StyleSheet.create({
   backBtn: { color: '#ff4444', fontSize: 16, fontWeight: 'bold', padding: 4 },
   pauseBtn: { flexDirection: 'row', gap: 3, alignItems: 'center', padding: 6 },
   pauseIconBar: { width: 4, height: 14, backgroundColor: '#FFD700', borderRadius: 2 },
-  pauseOverlay: { backgroundColor: '#0a0000', justifyContent: 'flex-start', alignItems: 'center', paddingTop: 60, zIndex: 100 },
+  pauseOverlay: { backgroundColor: '#0a0000', justifyContent: 'center', alignItems: 'center', zIndex: 100 },
   pauseStopIt: { width: 140, height: 140, marginBottom: 12 },
   pauseTitle: { color: '#ff4444', fontSize: 32, fontWeight: 'bold', letterSpacing: 4, marginBottom: 20, marginTop: 20 },
   resumeBtn: { borderWidth: 2, borderColor: '#ff4444', paddingHorizontal: 36, paddingVertical: 13, borderRadius: 14 },
   resumeBtnText: { color: '#ff4444', fontSize: 16, fontWeight: 'bold', letterSpacing: 1 },
   quitText: { color: '#8b0000', fontSize: 14, fontWeight: '600', marginTop: 28 },
 
-  readyContainer: { flex: 1, backgroundColor: '#1a0000', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
+  readyContainer: { flex: 1, backgroundColor: '#1a0000', justifyContent: 'flex-start', paddingTop: '14%', alignItems: 'center', paddingHorizontal: 32 }, // content high: flames rise from the bottom
   readyTitle: { color: '#ff4444', fontSize: 28, fontWeight: 'bold', letterSpacing: 3, marginBottom: 12 },
   readySubtitle: { color: '#888', fontSize: 14, textAlign: 'center', lineHeight: 22, marginBottom: 40 },
   readyBtn: { backgroundColor: '#ff4444', paddingHorizontal: 40, paddingVertical: 15, borderRadius: 14 },

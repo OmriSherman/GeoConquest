@@ -15,6 +15,7 @@ import {
   playDevilLaugh,
   playXpGain,
   playPurchase,
+  playGoldLoss,
   playGauntletTier,
   playGauntletFail,
 } from '../lib/audio';
@@ -91,7 +92,7 @@ function achIconNode(key: string | undefined, fallbackKey: string) {
 }
 
 export default function QuizResultsScreen({ navigation, route }: Props) {
-  const { score, total, goldEarned, quizType, elapsedSeconds, tierAccent, tierLabel, tierBg, rewardMultiplier = 1, millionairePowerUpsUsed, xpOverride } = route.params;
+  const { score, total, goldEarned, quizType, elapsedSeconds, tierAccent, tierLabel, tierBg, rewardMultiplier = 1, millionairePowerUpsUsed, xpOverride, penaltyPercent } = route.params;
   const percentage = Math.round((score / total) * 100);
   const { showToast } = useToast();
   const { user, addXP, addGold, profile, refreshProfile, incrementQuizCount, nextQuizBoostActive, setNextQuizBoostActive, consumeNextQuizBoost, refundMap, maps, deductMap, mapsNextRefillAt, mapsAdsUsedToday, grantAdMap, unlockedItems, devInfiniteMapsEnabled } = useAuth();
@@ -552,6 +553,7 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
         playPurchase();
       }
 
+      if (totalGoldDelta < 0) void playGoldLoss();
       await animateGoldDelta(totalGoldDelta);
       if (isUnmountedRef.current) return;
 
@@ -748,7 +750,7 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
             <View style={styles.nightmareGoldHeaderRow}>
               <Image source={require('../../assets/avatars/demon.png')} style={{ width: 16, height: 16 }} resizeMode="contain" />
               <Text style={[styles.nightmareGoldTag, goldEarned < 0 ? styles.nightmareGoldTagPenalty : styles.nightmareGoldTagReward]}>
-                {goldEarned < 0 ? t('results.penalty') : t('results.reward')}
+                {goldEarned < 0 ? t('results.penalty') + (penaltyPercent ? ` · ${penaltyPercent}%` : '') : t('results.reward')}
               </Text>
             </View>
             <Text style={[styles.nightmareGoldAmount, goldEarned < 0 ? styles.nightmareGoldAmountPenalty : styles.nightmareGoldAmountReward]}>
@@ -888,6 +890,12 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
               return;
             }
 
+            // Only nag when tickets are running low; otherwise just start the next run.
+            if (tickets > 3) {
+              navigation.replace('MillionaireQuiz' as any);
+              return;
+            }
+
             showAlert({
               variant: 'ticket',
               title: t('maps.playAgainPrompt'),
@@ -918,7 +926,7 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
       </TouchableOpacity>
 
       <View style={styles.bottomRow}>
-        <TouchableOpacity style={[styles.menuButton, { flex: 1 }]} onPress={() => navigation.popToTop()}>
+        <TouchableOpacity style={[styles.menuButton, { flex: 1 }]} onPress={() => navigation.reset({ index: 0, routes: [{ name: 'QuizMenu' }] })}>
           <Text style={styles.menuText}>{t('results.backToQuizzes')}</Text>
         </TouchableOpacity>
 

@@ -8,6 +8,7 @@ import { DEV_MODE } from '../lib/devMode';
 import { supabase } from '../lib/supabase';
 import { playTick, playVictory } from '../lib/audio';
 import TopFallConfetti from '../components/TopFallConfetti';
+import MythicSilhouette from '../components/MythicSilhouette';
 import { CHOICE_REWARDS, MYTHIC_AVATARS, MYTHIC_DROP_RATES, MYTHIC_DUST_IMAGE, MYTHIC_REWARD_IMAGES, MythicChestState, MythicReward, rewardImage } from '../lib/mythicChest';
 import { t, useLocale } from '../lib/i18n';
 import { XpAmount, XpIcon } from '../components/XpIcon';
@@ -61,6 +62,7 @@ function IdleParticle({ particle }: { particle: typeof IDLE_PARTICLES[number] })
 
 function RewardIcon({ rewardKey }: { rewardKey: string }) {
   const image = rewardKey === 'gold_150000' ? require('../../assets/avatars/royal_open.png') : rewardKey === 'avatar' ? undefined : MYTHIC_REWARD_IMAGES[rewardKey];
+  if (rewardKey === 'avatar') return <MythicSilhouette size={30} />;
   if (image) return <Image source={image} style={styles.oddsIcon} resizeMode="contain" />;
   return <View style={styles.missingRewardIcon}>{rewardKey === 'xp' ? <XpIcon size={18} /> : <Text style={styles.missingRewardIconText}>?</Text>}</View>;
 }
@@ -202,7 +204,8 @@ export default function MythicChestScreen({ navigation }: { navigation: any }) {
     setPhase('revealed');
   };
   const openChest = async () => {
-    if (phase !== 'ready' || state.mythic_chests <= 0) return;
+    if (phase === 'opening' || state.mythic_chests <= 0) return;
+    if (phase === 'revealed') { rewardPop.setValue(0); scale.setValue(1); setReward(null); }
     setError(null); setPhase('opening'); playTick();
     try {
       const { data, error: rpcError } = DEV_MODE ? { data: { reward: { kind: 'avatar', quantity: 1, avatar_id: 'png_conquest_frog' }, dust_awarded: 1, mythic_dust: state.mythic_dust + 1 }, error: null } : await supabase.rpc('claim_mythic_chest');
@@ -270,7 +273,7 @@ export default function MythicChestScreen({ navigation }: { navigation: any }) {
       <View style={styles.stage}><Animated.View style={[styles.aura, { opacity: auraPulse.interpolate({ inputRange: [0, 1], outputRange: [0.48, 0.9] }), transform: [{ scale: auraPulse.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1.12] }) }] }]} /><View style={styles.auraCore} />{IDLE_PARTICLES.map((particle, index) => <IdleParticle key={index} particle={particle} />)}{phase === 'revealed' && reward ? <><Animated.Image source={OPEN} style={[styles.openChest, { transform: [{ scale }] }]} resizeMode="contain" /><Animated.View style={[styles.rewardGlow, { opacity: rewardPop.interpolate({ inputRange: [0, 1], outputRange: [0, 0.95] }), transform: [{ scale: rewardPop.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1.15] }) }] }]} /><Animated.View style={[styles.rewardHero, { opacity: rewardPop, transform: [{ scale: rewardPop }, { translateY: rewardPop.interpolate({ inputRange: [0, 1], outputRange: [40, 0] }) }] }]}><Image source={rewardImage(reward)} style={styles.rewardRevealImage} resizeMode="contain" /></Animated.View></> : <Animated.Image source={chestImage} style={[styles.chest, { transform: [{ scale }] }]} resizeMode="contain" />}{opened && <><Animated.View pointerEvents="none" style={[styles.flash, { opacity: flash }]} />{Array.from({ length: 8 }, (_, i) => <Firework key={i} index={i} />)}<TopFallConfetti /></>}</View>
       {phase === 'revealed' && reward && <View style={styles.rewardCard}><Text style={styles.rewardKicker}>{t('mythicChest.rewardUnlocked')}</Text>{reward.kind === 'xp' ? <XpAmount amount={reward.quantity.toLocaleString()} iconSize={24} textStyle={styles.rewardTitle} /> : <Text style={styles.rewardTitle}>{localizedRewardLabel(reward)}</Text>}<Text style={styles.rewardSub}>{reward.kind === 'xp' ? t('mythicChest.rewardAppliedXp') : reward.kind.includes('potion') ? t('mythicChest.rewardPotionStored') : t('mythicChest.rewardAdded')}</Text><View style={styles.dustAwardRow}><Image source={MYTHIC_DUST_IMAGE} style={styles.dustIcon} /><Text style={styles.dustAwardText}>{t('mythicChest.dustAward')}</Text></View></View>}
       <View style={styles.statsCard}><View style={styles.statRow}><Text style={styles.statLabel}>{t('mythicChest.chestsAvailable')}</Text><Text style={styles.statValue}>{state.mythic_chests}</Text></View><View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${monthlyProgress * 100}%` }]} /></View><View style={styles.statRow}><Text style={styles.statHint}>{t('mythicChest.monthlyOpened')}</Text><Text style={styles.statHint}>{state.mythic_monthly_opened} / 1</Text></View><View style={styles.dustRow}><Text style={styles.dustLabel}>{t('mythicChest.dust')}</Text><Text style={styles.dustValue}>{state.mythic_dust} / 10</Text></View><View style={styles.progressTrack}><View style={[styles.dustFill, { width: `${Math.min(100, state.mythic_dust * 10)}%` }]} /></View></View>
-      <TouchableOpacity style={[styles.primary, (state.mythic_chests <= 0 || phase !== 'ready') && styles.disabled]} onPress={openChest} activeOpacity={.85}><Text style={styles.primaryText}>{phase === 'opening' ? t('mythicChest.opening') : phase === 'revealed' ? t('mythicChest.rewardClaimed') : state.mythic_chests > 0 ? t('mythicChest.openChest') : t('mythicChest.noChests')}</Text></TouchableOpacity>
+      <TouchableOpacity style={[styles.primary, (state.mythic_chests <= 0 || phase === 'opening') && styles.disabled]} onPress={openChest} activeOpacity={.85}><Text style={styles.primaryText}>{phase === 'opening' ? t('mythicChest.opening') : phase === 'revealed' && state.mythic_chests > 0 ? t('mythicChest.openAnother') : phase === 'revealed' ? t('mythicChest.rewardClaimed') : state.mythic_chests > 0 ? t('mythicChest.openChest') : t('mythicChest.noChests')}</Text></TouchableOpacity>
       {state.mythic_dust >= 10 && <TouchableOpacity style={styles.choiceButton} onPress={() => setChoiceOpen(true)}><Text style={styles.choiceText}>{t('mythicChest.openGuaranteed')}</Text></TouchableOpacity>}
       <TouchableOpacity accessibilityRole="button" accessibilityLabel={t('mythicChest.purchaseAccessibility')} style={[styles.purchaseCard, purchasing && styles.disabled]} disabled={purchasing} onPress={buyMythicChest} activeOpacity={0.88}>
         <View style={styles.purchaseTop}>

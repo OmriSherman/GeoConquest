@@ -128,7 +128,7 @@ const SHOP_LOCAL_FLAG_SOURCES: Record<string, ImageSourcePropType> = {
 };
 
 export default function ShopScreen() {
-  const { refreshProfile } = useAuth();
+  const { refreshProfile, devOwnAllItems, effectiveMaxTurns, selectExpedition } = useAuth();
   const { ticketAdsRemaining, ticketAdReward } = useAuth();
   const { isOwned, canAfford, purchaseCountry, bulkPurchaseCountries, goldBalance, ownedCountries } = useGame();
   const { profile, setUsername, purchaseAvatarItem, purchaseQuizUpgrade, disabledUpgrades, toggleUpgrade, purchaseTicket, purchaseTickets, refreshQuestStatus, pendingAvatarNotification, clearAvatarNotification } = useAuth();
@@ -169,7 +169,13 @@ export default function ShopScreen() {
   // ── Avatar/Flag tab state ──────────────────────────────────────────────────
   const [subTab, setSubTab] = useState<'buy' | 'owned'>('buy');
   const [newItemBadge, setNewItemBadge] = useState<'avatar' | 'flag' | null>(null);
-  const [unlockedItems, setUnlockedItems] = useState<Set<string>>(new Set());
+  const [unlockedItemsRaw, setUnlockedItems] = useState<Set<string>>(new Set());
+  // DEV: follow the 'own all avatars' toggle (upgrades always unlocked so modes stay playable)
+  const unlockedItems = useMemo(() => {
+    if (!DEV_MODE) return unlockedItemsRaw;
+    const ids = devOwnAllItems ? DEV_UNLOCKED_ITEM_IDS : [...DEV_UNLOCKED_ITEM_IDS].filter(id => id.startsWith('upgrade_'));
+    return new Set([...unlockedItemsRaw, ...ids]);
+  }, [unlockedItemsRaw, devOwnAllItems]);
   const [loadingUnlocks, setLoadingUnlocks] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
@@ -324,7 +330,7 @@ export default function ShopScreen() {
         chains.push(chain);
       }
     }
-    return { avatarTierChains: chains, standaloneCustomAvatars: items.filter(i => !inChain.has(i.key) && !i.cosmetic) };
+    return { avatarTierChains: chains, standaloneCustomAvatars: items.filter(i => !inChain.has(i.key)) }; // cosmetic (chest) avatars stay in: Owned shows them, Buy hides them
   }, []);
 
 
@@ -371,7 +377,7 @@ export default function ShopScreen() {
         invalidRewardAvatars.forEach((itemId) => set.delete(itemId));
       }
 
-      setUnlockedItems(DEV_MODE ? new Set([...set, ...DEV_UNLOCKED_ITEM_IDS]) : set);
+      setUnlockedItems(set);
     } catch (err) {
       console.warn('Failed to load unlocks:', err);
     } finally {
@@ -1076,12 +1082,13 @@ export default function ShopScreen() {
                 price: a.price,
                 isPremium: a.isPremium,
                 questOnly: a.questOnly,
+                cosmetic: a.cosmetic,
                 isPremiumSubscription: a.isPremiumSubscription,
                 requiresLevel: a.requiresLevel,
               }))] as any[]).filter((a: any) => {
                 const isOwned = (!a.isPremium && !a.questOnly) || unlockedItems.has(a.emoji);
                 if (subTab === 'owned') return isOwned;
-                return !isOwned && !a.questOnly;
+                return !isOwned && !a.questOnly && !a.cosmetic;
               }).sort((a: any, b: any) => {
                 const pa = a.price ?? 0;
                 const pb = b.price ?? 0;
@@ -1090,7 +1097,7 @@ export default function ShopScreen() {
               })}
               ListHeaderComponent={(
                 <>
-                  {subTab === 'owned' && (
+                  {subTab === 'owned' && MYTHIC_AVATAR_OPTIONS.some(a => unlockedItems.has(a.key)) && (
                     <View style={styles.mythicAvatarSection}>
                       <View style={styles.mythicAvatarHeader}>
                         <View>
@@ -1099,12 +1106,7 @@ export default function ShopScreen() {
                         </View>
                         <Text style={styles.mythicAvatarCount}>{MYTHIC_AVATAR_OPTIONS.filter(a => unlockedItems.has(a.key)).length} / {MYTHIC_AVATAR_OPTIONS.length}</Text>
                       </View>
-                      {MYTHIC_AVATAR_OPTIONS.filter(a => unlockedItems.has(a.key)).length === 0 ? (
-                        <View style={styles.mythicAvatarEmpty}>
-                          <Text style={styles.mythicAvatarQuestion}>?</Text>
-                          <Text style={styles.mythicAvatarEmptyText}>{t('shop.mythicAvatarEmpty')}</Text>
-                        </View>
-                      ) : (
+                      {(
                         <View style={styles.mythicAvatarGrid}>
                           {MYTHIC_AVATAR_OPTIONS.filter(a => unlockedItems.has(a.key)).map(avatar => (
                             <TouchableOpacity
@@ -1530,6 +1532,17 @@ export default function ShopScreen() {
             );
           })()}
 
+          {(profile?.max_quiz_turns || 10) >= 20 && (
+            <TouchableOpacity style={[styles.upgradeCard, styles.upgradeCardOwned]} onPress={() => void selectExpedition(10)} activeOpacity={0.8}>
+              <View style={styles.upgradeInfo}>
+                <Text style={styles.upgradeTitle}>{t('shop.standardExpedition')}</Text>
+              </View>
+              <View style={styles.ownedItemBadgeRow}>
+                <View style={styles.radioOuter}>{effectiveMaxTurns === 10 && <View style={styles.radioInner} />}</View>
+              </View>
+            </TouchableOpacity>
+          )}
+
           {(
             <TouchableOpacity
               style={[styles.upgradeCard, (profile?.max_quiz_turns || 10) >= 20 && styles.upgradeCardOwned]}
@@ -1547,12 +1560,9 @@ export default function ShopScreen() {
               </View>
               {(profile?.max_quiz_turns || 10) >= 20 ? (
                 <View style={styles.ownedItemBadgeRow}>
-                  <Switch
-                    value={!disabledUpgrades.has('upgrade_level_2')}
-                    onValueChange={() => toggleUpgrade('upgrade_level_2')}
-                    trackColor={{ false: '#2a2a4e', true: '#FFD700' }}
-                    thumbColor={!disabledUpgrades.has('upgrade_level_2') ? '#1a1a2e' : '#888'}
-                  />
+                  <TouchableOpacity onPress={() => void selectExpedition(20)} hitSlop={10} accessibilityRole="radio" accessibilityState={{ checked: effectiveMaxTurns === 20 }}>
+                    <View style={styles.radioOuter}>{effectiveMaxTurns === 20 && <View style={styles.radioInner} />}</View>
+                  </TouchableOpacity>
                 </View>
               ) : (
                 <View style={styles.goldBadge}>
@@ -1591,12 +1601,9 @@ export default function ShopScreen() {
                 </View>
                 {isOwned ? (
                   <View style={styles.ownedItemBadgeRow}>
-                    <Switch
-                      value={!disabledUpgrades.has('upgrade_level_3')}
-                      onValueChange={() => toggleUpgrade('upgrade_level_3')}
-                      trackColor={{ false: '#2a2a4e', true: '#FFD700' }}
-                      thumbColor={!disabledUpgrades.has('upgrade_level_3') ? '#1a1a2e' : '#888'}
-                    />
+                    <TouchableOpacity onPress={() => void selectExpedition(30)} hitSlop={10} accessibilityRole="radio" accessibilityState={{ checked: effectiveMaxTurns === 30 }}>
+                      <View style={styles.radioOuter}>{effectiveMaxTurns === 30 && <View style={styles.radioInner} />}</View>
+                    </TouchableOpacity>
                   </View>
                 ) : cs.isLevelLocked ? (
                   <View style={[styles.upgradeBadge, { backgroundColor: bp.badgeBg, borderColor: bp.badgeBorder, flexDirection: 'row', alignItems: 'center', gap: 5 }]}>
@@ -2371,6 +2378,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  radioOuter: { width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: '#FFD700', alignItems: 'center', justifyContent: 'center' },
+  radioInner: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#FFD700' },
   upgradeCardOwned: {
     borderColor: '#FFD700',
     backgroundColor: '#1a1a2e',

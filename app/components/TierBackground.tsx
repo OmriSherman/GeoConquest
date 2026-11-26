@@ -31,6 +31,18 @@ interface LayerCfg {
   type: 'up' | 'streak';
 }
 
+// Pulsing accent glow behind the stage: faster and brighter in higher tiers.
+const TIER_GLOW: Record<TierLabel, { color: string; period: number; max: number }> = {
+  DANGER:   { color: '#4D96FF', period: 5000, max: 0.07 },
+  PERIL:    { color: '#22c55e', period: 4200, max: 0.08 },
+  ABYSS:    { color: '#818cf8', period: 3600, max: 0.09 },
+  VOID:     { color: '#9b5cf6', period: 3000, max: 0.10 },
+  HELL:     { color: '#ff6b35', period: 2400, max: 0.12 },
+  INFERNO:  { color: '#ef4444', period: 1900, max: 0.14 },
+  OBLIVION: { color: '#f43f5e', period: 1500, max: 0.16 },
+  ETERNITY: { color: '#fbbf24', period: 2500, max: 0.10 },
+};
+
 interface TierCfg {
   layers: LayerCfg[];
   heavenlyGlow?: boolean;
@@ -94,7 +106,8 @@ function makeLayer(cfg: LayerCfg, layerIdx: number): Particle[] {
   }));
 }
 
-export default function TierBackground({ tierLabel }: { tierLabel: TierLabel }) {
+// Memoized: the parent re-renders on every answer / timer tick, which used to rebuild every particle.
+function TierBackground({ tierLabel }: { tierLabel: TierLabel }) {
   const cfg = TIER_CONFIG[tierLabel];
 
   const layersRef = useRef<Particle[][]>(cfg.layers.map((l, li) => makeLayer(l, li)));
@@ -102,6 +115,8 @@ export default function TierBackground({ tierLabel }: { tierLabel: TierLabel }) 
     layersRef.current.map(particles => particles.map(p => new Animated.Value(p.startOffset)))
   );
   const glowAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(0)).current;
+  const glow = TIER_GLOW[tierLabel];
 
   useEffect(() => {
     const loops: Animated.CompositeAnimation[] = [];
@@ -119,6 +134,18 @@ export default function TierBackground({ tierLabel }: { tierLabel: TierLabel }) 
         );
       });
     });
+
+    {
+      const g = TIER_GLOW[tierLabel];
+      loops.push(
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(pulseAnim, { toValue: 1, duration: g.period / 2, useNativeDriver: true }),
+            Animated.timing(pulseAnim, { toValue: 0, duration: g.period / 2, useNativeDriver: true }),
+          ])
+        )
+      );
+    }
 
     if (cfg.heavenlyGlow) {
       loops.push(
@@ -164,6 +191,20 @@ export default function TierBackground({ tierLabel }: { tierLabel: TierLabel }) 
           }}
         />
       ))}
+
+      {/* Stage glow: accent orbs at the bottom and top edge, pulsing */}
+      <Animated.View renderToHardwareTextureAndroid shouldRasterizeIOS style={{
+        position: 'absolute', left: -SCREEN_W * 0.25, bottom: -SCREEN_W * 0.6,
+        width: SCREEN_W * 1.5, height: SCREEN_W * 1.5, borderRadius: SCREEN_W * 0.75,
+        backgroundColor: glow.color,
+        opacity: pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [glow.max * 0.4, glow.max] }),
+      }} />
+      <Animated.View renderToHardwareTextureAndroid shouldRasterizeIOS style={{
+        position: 'absolute', left: -SCREEN_W * 0.25, top: -SCREEN_W * 0.9,
+        width: SCREEN_W * 1.5, height: SCREEN_W * 1.5, borderRadius: SCREEN_W * 0.75,
+        backgroundColor: glow.color,
+        opacity: pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [glow.max, glow.max * 0.4] }),
+      }} />
 
       {cfg.heavenlyGlow && (
         <>
@@ -244,3 +285,5 @@ export default function TierBackground({ tierLabel }: { tierLabel: TierLabel }) 
     </View>
   );
 }
+
+export default React.memo(TierBackground);

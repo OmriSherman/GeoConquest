@@ -33,6 +33,7 @@ import CountryShapeView from '../components/CountryShapeView';
 import { playDing, playWrong, playTick, playTextToSpeech, playMillionaireSwap } from '../lib/audio';
 import * as Speech from 'expo-speech';
 import { t } from '../lib/i18n';
+import { addQuizTabGuard } from '../lib/quizTabGuard';
 
 const ANSWER_COLORS = ['#4FC3F7', '#F44336', '#FFD700', '#4CAF50']; // blue, red, yellow, green
 
@@ -121,6 +122,8 @@ function AudienceVoteCircle({ percentage, isCorrect }: { percentage: number; isC
 }
 
 export default function MillionaireQuizScreen({ navigation }: Props) {
+  const ladderScrollRef = useRef<ScrollView>(null);
+  const [ladderWidth, setLadderWidth] = useState(0);
   const { profile, disabledUpgrades, spendTicket } = useAuth();
   const { showAlert } = useAlert();
 
@@ -165,8 +168,6 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
   const questionsRef = useRef<MillionaireQuestion[]>([]);
   const autoAdvanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const quizStartRef = useRef<number>(0);
-  const ladderScrollRef = useRef<ScrollView>(null);
-  const [ladderWidth, setLadderWidth] = useState(0);
   const breathAnim = useRef(new Animated.Value(1)).current;
 
   // Tab navigation guard — intercept bottom-tab presses while quiz is active
@@ -174,15 +175,17 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
     React.useCallback(() => {
       const parent = navigation.getParent();
       if (!parent) return;
-      const unsubscribe = (parent as any).addListener('tabPress', (e: any) => {
+      const unsubscribe = addQuizTabGuard((e) => {
         if (!readyRef.current) return;
         e.preventDefault();
+        const tappedTab = e.tabName; // go there after confirming
         onConfirmQuitRef.current = () => {
           stopTimer();
           Speech.stop();
           if (autoAdvanceTimer.current) clearTimeout(autoAdvanceTimer.current);
           allowLeaveRef.current = true;
           navigation.popToTop();
+          if (tappedTab && tappedTab !== 'Quizzes') (parent as any).navigate(tappedTab);
         };
         setShowQuitModal(true);
       });
@@ -209,7 +212,7 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
   // Auto-center ladder on current question
   useEffect(() => {
     if (ladderWidth === 0) return;
-    const ITEM_W = 44; // minWidth 36 + gap 4 + padding ~4
+    const ITEM_W = 51; // item ~46 + gap 5
     const x = Math.max(0, currentIndex * ITEM_W - ladderWidth / 2 + ITEM_W / 2);
     ladderScrollRef.current?.scrollTo({ x, animated: true });
   }, [currentIndex, ladderWidth]);
@@ -632,7 +635,7 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
           <Text style={[styles.timerText, { color: timerColor }]}>{timeLeft}s</Text>
         </View>
       )}
-      {/* Prize Ladder Strip */}
+      {/* Prize ladder strip */}
       <ScrollView
         ref={ladderScrollRef}
         horizontal
@@ -644,8 +647,8 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
         {MILLIONAIRE_GOLD_LADDER.map((amount, i) => {
           const isCurrent = i === currentIndex;
           const isPast = i < currentIndex;
-          const isWalkCheckpointQuestion = WALK_AWAY_CHECKPOINT_INDICES.includes(i + 1);
           const isJackpot = i === 14;
+          const isCheckpoint = WALK_AWAY_CHECKPOINT_INDICES.includes(i + 1) || isJackpot;
           return (
             <View
               key={i}
@@ -653,7 +656,7 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
                 styles.ladderItem,
                 isCurrent && styles.ladderItemCurrent,
                 isPast && styles.ladderItemPast,
-                (isWalkCheckpointQuestion || isJackpot) && !isCurrent && styles.ladderItemCheckpoint,
+                isCheckpoint && !isCurrent && styles.ladderItemCheckpoint,
                 isJackpot && styles.ladderItemJackpot,
               ]}
             >
@@ -811,7 +814,6 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
       <Modal visible={showWalkOrContinue} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Image source={require('../../assets/avatars/flame.png')} style={{ width: 48, height: 48 }} resizeMode="contain" />
             <Text style={styles.modalTitle}>{t('millionaireQuiz.walkTitle')}</Text>
             <Text style={styles.modalBody}>{t('millionaireQuiz.checkpointBody')}</Text>
             <View style={styles.prizeCompare}>
@@ -842,6 +844,7 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
             <TouchableOpacity style={styles.dimBtn} onPress={walkAwayFromCheckpoint}>
               <Text style={styles.dimBtnText}>{t('millionaireQuiz.takeGold', { amount: walkOrContinuePrize.toLocaleString() })}</Text>
             </TouchableOpacity>
+            <Text style={styles.walkNoXp}>{t('millionaireQuiz.walkNoXp')}</Text>
           </View>
         </View>
       </Modal>
@@ -874,6 +877,7 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
+  walkNoXp: { color: '#FFA500', fontSize: 12, textAlign: 'center', marginTop: 12, lineHeight: 17 },
   container: { flex: 1, backgroundColor: '#0a0a1a' },
   centered: {
     flex: 1,
@@ -941,14 +945,8 @@ const styles = StyleSheet.create({
   elapsedTimerText: { color: '#aaa', fontSize: 13, fontWeight: '600', textAlign: 'right', paddingHorizontal: 16, paddingBottom: 4 },
 
   // Ladder strip
-  ladderScroll: { direction: 'ltr' },
-  ladderStrip: {
-    direction: 'ltr',
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-    gap: 5,
-    alignItems: 'center',
-  },
+  ladderScroll: { direction: 'ltr', flexGrow: 0 },
+  ladderStrip: { direction: 'ltr', paddingHorizontal: 8, paddingVertical: 10, gap: 5, alignItems: 'center' },
   ladderItem: {
     paddingHorizontal: 10,
     paddingVertical: 7,
@@ -962,6 +960,11 @@ const styles = StyleSheet.create({
   ladderItemCurrent: {
     backgroundColor: '#2a2000',
     borderColor: '#FFD700',
+    shadowColor: '#FFD700',
+    shadowOpacity: 1,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 10,
   },
   ladderItemPast: {
     opacity: 0.4,

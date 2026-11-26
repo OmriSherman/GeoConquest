@@ -24,6 +24,7 @@ import HeatStreakBadge from '../components/HeatStreakBadge';
 import QuitConfirmModal from '../components/QuitConfirmModal';
 import EarningsStrip from '../components/EarningsStrip';
 import { t } from '../lib/i18n';
+import { addQuizTabGuard } from '../lib/quizTabGuard';
 
 const GOLD_PER_CORRECT = 20;
 const ANSWER_COLORS = ['#4FC3F7', '#F44336', '#FFD700', '#4CAF50'];
@@ -231,13 +232,15 @@ export default function TrailQuizScreen({ navigation }: Props) {
     React.useCallback(() => {
       const parent = navigation.getParent();
       if (!parent) return;
-      const unsubscribe = (parent as any).addListener('tabPress', (e: any) => {
+      const unsubscribe = addQuizTabGuard((e) => {
         if (!readyRef.current) return;
         e.preventDefault();
+        const tappedTab = e.tabName; // go there after confirming
         onConfirmQuitRef.current = () => {
           if (autoAdvanceTimer.current) clearTimeout(autoAdvanceTimer.current);
           allowLeaveRef.current = true;
           navigation.popToTop();
+          if (tappedTab && tappedTab !== 'Quizzes') (parent as any).navigate(tappedTab);
         };
         setShowQuitModal(true);
       });
@@ -694,7 +697,7 @@ const styles = StyleSheet.create({
   // ── Pause ─────────────────────────────────────────────────────────────────
   pauseBtn: { flexDirection: 'row', gap: 3, alignItems: 'center', padding: 6 },
   pauseIconBar: { width: 4, height: 14, backgroundColor: '#FFD700', borderRadius: 2 },
-  pauseOverlay: { backgroundColor: '#0a0a1a', justifyContent: 'flex-start', alignItems: 'center', paddingTop: 60, zIndex: 100 },
+  pauseOverlay: { backgroundColor: '#0a0a1a', justifyContent: 'center', alignItems: 'center', zIndex: 100 },
   pauseStopIt: { width: 140, height: 140, marginBottom: 12 },
   pauseTitle: { color: '#fff', fontSize: 32, fontWeight: 'bold', letterSpacing: 4, marginBottom: 32 },
   resumeBtn: { borderWidth: 2, borderColor: '#4d96ff', paddingHorizontal: 36, paddingVertical: 13, borderRadius: 14, marginBottom: 8 },

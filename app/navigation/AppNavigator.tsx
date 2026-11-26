@@ -20,6 +20,7 @@ import { CommonActions, createNavigationContainerRef, NavigationContainer } from
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useAuth } from '../context/AuthContext';
+import { runQuizTabGuard } from '../lib/quizTabGuard';
 import {
   RootStackParamList,
   AuthStackParamList,
@@ -155,18 +156,20 @@ function QuizNavigator() {
 function MainNavigator() {
   const insets = useSafeAreaInsets();
   const bottomPadding = Math.max(insets.bottom, 20);
+  const tabBarStyle = {
+    backgroundColor: '#0a0a1a',
+    borderTopColor: '#1a1a2e',
+    height: 64 + bottomPadding,
+    paddingBottom: bottomPadding,
+    paddingTop: 6,
+  };
 
   return (
     <MainTab.Navigator
+      screenListeners={({ route }) => ({ tabPress: (e) => runQuizTabGuard(e, route.name) })}
       screenOptions={{
         headerShown: false,
-        tabBarStyle: {
-          backgroundColor: '#0a0a1a',
-          borderTopColor: '#1a1a2e',
-          height: 64 + bottomPadding,
-          paddingBottom: bottomPadding,
-          paddingTop: 6,
-        },
+        tabBarStyle,
         tabBarActiveTintColor: '#FFD700',
         tabBarInactiveTintColor: '#555',
         tabBarLabelStyle: { fontSize: 12 },
@@ -230,17 +233,28 @@ export default function AppNavigator() {
   useEffect(() => {
     async function handleUrl(url: string) {
       if (url.includes('reset-password')) {
+        // The reset link must become a real session before updateUser can work
+        // (detectSessionInUrl is off), so only open the modal once it has.
+        let sessionError: { message?: string } | null = null;
         const codeMatch = url.match(/[?&]code=([^&]+)/);
+        const hashParams = new URLSearchParams(url.split('#')[1] ?? '');
+        const accessToken = hashParams.get('access_token');
+        const refreshToken = hashParams.get('refresh_token');
         if (codeMatch?.[1]) {
-          try { await supabase.auth.exchangeCodeForSession(decodeURIComponent(codeMatch[1])); } catch {}
-          setShowResetModal(true);
+          ({ error: sessionError } = await supabase.auth.exchangeCodeForSession(decodeURIComponent(codeMatch[1])));
+        } else if (accessToken && refreshToken) {
+          ({ error: sessionError } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken }));
+        } else if (hashParams.get('error_description')) {
+          sessionError = { message: hashParams.get('error_description')!.replace(/\+/g, ' ') };
+        } else {
           return;
         }
-        const typeMatch = url.match(/[#&]type=([^&]+)/);
-        if (typeMatch?.[1] === 'recovery') {
-          setShowResetModal(true);
+        if (sessionError) {
+          Alert.alert(t('common.error'), sessionError.message ?? t('nav.passwordFailed'));
           return;
         }
+        setShowResetModal(true);
+        return;
       }
       const match = url.match(/[?&]code=([^&]+)/);
       if (match?.[1]) {
