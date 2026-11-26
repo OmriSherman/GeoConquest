@@ -238,16 +238,32 @@ export function getRandomCountries(
 
 type QuizBuildOptions = {
   reverseFirst?: boolean;
+  // Difficulty hooks (see quizDifficulty.ts): which countries are asked / how close the wrong answers are
+  pick?: (pool: Country[], count: number) => Country[];
+  distract?: (correct: Country, pool: Country[], count: number) => Country[];
+  easyNonBorder?: boolean;
+  // Hard only: ~15% of questions get 6 answers instead of 4 (falls back to 4 if there aren't enough valid options)
+  sixOptions?: boolean;
 };
+
+const SIX_OPTION_CHANCE = 0.15;
+
+/** 3 wrong answers, or 5 for a six-answer question. */
+function pickWrong(correct: Country, pool: Country[], o: QuizBuildOptions): Country[] {
+  const six = !!o.sixOptions && Math.random() < SIX_OPTION_CHANCE;
+  const get = (n: number) => (o.distract ? o.distract(correct, pool, n) : getRandomCountries(pool, correct, n));
+  const wrong = get(six ? 5 : 3);
+  return six && wrong.length < 5 ? wrong.slice(0, 3) : wrong;
+}
 
 /** Builds an N-question session array (no repeats). */
 export function buildQuizQuestions(countries: Country[], count: number = 10, options: QuizBuildOptions = {}): QuizQuestion[] {
   const quizCountries = countries.filter((c) => isQuizEligibleCca2(c.cca2));
   const shuffled = [...quizCountries].sort(() => Math.random() - 0.5);
-  const selected = shuffled.slice(0, count);
+  const selected = options.pick ? options.pick(quizCountries, count) : shuffled.slice(0, count);
 
   return selected.map((country, index) => {
-    const wrong = getRandomCountries(quizCountries, country, 3);
+    const wrong = pickWrong(country, quizCountries, options);
     const answerOptions = [...wrong, country].sort(() => Math.random() - 0.5);
     const correctIndex = answerOptions.findIndex((o) => o.cca2 === country.cca2);
     return {
@@ -263,10 +279,10 @@ export function buildQuizQuestions(countries: Country[], count: number = 10, opt
 export function buildCapitalsQuizQuestions(countries: Country[], count: number = 10, options: QuizBuildOptions = {}): QuizQuestion[] {
   const validTargets = countries.filter(c => isQuizEligibleCca2(c.cca2) && c.capital && c.capital.length > 0);
   const shuffled = [...validTargets].sort(() => Math.random() - 0.5);
-  const selected = shuffled.slice(0, count);
+  const selected = options.pick ? options.pick(validTargets, count) : shuffled.slice(0, count);
 
   return selected.map((country, index) => {
-    const wrong = getRandomCountries(validTargets, country, 3);
+    const wrong = pickWrong(country, validTargets, options);
     const answerOptions = [...wrong, country].sort(() => Math.random() - 0.5);
     const correctIndex = answerOptions.findIndex((o) => o.cca2 === country.cca2);
     return {
@@ -279,12 +295,12 @@ export function buildCapitalsQuizQuestions(countries: Country[], count: number =
 }
 
 /** Builds an N-question session for the Borders Quiz */
-export function buildBordersQuizQuestions(countries: Country[], count: number = 10) {
+export function buildBordersQuizQuestions(countries: Country[], count: number = 10, opts: QuizBuildOptions = {}) {
   const quizCountries = countries.filter((c) => isQuizEligibleCca2(c.cca2));
   // Only target countries with at least 3 borders, so we can pick 3 real borders
   const validTargets = quizCountries.filter(c => c.borders && c.borders.length >= 3);
   const shuffledTargets = [...validTargets].sort(() => Math.random() - 0.5);
-  const selected = shuffledTargets.slice(0, count);
+  const selected = opts.pick ? opts.pick(validTargets, count) : shuffledTargets.slice(0, count);
 
   const cca3Map = getCca3ToCca2Map();
 
@@ -294,9 +310,10 @@ export function buildBordersQuizQuestions(countries: Country[], count: number = 
       .map(b => cca3Map[b])
       .filter((cca2): cca2 is string => !!cca2 && isQuizEligibleCca2(cca2)); // some borders might not map correctly if they are missing
 
-    // Choose 3 real borders
+    // Choose 3 real borders (5 for a six-answer question, when the country has that many)
+    const six = !!opts.sixOptions && actualBorderCca2s.length >= 5 && Math.random() < SIX_OPTION_CHANCE;
     const shuffledBorders = [...actualBorderCca2s].sort(() => Math.random() - 0.5);
-    const threeBorders = shuffledBorders.slice(0, 3);
+    const threeBorders = shuffledBorders.slice(0, six ? 5 : 3);
     const borderCountries = threeBorders
       .map(code => quizCountries.find(c => c.cca2 === code))
       .filter((c): c is Country => c !== undefined);
@@ -313,7 +330,10 @@ export function buildBordersQuizQuestions(countries: Country[], count: number = 
       .map(b => cca3Map[b])
       .filter((cca2): cca2 is string => !!cca2 && isQuizEligibleCca2(cca2));
 
-    let candidateProxys = quizCountries.filter(
+    // Easy: the odd one out is any non-neighbour in the world, not a near miss
+    let candidateProxys = opts.easyNonBorder ? quizCountries.filter(
+      c => c.cca2 !== targetCountry.cca2 && !actualBorderCca2s.includes(c.cca2)
+    ) : quizCountries.filter(
       c => c.cca2 !== targetCountry.cca2 &&
         !actualBorderCca2s.includes(c.cca2) &&
         neighborsOfNeighborsCca2.includes(c.cca2)

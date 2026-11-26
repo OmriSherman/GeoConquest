@@ -452,7 +452,7 @@ export default function TrailQuizScreen({ navigation }: Props) {
       <View style={[styles.centered, { backgroundColor: '#0a0a1a' }]}>
         <Image source={require('../../assets/avatars/compass.png')} style={{ width: 80, height: 80, marginBottom: 20 }} resizeMode="contain" />
         <Text style={styles.readyTitle}>{t('nav.trailQuiz').toUpperCase()}</Text>
-        <Text style={styles.readySubtitle}>{t('trailQuiz.subtitle')}{'\n'}{t('drawQuiz.round', { current: 1, total: TRAIL_QUESTION_COUNT })}</Text>
+        <Text style={styles.readySubtitle}>{t('trailQuiz.subtitle')}</Text>
         <TouchableOpacity style={styles.readyBtn} onPress={() => { quizStartRef.current = Date.now(); setReady(true); }}>
           <Text style={styles.readyBtnText}>{t('quizCommon.letsGo')}</Text>
         </TouchableOpacity>

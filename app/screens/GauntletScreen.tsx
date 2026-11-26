@@ -232,11 +232,12 @@ function buildQuestion(
   const shapeCountries = all.filter(c => c.cca2 !== subject.cca2 && hasCountryShape(c.cca2));
   const flagCountries = all.filter(c => c.cca2 !== subject.cca2 && !!c.flagUrl);
 
-  const buildCountryNameOptions = () => shuffle([subject.name, ...wrongPool.slice(0, 3).map(c => c.name)]);
+  const wrongN = boss ? 5 : 3; // boss rounds always have six answers
+  const buildCountryNameOptions = () => shuffle([subject.name, ...wrongPool.slice(0, wrongN).map(c => c.name)]);
   const buildCapitalOptions = () => {
     const rightCapital = subject.capital!;
     const wrongCaps = shuffle(all.filter(c => c.cca2 !== subject.cca2 && c.capital?.trim()))
-      .slice(0, 3)
+      .slice(0, wrongN)
       .map(c => c.capital!);
     const options = shuffle([rightCapital, ...wrongCaps]);
     return { options, correctIndex: options.indexOf(rightCapital) };
@@ -246,11 +247,11 @@ function buildQuestion(
     const neighbors = all.filter(c => neighborCca2s.includes(c.cca2));
     const correctNeighbor = neighbors[Math.floor(Math.random() * neighbors.length)];
     const nonNeighbors = shuffle(all.filter(c => c.cca2 !== subject.cca2 && !neighborCca2s.includes(c.cca2)));
-    const options = shuffle([correctNeighbor.name, ...nonNeighbors.slice(0, 3).map(c => c.name)]);
+    const options = shuffle([correctNeighbor.name, ...nonNeighbors.slice(0, wrongN).map(c => c.name)]);
     return { options, correctIndex: options.indexOf(correctNeighbor.name) };
   };
   const buildShapeAnswerOptions = () => {
-    const optionCountries = shuffle([subject, ...shuffle(shapeCountries).slice(0, 3)]);
+    const optionCountries = shuffle([subject, ...shuffle(shapeCountries).slice(0, wrongN)]);
     return {
       optionCountries,
       options: optionCountries.map(c => c.name),
@@ -258,7 +259,7 @@ function buildQuestion(
     };
   };
   const buildFlagAnswerOptions = () => {
-    const optionCountries = shuffle([subject, ...shuffle(flagCountries).slice(0, 3)]);
+    const optionCountries = shuffle([subject, ...shuffle(flagCountries).slice(0, wrongN)]);
     return {
       optionCountries,
       options: optionCountries.map(c => c.name),
@@ -404,7 +405,7 @@ export default function GauntletScreen({ navigation }: Props) {
 
   const [phase, setPhase] = useState<Phase>('loading');
   const [question, setQuestion] = useState<GQuestion | null>(null);
-  const [btnStates, setBtnStates] = useState<BtnState[]>(['default', 'default', 'default', 'default']);
+  const [btnStates, setBtnStates] = useState<BtnState[]>(['default', 'default', 'default', 'default', 'default', 'default']);
   const [round, setRound] = useState(0);
   const [score, setScore] = useState(0);
   const [shields, setShields] = useState(0);
@@ -440,7 +441,7 @@ export default function GauntletScreen({ navigation }: Props) {
   const pausedFractionRef = useRef(1);
 
   // Drop zone refs for hit testing
-  const dropZoneRefs = useRef<Array<View | null>>([null, null, null, null]);
+  const dropZoneRefs = useRef<Array<View | null>>([]);
   const dropZoneMeasures = useRef<Array<{ x: number; y: number; w: number; h: number } | null>>([]);
 
   // Animated values
@@ -490,7 +491,7 @@ export default function GauntletScreen({ navigation }: Props) {
 
   function measureDropZones() {
     dropZoneRefs.current.forEach((ref, i) => {
-      ref?.measureInWindow((x, y, w, h) => {
+      ref?.measureInWindow?.((x, y, w, h) => {
         dropZoneMeasures.current[i] = { x, y, w, h };
       });
     });
@@ -575,7 +576,7 @@ export default function GauntletScreen({ navigation }: Props) {
         dragPos.flattenOffset();
         Animated.spring(dragScale, { toValue: 1, friction: 5, useNativeDriver: true }).start();
         setIsDragging(false);
-        setBtnStates(['default', 'default', 'default', 'default']);
+        setBtnStates(['default', 'default', 'default', 'default', 'default', 'default']);
 
         const dropped = findDropZone(gs.moveX, gs.moveY);
         if (dropped >= 0) {
@@ -592,7 +593,7 @@ export default function GauntletScreen({ navigation }: Props) {
         dragPos.flattenOffset();
         setIsDragging(false);
         snapDragBack();
-        setBtnStates(['default', 'default', 'default', 'default']);
+        setBtnStates(['default', 'default', 'default', 'default', 'default', 'default']);
       },
     })
   ).current;
@@ -785,7 +786,7 @@ export default function GauntletScreen({ navigation }: Props) {
       dragPos.setOffset({ x: 0, y: 0 });
       setIsDragging(false);
       dragScale.setValue(1);
-      setBtnStates(['default', 'default', 'default', 'default']);
+      setBtnStates(['default', 'default', 'default', 'default', 'default', 'default']);
 
       Animated.timing(answerFade, { toValue: 1, duration: 220, delay: 60, useNativeDriver: true }).start(() => {
         answeredRef.current = false;
@@ -1059,6 +1060,7 @@ export default function GauntletScreen({ navigation }: Props) {
             const optionCountry = q.optionCountries?.[i];
             const answerStyle = [
               styles.answerCard,
+              q.options.length > 4 && styles.answerCardSix,
               { backgroundColor: tier.cardBg, borderColor: tier.btnBorder },
               s === 'correct' && styles.answerCorrect,
               s === 'wrong' && styles.answerWrong,
@@ -1094,6 +1096,7 @@ export default function GauntletScreen({ navigation }: Props) {
             return (
               <AnimatedTouchable
                 key={`answer-${round}-${i}`}
+                ref={(r: any) => { dropZoneRefs.current[i] = r; }}
                 style={answerStyle}
                 onPress={() => handleAnswer(i)}
                 disabled={isAnswered}
@@ -1285,6 +1288,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginBottom: 14,
   },
+
+  answerCardSix: { minHeight: 84, paddingVertical: 8, marginBottom: 8 },
 
   promptText: {
     width: '100%',

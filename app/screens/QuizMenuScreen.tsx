@@ -121,8 +121,8 @@ export default function QuizMenuScreen({ navigation }: Props) {
   const rewardParts = (suffix: string) => {
     if (suffix === 'maxPrize') return { xpAmount: '1,000', suffix: t('quizMenu.maxPrize') };
     if (suffix === 'drawAccuracy') return { xpAmount: '0-50', suffix: t('quizMenu.byAccuracy') };
-    if (suffix === 'perCorrectOnly') return { suffix: t('quizMenu.perCorrect') };
-    return { xpAmount: suffix, suffix: t('quizMenu.perCorrect') };
+    if (suffix === 'perCorrectOnly') return {};
+    return { xpAmount: suffix };
   };
 
   const TICKET_COST = 500;
@@ -275,7 +275,6 @@ export default function QuizMenuScreen({ navigation }: Props) {
       {/* Inline header matching Shop */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={styles.headerTitle}>{t('quizzes.title')}</Text>
           <TouchableOpacity style={styles.infoBtn} onPress={showRewardsInfo}>
             <Text style={styles.infoBtnText}>?</Text>
           </TouchableOpacity>
@@ -359,7 +358,8 @@ export default function QuizMenuScreen({ navigation }: Props) {
           <Text style={{ color: '#93c5fd', textAlign: 'center', fontWeight: '700' }}>DEV · Infinite maps {devInfiniteMapsEnabled ? 'enabled' : 'disabled'} — tap to toggle</Text>
         </TouchableOpacity>}
         <DailyRewardModal inventoryRequest={inventoryRequest} onShopPotions={() => navigation.getParent()?.navigate('Shop', { initialTab: 'upgrades' })} />
-        {QUIZZES.map((quiz, index) => {
+        {(() => {
+        const renderQuiz = (quiz: (typeof QUIZZES)[number], index: number) => {
           let isLocked = false;
           let lockReason: 'upgrade_capitals' | 'upgrade_borders' | 'upgrade_border_draw' | 'trail_level' | null = null;
 
@@ -390,19 +390,14 @@ export default function QuizMenuScreen({ navigation }: Props) {
           return (
             <React.Fragment key={quiz.screen}>
             {isMillionaire && <Text style={styles.quizCategoryTitle}>{t('quizMenu.goBig')}</Text>}
-            {index > 0 && quiz.category !== QUIZZES[index - 1].category && (
-              <Text style={styles.quizCategoryTitle}>
-                {quiz.category === 'regular' ? t('quizMenu.regularQuizzes') : t('quizMenu.uniqueQuizzes')}
-              </Text>
-            )}
             <QuizCard
+              compact={quiz.category !== 'featured'}
               title={t(quiz.titleKey)}
-              goldRewardParts={{ amount: quiz.goldAmount, ...rewardParts(quiz.goldSuffix) }}
               iconNode={QUIZ_ICON_IMAGES[quiz.emoji] ? <Image source={QUIZ_ICON_IMAGES[quiz.emoji]} style={{ width: 42, height: 42 }} resizeMode="contain" /> : undefined}
               emoji={QUIZ_ICON_IMAGES[quiz.emoji] ? undefined : quiz.emoji}
               isLocked={isLocked}
               cardState={isLocked ? 'unique' : undefined}
-              costBadge={isMillionaire ? (
+              costBadge={isLocked && quiz.category !== 'featured' ? undefined : isMillionaire ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                   <Image source={require('../../assets/avatars/raffle_ticket.png')} style={{ width: 13, height: 13 }} resizeMode="contain" />
                   <Text style={{ color: '#aaa', fontSize: 12 }}>1 ticket</Text>
@@ -468,7 +463,16 @@ export default function QuizMenuScreen({ navigation }: Props) {
             />
             </React.Fragment>
           );
-        })}
+        };
+        // Regular and unique quizzes sit in 2-column grids; Millionaire keeps the full-width card
+        const grid = (cat: string, titleKey: string) => (
+          <React.Fragment key={cat}>
+            <Text style={styles.quizCategoryTitle}>{t(titleKey)}</Text>
+            <View style={styles.regularGrid}>{QUIZZES.map((q, i) => q.category === cat ? renderQuiz(q, i) : null)}</View>
+          </React.Fragment>
+        );
+        return [renderQuiz(QUIZZES[0], 0), grid('regular', 'quizMenu.regularQuizzes'), grid('unique', 'quizMenu.uniqueQuizzes')];
+        })()}
 
         <Text style={styles.quizCategoryTitle}>{t('quizMenu.legendaryQuizzes')}</Text>
         {(() => {
@@ -476,7 +480,6 @@ export default function QuizMenuScreen({ navigation }: Props) {
           return (
             <QuizCard
               title={t('quiz.gauntlet')}
-              goldRewardParts={{ amount: '25', xpAmount: '25', suffix: t('quizMenu.perCorrect') }}
               iconNode={<Image source={require('../../assets/avatars/galaxy.png')} style={{ width: 42, height: 42 }} resizeMode="contain" />}
               isLocked={gauntletLocked}
               cardState={gauntletLocked ? 'unique' : undefined}
@@ -518,11 +521,6 @@ export default function QuizMenuScreen({ navigation }: Props) {
           return (
             <QuizCard
               title={isUnlocked ? t('quiz.nightmare') : "???"}
-              goldRewardParts={isUnlocked ? {
-                amount: nightmareCompleted ? '2,000' : '50,000',
-                suffix: nightmareCompleted ? `/ ${t('quizMenu.repeatReward')}` : `/ ${t('quizMenu.oneTimeReward')}`,
-              } : undefined}
-              goldReward={!isUnlocked ? "???" : undefined}
               iconNode={<Image source={require('../../assets/avatars/beast_mark.png')} style={{ width: 42, height: 42 }} resizeMode="contain" />}
               onPress={async () => {
                 if (isUnlocked) {
@@ -729,6 +727,7 @@ const styles = StyleSheet.create({
   infoBtn: { width: 28, height: 28, borderRadius: 14, borderWidth: 1, borderColor: '#3a3a5e', alignItems: 'center', justifyContent: 'center' },
   infoBtnText: { color: '#aaa', fontSize: 14, fontWeight: '600' },
   container: { flexGrow: 1, padding: 12, justifyContent: 'center' },
+  regularGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   quizCategoryTitle: {
     color: '#d8b4fe',
     fontSize: 14,

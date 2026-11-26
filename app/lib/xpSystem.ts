@@ -31,7 +31,7 @@ export function getLevelInfo(totalXP: number): {
 
 // ─── XP Per Correct Answer ───────────────────────────────────────────────────
 
-const XP_PER_CORRECT: Partial<Record<QuizType, number>> = {
+export const XP_PER_CORRECT: Partial<Record<QuizType, number>> = {
   flag: 5,
   shape: 7,
   capitals: 12,

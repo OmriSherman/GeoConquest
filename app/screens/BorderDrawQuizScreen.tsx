@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import Svg, { Path as SvgPath } from 'react-native-svg';
+import Svg, { G, Path as SvgPath } from 'react-native-svg';
 import { geoMercator, geoPath } from 'd3-geo';
 import { mesh } from 'topojson-client';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -317,20 +317,87 @@ export default function BorderDrawQuizScreen({ navigation }: Props) {
     return unsub;
   }, [navigation, phase]);
 
+  // Pen on: one finger draws. Pen off (or after submit): one finger pans. Two fingers always pinch-zoom.
+  const [penOn, setPenOn] = useState(true);
+  const penOnRef = useRef(true);
+  penOnRef.current = penOn;
+  const submittedRef = useRef(false);
+  submittedRef.current = submitted;
+  const sizeRef = useRef({ w: 320, h: CANVAS_HEIGHT });
+  sizeRef.current = { w: canvasWidth, h: canvasHeight };
+  const viewRef = useRef({ s: 1, tx: 0, ty: 0 });
+  const [view, setView] = useState(viewRef.current);
+  const geoCache = useRef<{ key: string; data: ReturnType<typeof buildCombinedData> } | null>(null);
+  const gest = useRef({ n: 0, ox: 0, oy: 0, lastX: 0, lastY: 0, startDist: 1, startS: 1, pivotX: 0, pivotY: 0, drawing: false }).current;
+
+  function applyView(s: number, tx: number, ty: number) {
+    const { w, h } = sizeRef.current;
+    const sc = Math.min(8, Math.max(1, s));
+    const v = { s: sc, tx: Math.min(0, Math.max(w - w * sc, tx)), ty: Math.min(0, Math.max(h - h * sc, ty)) };
+    viewRef.current = v;
+    setView(v);
+  }
+
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       onPanResponderGrant: (evt) => {
-        const { locationX, locationY } = evt.nativeEvent;
-        setStrokes((all) => [...all, [[locationX, locationY]]]);
+        const ne = evt.nativeEvent;
+        gest.ox = ne.pageX - ne.locationX;
+        gest.oy = ne.pageY - ne.locationY;
+        gest.lastX = ne.pageX;
+        gest.lastY = ne.pageY;
+        gest.n = 1;
+        gest.drawing = false;
+        if (penOnRef.current && !submittedRef.current && ne.touches.length < 2) {
+          const { s: sc, tx, ty } = viewRef.current;
+          gest.drawing = true;
+          setStrokes((all) => [...all, [[(ne.locationX - tx) / sc, (ne.locationY - ty) / sc]]]);
+        }
       },
       onPanResponderMove: (evt) => {
-        const { locationX, locationY } = evt.nativeEvent;
-        setStrokes((all) => all.length
-          ? [...all.slice(0, -1), [...all[all.length - 1], [locationX, locationY]]]
-          : all);
+        const ts = evt.nativeEvent.touches;
+        const v = viewRef.current;
+        if (ts.length >= 2) {
+          const dist = Math.hypot(ts[0].pageX - ts[1].pageX, ts[0].pageY - ts[1].pageY) || 1;
+          const cx = (ts[0].pageX + ts[1].pageX) / 2 - gest.ox;
+          const cy = (ts[0].pageY + ts[1].pageY) / 2 - gest.oy;
+          if (gest.n !== 2) {
+            // a second finger landed: drop a stray dot the first finger may have started
+            if (gest.drawing) setStrokes((all) => (all.length && all[all.length - 1].length < 8 ? all.slice(0, -1) : all));
+            gest.drawing = false;
+            gest.n = 2;
+            gest.startDist = dist;
+            gest.startS = v.s;
+            gest.pivotX = (cx - v.tx) / v.s;
+            gest.pivotY = (cy - v.ty) / v.s;
+            return;
+          }
+          const sc = Math.min(8, Math.max(1, gest.startS * (dist / gest.startDist)));
+          applyView(sc, cx - gest.pivotX * sc, cy - gest.pivotY * sc);
+          return;
+        }
+        const x = ts[0].pageX;
+        const y = ts[0].pageY;
+        if (gest.n === 2) { // one finger left after a pinch: re-baseline, don't draw until a new touch
+          gest.n = 1;
+          gest.lastX = x;
+          gest.lastY = y;
+          return;
+        }
+        if (gest.drawing) {
+          const px = (x - gest.ox - v.tx) / v.s;
+          const py = (y - gest.oy - v.ty) / v.s;
+          setStrokes((all) => all.length ? [...all.slice(0, -1), [...all[all.length - 1], [px, py]]] : all);
+        } else if (!penOnRef.current || submittedRef.current) {
+          applyView(v.s, v.tx + (x - gest.lastX), v.ty + (y - gest.lastY));
+        }
+        gest.lastX = x;
+        gest.lastY = y;
       },
+      onPanResponderRelease: () => { gest.n = 0; gest.drawing = false; },
+      onPanResponderTerminate: () => { gest.n = 0; gest.drawing = false; },
     })
   ).current;
 
@@ -379,6 +446,7 @@ export default function BorderDrawQuizScreen({ navigation }: Props) {
     setSubmitted(false);
     setRating(null);
     setStrokes([]);
+    applyView(1, 0, 0);
   }
 
   function confirmQuit() {
@@ -417,7 +485,7 @@ export default function BorderDrawQuizScreen({ navigation }: Props) {
       <View style={styles.readyContainer}>
         <Image source={IMG_BORDER} style={styles.readyIcon} resizeMode="contain" />
         <Text style={styles.readyTitle}>{t('drawQuiz.title')}</Text>
-        <Text style={styles.readySubtitle}>{t('drawQuiz.subtitle')}{'\n'}{t('drawQuiz.round', { current: 1, total: ROUND_COUNT })}</Text>
+        <Text style={styles.readySubtitle}>{t('drawQuiz.subtitle')}</Text>
         <TouchableOpacity style={styles.readyBtn} onPress={() => { quizStartRef.current = Date.now(); setPhase('quiz'); }}>
           <Text style={styles.readyBtnText}>{t('quizCommon.letsGo')}</Text>
         </TouchableOpacity>
@@ -430,7 +498,9 @@ export default function BorderDrawQuizScreen({ navigation }: Props) {
 
   // ─── Quiz phase ─────────────────────────────────────────────────────────────
   const pair = pairs[qIndex];
-  const geoData = buildCombinedData(pair.countryA.cca2, pair.countryB.cca2, canvasWidth, canvasHeight);
+  const geoKey = `${qIndex}|${canvasWidth}|${canvasHeight}`;
+  if (geoCache.current?.key !== geoKey) geoCache.current = { key: geoKey, data: buildCombinedData(pair.countryA.cca2, pair.countryB.cca2, canvasWidth, canvasHeight) };
+  const geoData = geoCache.current.data;
   const userStrokePath = strokes.map(ptsToPath).join(' ');
   const pointCount = strokes.reduce((n, st) => n + st.length, 0);
 
@@ -504,60 +574,65 @@ export default function BorderDrawQuizScreen({ navigation }: Props) {
         }}
       >
         <Svg width={canvasWidth} height={canvasHeight}>
-          {geoData?.pathA && geoData?.pathB ? (
-            <SvgPath d={`${geoData.pathA} ${geoData.pathB}`} fill="#FFD700" stroke="none" fillRule="nonzero" />
-          ) : null}
-          {/* User stroke */}
-          {userStrokePath ? (
-            <SvgPath
-              d={userStrokePath}
-              stroke={submitted ? '#FF7043' : '#fff'}
-              strokeWidth={3}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              fill="none"
-            />
-          ) : null}
-          {/* Revealed border */}
-          {submitted && geoData?.borderSvgPath ? (
-            <SvgPath
-              d={geoData.borderSvgPath}
-              stroke="#4CAF50"
-              strokeWidth={3.5}
-              strokeDasharray="8,5"
-              strokeLinecap="round"
-              fill="none"
-            />
-          ) : null}
+          <G transform={`translate(${view.tx},${view.ty}) scale(${view.s})`}>
+            {geoData?.pathA && geoData?.pathB ? (
+              <SvgPath d={`${geoData.pathA} ${geoData.pathB}`} fill="#FFD700" stroke="none" fillRule="nonzero" />
+            ) : null}
+            {/* User stroke */}
+            {userStrokePath ? (
+              <SvgPath
+                d={userStrokePath}
+                stroke={submitted ? '#FF7043' : '#fff'}
+                strokeWidth={3 / view.s}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+              />
+            ) : null}
+            {/* Revealed border */}
+            {submitted && geoData?.borderSvgPath ? (
+              <SvgPath
+                d={geoData.borderSvgPath}
+                stroke="#4CAF50"
+                strokeWidth={3.5 / view.s}
+                strokeDasharray={`${8 / view.s},${5 / view.s}`}
+                strokeLinecap="round"
+                fill="none"
+              />
+            ) : null}
+          </G>
         </Svg>
 
-        {/* Touch capture layer - only when drawing */}
+        {/* Touch layer: draws, pans or pinch-zooms (also after submit, to inspect the result) */}
+        <View style={StyleSheet.absoluteFill} {...panResponder.panHandlers} />
+
+        {/* Result floats over the top of the map */}
+        {submitted && rating ? (
+          <Animated.View pointerEvents="none" style={[styles.ratingBadge, { transform: [{ scale: ratingScale }] }]}>
+            <Image source={RATING_IMG[rating]} style={styles.ratingIcon} resizeMode="contain" />
+            <Text style={[styles.ratingText, { color: RATING_COLOR[rating] }]}>
+              {getRatingLabel(rating)}
+            </Text>
+            <View style={styles.ratingGoldRow}>
+              <Text style={styles.ratingGold}>+{RATING_GOLD[rating]}</Text>
+              <Image source={IMG_GOLD_COIN} style={styles.ratingGoldIcon} resizeMode="contain" />
+            </View>
+          </Animated.View>
+        ) : null}
+
+        {/* Corner controls */}
         {!submitted && (
-          <View style={StyleSheet.absoluteFill} {...panResponder.panHandlers} />
+          <TouchableOpacity
+            style={[styles.penBtn, styles.penBtnOn]}
+            onPress={() => setPenOn((v) => !v)}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: penOn }}
+            accessibilityLabel="Pen"
+          >
+            <Text style={styles.penBtnText}>{penOn ? '✏️' : '✋'}</Text>
+          </TouchableOpacity>
         )}
       </View>
-
-      {/* Rating badge — below canvas so it never covers the border comparison */}
-      {submitted && rating ? (
-        <Animated.View style={[styles.ratingBadge, { transform: [{ scale: ratingScale }] }]}>
-          <Image source={RATING_IMG[rating]} style={styles.ratingIcon} resizeMode="contain" />
-          <Text style={[styles.ratingText, { color: RATING_COLOR[rating] }]}>
-            {getRatingLabel(rating)}
-          </Text>
-          <View style={styles.ratingGoldRow}>
-            <Text style={styles.ratingGold}>+{RATING_GOLD[rating]}</Text>
-            <Image source={IMG_GOLD_COIN} style={styles.ratingGoldIcon} resizeMode="contain" />
-          </View>
-        </Animated.View>
-      ) : null}
-
-      {/* Legend */}
-      {submitted && geoData?.borderSvgPath ? (
-        <View style={styles.legend}>
-          <Text style={styles.legendItem}>— <Text style={{ color: '#4CAF50' }}>{t('drawQuiz.actualBorder')}</Text></Text>
-          <Text style={styles.legendItem}>— <Text style={{ color: '#FF7043' }}>{t('drawQuiz.yourStroke')}</Text></Text>
-        </View>
-      ) : null}
 
       {/* Action buttons */}
       <View style={styles.actions}>
@@ -581,7 +656,7 @@ export default function BorderDrawQuizScreen({ navigation }: Props) {
         ) : (
           <TouchableOpacity style={styles.nextBtn} onPress={handleNext}>
             <Text style={styles.nextBtnText}>
-              {qIndex + 1 >= ROUND_COUNT ? t('drawQuiz.seeResults') : t('drawQuiz.next')}
+              {qIndex + 1 >= ROUND_COUNT ? t('drawQuiz.seeResults') : t('drawQuiz.next').replace(/\s*[→←]\s*/g, '')}
             </Text>
           </TouchableOpacity>
         )}
@@ -618,21 +693,21 @@ const styles = StyleSheet.create({
   resumeBtn: { backgroundColor: '#FFD700', paddingHorizontal: 42, paddingVertical: 14, borderRadius: 14 },
   resumeText: { color: '#0a0a1a', fontSize: 16, fontWeight: 'bold' },
 
-  countriesRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 10, gap: 8 },
-  countryCard: { flex: 1, alignItems: 'center', gap: 4, paddingVertical: 8, paddingHorizontal: 6, backgroundColor: '#111128', borderRadius: 12, borderWidth: 1, borderColor: '#2a2a4e' },
-  countryFlag: { fontSize: 28 },
+  countriesRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 6, gap: 8 },
+  countryCard: { flex: 1, alignItems: 'center', gap: 2, paddingVertical: 4, paddingHorizontal: 6, backgroundColor: '#111128', borderRadius: 12, borderWidth: 1, borderColor: '#2a2a4e' },
+  countryFlag: { fontSize: 22 },
   countryName: { color: '#fff', fontSize: 12, fontWeight: '600', textAlign: 'center' },
   dividerCol: { alignItems: 'center', gap: 4 },
-  dividerLine: { width: 1, height: 18, backgroundColor: '#2a2a4e' },
-  vsIcon: { width: 24, height: 24 },
+  dividerLine: { width: 1, height: 10, backgroundColor: '#2a2a4e' },
+  vsIcon: { width: 20, height: 20 },
 
-  prompt: { color: '#888', fontSize: 14, textAlign: 'center', marginBottom: 10, paddingHorizontal: 20 },
+  prompt: { color: '#888', fontSize: 14, textAlign: 'center', marginBottom: 6, paddingHorizontal: 20 },
 
   canvasWrapper: {
     marginHorizontal: 16,
     flex: 1,
     minHeight: 160,
-    maxHeight: 420,
+    maxHeight: 340,
     backgroundColor: '#111128',
     borderRadius: 16,
     borderWidth: 1,
@@ -640,18 +715,24 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
 
+  penBtn: { position: 'absolute', top: 8, right: 8, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(17,17,40,0.85)', borderWidth: 1, borderColor: '#2a2a4e', alignItems: 'center', justifyContent: 'center' },
+  penBtnOn: { borderColor: '#FFD700', backgroundColor: 'rgba(60,50,10,0.9)' },
+  penBtnText: { fontSize: 18, color: '#fff' },
+
   ratingBadge: {
+    position: 'absolute',
+    top: 10,
     alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: '#111128',
+    backgroundColor: 'rgba(17,17,40,0.92)',
     borderRadius: 14,
     paddingHorizontal: 20,
-    paddingVertical: 10,
-    marginTop: 12,
+    paddingVertical: 6,
     borderWidth: 1,
     borderColor: '#2a2a4e',
+    zIndex: 5,
   },
   ratingIcon: { width: 28, height: 28 },
   ratingText: { fontSize: 20, fontWeight: 'bold' },
@@ -662,13 +743,13 @@ const styles = StyleSheet.create({
   legend: { flexDirection: 'row', justifyContent: 'center', gap: 20, paddingTop: 8 },
   legendItem: { color: '#666', fontSize: 12 },
 
-  actions: { flexDirection: 'row', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 20, gap: 12 },
+  actions: { flexDirection: 'row', paddingHorizontal: 20, paddingTop: 8, paddingBottom: 14, gap: 12 },
   partsHint: { color: '#FFA500', fontSize: 13, fontWeight: '600', textAlign: 'center', marginTop: -6, marginBottom: 10, paddingHorizontal: 20 },
-  clearBtn: { flex: 1, borderWidth: 1, borderColor: '#333', borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
+  clearBtn: { flex: 1, borderWidth: 1, borderColor: '#333', borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
   clearBtnText: { color: '#888', fontWeight: 'bold', fontSize: 15 },
-  submitBtn: { flex: 2, backgroundColor: '#FFD700', borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
+  submitBtn: { flex: 2, backgroundColor: '#FFD700', borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
   submitBtnText: { color: '#0a0a1a', fontWeight: 'bold', fontSize: 15 },
-  nextBtn: { flex: 1, backgroundColor: '#FFD700', borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
+  nextBtn: { flex: 1, backgroundColor: '#FFD700', borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
   nextBtnText: { color: '#0a0a1a', fontWeight: 'bold', fontSize: 16 },
 
   backBtn: { borderWidth: 1, borderColor: '#FFD700', paddingHorizontal: 28, paddingVertical: 12, borderRadius: 12 },

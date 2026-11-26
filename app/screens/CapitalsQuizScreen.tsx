@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
@@ -26,11 +27,13 @@ import AvatarDisplay from '../components/AvatarDisplay';
 import QuitConfirmModal from '../components/QuitConfirmModal';
 import * as Speech from 'expo-speech';
 import { t } from '../lib/i18n';
+import DifficultyPicker from '../components/DifficultyPicker';
+import { DIFFICULTY_MULTIPLIER, QuizDifficulty, difficultyHooks, loadDifficulty, saveDifficulty } from '../lib/quizDifficulty';
 import { addQuizTabGuard } from '../lib/quizTabGuard';
 
 const GOLD_PER_CORRECT = 18;
 const AUTO_ADVANCE_DELAY_MS = 2500;
-const ANSWER_COLORS = ['#4FC3F7', '#F44336', '#FFD700', '#4CAF50'];
+const ANSWER_COLORS = ['#4FC3F7', '#F44336', '#FFD700', '#4CAF50', '#FF9800', '#B388FF'];
 
 type Props = {
   navigation: StackNavigationProp<QuizStackParamList, 'CapitalsQuiz'>;
@@ -39,6 +42,8 @@ type Props = {
 type AnswerState = 'default' | 'correct' | 'wrong' | 'disabled';
 
 export default function CapitalsQuizScreen({ navigation }: Props) {
+  const { height: winH } = useWindowDimensions();
+  const sixH = Math.round(winH * 0.12); // six-answer rectangles scale with the screen
   const { addGold } = useGame();
   const { profile, effectiveMaxTurns } = useAuth();
   
@@ -52,7 +57,7 @@ export default function CapitalsQuizScreen({ navigation }: Props) {
   const [animTrigger, setAnimTrigger] = useState(0);
   const [answeredCount, setAnsweredCount] = useState(0);
   const [buttonStates, setButtonStates] = useState<AnswerState[]>([
-    'default', 'default', 'default', 'default',
+    'default', 'default', 'default', 'default', 'default', 'default',
   ]);
   const [currentCombo, setCurrentCombo] = useState(0);
   const [answered, setAnswered] = useState(false);
@@ -61,6 +66,10 @@ export default function CapitalsQuizScreen({ navigation }: Props) {
   const [showInfoModal, setShowInfoModal] = useState(false);
   const [infoCountry, setInfoCountry] = useState<Country | null>(null);
   const [ready, setReady] = useState(false);
+  const [difficulty, setDifficultyState] = useState<QuizDifficulty>('medium');
+  const difficultyRef = useRef<QuizDifficulty>('medium');
+  const countriesRef = useRef<Country[]>([]);
+  const [building, setBuilding] = useState(false);
   const [paused, setPaused] = useState(false);
   const readyRef = useRef(false);
   readyRef.current = ready;
@@ -93,9 +102,11 @@ export default function CapitalsQuizScreen({ navigation }: Props) {
             throw new Error('OFFLINE_NO_PREMIUM');
           }
         }
-        const q = buildCapitalsQuizQuestions(countries, TOTAL_QUESTIONS, { reverseFirst: true });
-        setQuestions(q);
-        questionsRef.current = q;
+        countriesRef.current = countries;
+        const d = await loadDifficulty('capitals');
+        difficultyRef.current = d;
+        setDifficultyState(d);
+        await buildFor(d);
       } catch (e: any) {
         setError(e.message === 'OFFLINE_NO_PREMIUM'
           ? 'offline_upgrade'
@@ -159,6 +170,20 @@ export default function CapitalsQuizScreen({ navigation }: Props) {
     }, [navigation])
   );
 
+  async function buildFor(d: QuizDifficulty) {
+    const q = buildCapitalsQuizQuestions(countriesRef.current, TOTAL_QUESTIONS, { reverseFirst: true, ...difficultyHooks(d) });
+    setQuestions(q);
+    questionsRef.current = q;
+  }
+
+  async function selectDifficulty(d: QuizDifficulty) {
+    difficultyRef.current = d;
+    setDifficultyState(d);
+    saveDifficulty('capitals', d);
+    setBuilding(true);
+    try { await buildFor(d); } finally { setBuilding(false); }
+  }
+
   function handleAnswer(selectedIndex: number) {
     if (answered || paused) return;
     setAnswered(true);
@@ -181,7 +206,7 @@ export default function CapitalsQuizScreen({ navigation }: Props) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
       scoreRef.current += 1;
-      const totalEarned = Math.round(GOLD_PER_CORRECT * (1 + (comboRef.current - 1) * 0.1));
+      const totalEarned = Math.round(GOLD_PER_CORRECT * DIFFICULTY_MULTIPLIER[difficultyRef.current] * (1 + (comboRef.current - 1) * 0.1));
       
       goldRef.current += totalEarned;
       setScore(scoreRef.current);
@@ -227,6 +252,8 @@ export default function CapitalsQuizScreen({ navigation }: Props) {
         total: TOTAL_QUESTIONS,
         goldEarned: goldRef.current,
         quizType: 'capitals',
+        rewardMultiplier: DIFFICULTY_MULTIPLIER[difficultyRef.current],
+        difficulty: difficultyRef.current,
         elapsedSeconds: Math.floor((Date.now() - quizStartRef.current) / 1000),
       });
       return;
@@ -240,7 +267,7 @@ export default function CapitalsQuizScreen({ navigation }: Props) {
       currentIndexRef.current = nextIndex;
       setCurrentIndex(nextIndex);
       setAnswered(false);
-      setButtonStates(['default', 'default', 'default', 'default']);
+      setButtonStates(['default', 'default', 'default', 'default', 'default', 'default']);
       Animated.timing(fadeAnim, {
         toValue: 1,
         duration: 200,
@@ -308,8 +335,10 @@ export default function CapitalsQuizScreen({ navigation }: Props) {
         <Image source={require('../../assets/avatars/building.png')} style={{ width: 80, height: 80, marginBottom: 20 }} resizeMode="contain" />
         <Text style={styles.readyTitle}>{t('nav.capitalsQuiz').toUpperCase()}</Text>
         <Text style={styles.readySubtitle}>{t('capitalsQuiz.subtitle')}</Text>
+        <DifficultyPicker quiz="capitals" baseGold={GOLD_PER_CORRECT} value={difficulty} onChange={selectDifficulty} disabled={building} />
         <TouchableOpacity
-          style={styles.readyBtn}
+          style={[styles.readyBtn, building && { opacity: 0.5 }]}
+          disabled={building}
           onPress={() => {
             quizStartRef.current = Date.now();
             elapsedIntervalRef.current = setInterval(() => {
@@ -413,20 +442,20 @@ export default function CapitalsQuizScreen({ navigation }: Props) {
               </View>
             </View>
 
-            <View style={styles.answersSection}>
-              <View style={styles.answers}>
+            <View style={[styles.answersSection, { paddingBottom: 2 }]}>
+              <View style={[styles.answers, { height: sixH * 3 + 20 }, question.options.length <= 4 && { alignContent: 'space-around' }]}>
                 {question.options.map((option, i) => (
                   <AnswerButton
                     key={`${currentIndex}-${option.cca2}`}
                     label={isReverseQuestion ? option.capital : option.name}
-                    style={[styles.answerGridButton, buttonStates[i] === 'default' && { borderColor: ANSWER_COLORS[i % ANSWER_COLORS.length] }]}
+                    style={[styles.answerGridButton, { minHeight: question.options.length > 4 ? sixH : Math.round(sixH * 1.15), paddingVertical: 6 }, buttonStates[i] === 'default' && { borderColor: ANSWER_COLORS[i % ANSWER_COLORS.length] }]}
                     state={buttonStates[i]}
                     onPress={() => handleAnswer(i)}
                   />
                 ))}
               </View>
 
-              <Text style={[styles.tapHint, { opacity: answered ? 1 : 0 }]}>
+              <Text style={[styles.tapHint, { marginTop: 2 }, { opacity: answered ? 1 : 0 }]}>
                 {t('quizCommon.tapToContinue')}
               </Text>
             </View>
@@ -534,7 +563,7 @@ const styles = StyleSheet.create({
   earningsLabel: { color: '#666', fontSize: 13 },
   earningsDivider: { width: 1, height: 16, backgroundColor: '#2a2a4e' },
   quizBody: { flex: 1 },
-  questionCenter: { flex: 1, justifyContent: 'center', paddingHorizontal: 20, paddingTop: 8, paddingBottom: 28 },
+  questionCenter: { flex: 1, justifyContent: 'center', paddingHorizontal: 20, paddingTop: 4, paddingBottom: 4 },
   answersSection: { paddingHorizontal: 20, paddingBottom: 20 },
   centered: {
     flex: 1,

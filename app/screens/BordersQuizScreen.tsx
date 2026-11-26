@@ -8,11 +8,12 @@ import {
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { QuizStackParamList, QuizQuestion } from '../types';
+import { QuizStackParamList, QuizQuestion, Country } from '../types';
 import { buildBordersQuizQuestions, fetchCountries, getOfflineFullCountries, getCca3ToCca2Map } from '../lib/countryData';
 import { useGame } from '../context/GameContext';
 import { useAuth } from '../context/AuthContext';
@@ -25,12 +26,14 @@ import HeatStreakBadge from '../components/HeatStreakBadge';
 import ConfettiCannon from 'react-native-confetti-cannon';
 import QuitConfirmModal from '../components/QuitConfirmModal';
 import { t } from '../lib/i18n';
+import DifficultyPicker from '../components/DifficultyPicker';
+import { DIFFICULTY_MULTIPLIER, QuizDifficulty, difficultyHooks, loadDifficulty, saveDifficulty } from '../lib/quizDifficulty';
 import { isQuizEligibleCca2 } from '../lib/countryExclusions';
 import { addQuizTabGuard } from '../lib/quizTabGuard';
 
 const GOLD_PER_CORRECT = 20;
 const AUTO_ADVANCE_DELAY_MS = 2500;
-const ANSWER_COLORS = ['#4FC3F7', '#F44336', '#FFD700', '#4CAF50'];
+const ANSWER_COLORS = ['#4FC3F7', '#F44336', '#FFD700', '#4CAF50', '#FF9800', '#B388FF'];
 
 type Props = {
   navigation: StackNavigationProp<QuizStackParamList, 'BordersQuiz'>;
@@ -39,6 +42,8 @@ type Props = {
 type AnswerState = 'default' | 'correct' | 'wrong' | 'disabled';
 
 export default function BordersQuizScreen({ navigation }: Props) {
+  const { height: winH } = useWindowDimensions();
+  const sixH = Math.round(winH * 0.12); // six-answer rectangles scale with the screen
   const { addGold } = useGame();
   const { profile, effectiveMaxTurns } = useAuth();
   const TOTAL_QUESTIONS = effectiveMaxTurns;
@@ -50,11 +55,15 @@ export default function BordersQuizScreen({ navigation }: Props) {
   const [goldDelta, setGoldDelta] = useState(0);
   const [animTrigger, setAnimTrigger] = useState(0);
   const [answeredCount, setAnsweredCount] = useState(0);
-  const [buttonStates, setButtonStates] = useState<AnswerState[]>(['default', 'default', 'default', 'default']);
+  const [buttonStates, setButtonStates] = useState<AnswerState[]>(['default', 'default', 'default', 'default', 'default', 'default']);
   const [currentCombo, setCurrentCombo] = useState(0);
   const [showConfetti, setShowConfetti] = useState(false);
   const [answered, setAnswered] = useState(false);
   const [ready, setReady] = useState(false);
+  const [difficulty, setDifficultyState] = useState<QuizDifficulty>('medium');
+  const difficultyRef = useRef<QuizDifficulty>('medium');
+  const countriesRef = useRef<Country[]>([]);
+  const [building, setBuilding] = useState(false);
   const [paused, setPaused] = useState(false);
   const readyRef = useRef(false);
   readyRef.current = ready;
@@ -124,9 +133,11 @@ export default function BordersQuizScreen({ navigation }: Props) {
             throw new Error('OFFLINE_NO_PREMIUM');
           }
         }
-        const q = buildBordersQuizQuestions(countries, TOTAL_QUESTIONS);
-        setQuestions(q);
-        questionsRef.current = q;
+        countriesRef.current = countries;
+        const d = await loadDifficulty('borders');
+        difficultyRef.current = d;
+        setDifficultyState(d);
+        await buildFor(d);
       } catch (e: any) {
         setError(e.message === 'OFFLINE_NO_PREMIUM'
           ? 'offline_upgrade'
@@ -141,6 +152,20 @@ export default function BordersQuizScreen({ navigation }: Props) {
       if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current);
     };
   }, []);
+
+  async function buildFor(d: QuizDifficulty) {
+    const q = buildBordersQuizQuestions(countriesRef.current, TOTAL_QUESTIONS, difficultyHooks(d));
+    setQuestions(q);
+    questionsRef.current = q;
+  }
+
+  async function selectDifficulty(d: QuizDifficulty) {
+    difficultyRef.current = d;
+    setDifficultyState(d);
+    saveDifficulty('borders', d);
+    setBuilding(true);
+    try { await buildFor(d); } finally { setBuilding(false); }
+  }
 
   function handleAnswer(selectedIndex: number) {
     if (answered || paused) return;
@@ -164,7 +189,7 @@ export default function BordersQuizScreen({ navigation }: Props) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
       scoreRef.current += 1;
-      const totalEarned = Math.round(GOLD_PER_CORRECT * (1 + (comboRef.current - 1) * 0.1));
+      const totalEarned = Math.round(GOLD_PER_CORRECT * DIFFICULTY_MULTIPLIER[difficultyRef.current] * (1 + (comboRef.current - 1) * 0.1));
       
       goldRef.current += totalEarned;
       setScore(scoreRef.current);
@@ -203,6 +228,8 @@ export default function BordersQuizScreen({ navigation }: Props) {
         total: TOTAL_QUESTIONS,
         goldEarned: goldRef.current,
         quizType: 'borders',
+        rewardMultiplier: DIFFICULTY_MULTIPLIER[difficultyRef.current],
+        difficulty: difficultyRef.current,
         elapsedSeconds: Math.floor((Date.now() - quizStartRef.current) / 1000),
       });
       return;
@@ -216,7 +243,7 @@ export default function BordersQuizScreen({ navigation }: Props) {
       currentIndexRef.current = nextIndex;
       setCurrentIndex(nextIndex);
       setAnswered(false);
-      setButtonStates(['default', 'default', 'default', 'default']);
+      setButtonStates(['default', 'default', 'default', 'default', 'default', 'default']);
       Animated.timing(fadeAnim, {
         toValue: 1,
         duration: 200,
@@ -265,8 +292,10 @@ export default function BordersQuizScreen({ navigation }: Props) {
         <Image source={require('../../assets/avatars/border.png')} style={{ width: 80, height: 80, marginBottom: 20 }} resizeMode="contain" />
         <Text style={styles.readyTitle}>{t('nav.bordersQuiz').toUpperCase()}</Text>
         <Text style={styles.readySubtitle}>{t('bordersQuiz.subtitle')}</Text>
+        <DifficultyPicker quiz="borders" baseGold={GOLD_PER_CORRECT} value={difficulty} onChange={selectDifficulty} disabled={building} />
         <TouchableOpacity
-          style={styles.readyBtn}
+          style={[styles.readyBtn, building && { opacity: 0.5 }]}
+          disabled={building}
           onPress={() => {
             quizStartRef.current = Date.now();
             elapsedIntervalRef.current = setInterval(() => {
@@ -345,20 +374,20 @@ export default function BordersQuizScreen({ navigation }: Props) {
               </View>
             </View>
 
-            <View style={styles.answersSection}>
-              <View style={styles.answers}>
+            <View style={[styles.answersSection, { paddingBottom: 2 }]}>
+              <View style={[styles.answers, { height: sixH * 3 + 20 }, question.options.length <= 4 && { alignContent: 'space-around' }]}>
                 {question.options.map((option, i) => (
                   <AnswerButton
                     key={`${currentIndex}-${option.cca2}`}
                     label={option.name}
-                    style={[styles.answerGridButton, buttonStates[i] === 'default' && { borderColor: ANSWER_COLORS[i % ANSWER_COLORS.length] }]}
+                    style={[styles.answerGridButton, { minHeight: question.options.length > 4 ? sixH : Math.round(sixH * 1.15), paddingVertical: 6 }, buttonStates[i] === 'default' && { borderColor: ANSWER_COLORS[i % ANSWER_COLORS.length] }]}
                     state={buttonStates[i]}
                     onPress={() => handleAnswer(i)}
                   />
                 ))}
               </View>
 
-              <Text style={[styles.tapHint, { opacity: answered ? 1 : 0 }]}>
+              <Text style={[styles.tapHint, { marginTop: 2 }, { opacity: answered ? 1 : 0 }]}>
                 {t('quizCommon.tapToContinue')}
               </Text>
 
@@ -396,7 +425,7 @@ const styles = StyleSheet.create({
   earningsLabel: { color: '#666', fontSize: 13 },
   earningsDivider: { width: 1, height: 16, backgroundColor: '#2a2a4e' },
   quizBody: { flex: 1 },
-  questionCenter: { flex: 1, justifyContent: 'center', paddingHorizontal: 20, paddingTop: 8, paddingBottom: 28 },
+  questionCenter: { flex: 1, justifyContent: 'center', paddingHorizontal: 20, paddingTop: 4, paddingBottom: 4 },
   answersSection: { paddingHorizontal: 20, paddingBottom: 20 },
   centered: { flex: 1, backgroundColor: '#0a0a1a', alignItems: 'center', justifyContent: 'center', gap: 12 },
   loadingText: { color: '#aaa', fontSize: 16 },
@@ -411,8 +440,8 @@ const styles = StyleSheet.create({
   comboText: { color: '#ff8888', fontWeight: 'bold', fontSize: 13 },
   scoreFill: { height: '100%', backgroundColor: '#FFD700', borderRadius: 2 },
   questionArea: { padding: 20 },
-  prompt: { color: '#fff', fontSize: 20, fontWeight: 'bold', textAlign: 'center', marginBottom: 16, marginTop: 4 },
-  shapeContainer: { backgroundColor: '#1a1a2e', borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#2a2a4e', marginBottom: 20 },
+  prompt: { color: '#fff', fontSize: 20, fontWeight: 'bold', textAlign: 'center', marginBottom: 8, marginTop: 4 },
+  shapeContainer: { backgroundColor: '#1a1a2e', borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#2a2a4e', marginBottom: 8 },
   answers: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   answerGridButton: { width: '48%', minHeight: 84, marginVertical: 0, paddingHorizontal: 10 },
   tapHint: { color: '#555', fontSize: 12, textAlign: 'center', marginTop: 16 },

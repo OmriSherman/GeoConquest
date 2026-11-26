@@ -92,7 +92,7 @@ function achIconNode(key: string | undefined, fallbackKey: string) {
 }
 
 export default function QuizResultsScreen({ navigation, route }: Props) {
-  const { score, total, goldEarned, quizType, elapsedSeconds, tierAccent, tierLabel, tierBg, rewardMultiplier = 1, millionairePowerUpsUsed, xpOverride, penaltyPercent } = route.params;
+  const { score, total, goldEarned, quizType, elapsedSeconds, tierAccent, tierLabel, tierBg, rewardMultiplier = 1, millionairePowerUpsUsed, xpOverride, penaltyPercent, difficulty } = route.params;
   const percentage = Math.round((score / total) * 100);
   const { showToast } = useToast();
   const { user, addXP, addGold, profile, refreshProfile, incrementQuizCount, nextQuizBoostActive, setNextQuizBoostActive, consumeNextQuizBoost, refundMap, maps, deductMap, mapsNextRefillAt, mapsAdsUsedToday, grantAdMap, unlockedItems, devInfiniteMapsEnabled } = useAuth();
@@ -452,13 +452,16 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
           gold_earned: goldEarned, total_questions: total,
           xp_earned: baseEffectiveXp, potion_base_xp: xp,
           client_result_key: route.key,
+          ...(difficulty ? { difficulty } : null),
         };
         // Same key on retry: the database grants potion bonuses only once.
         let saved = await supabase.from('quiz_results').insert(payload)
           .select('potion_xp_bonus,potion_gold_bonus,potions_used').maybeSingle();
         const firstError = saved.error;
         if (saved.error) {
-          saved = await supabase.from('quiz_results').insert(payload)
+          // Retry without the difficulty column in case its migration hasn't been applied yet
+          const { difficulty: _difficulty, ...legacyPayload } = payload as typeof payload & { difficulty?: string };
+          saved = await supabase.from('quiz_results').insert(legacyPayload)
             .select('potion_xp_bonus,potion_gold_bonus,potions_used').maybeSingle();
         }
         if (!saved.data) {

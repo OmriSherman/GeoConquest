@@ -19,9 +19,11 @@ interface Props {
   costBadge?: React.ReactNode;
   /** If true, play single blink animation */
   shouldBlink?: boolean;
+  /** Vertical card for the 2x2 grid */
+  compact?: boolean;
 }
 
-export default function QuizCard({ title, goldReward, goldRewardParts, xpReward, emoji, onPress, style, iconNode, isLocked, cardState, costBadge, shouldBlink }: Props) {
+export default function QuizCard({ title, goldReward, goldRewardParts, xpReward, emoji, onPress, style, iconNode, isLocked, cardState, costBadge, shouldBlink, compact }: Props) {
   const isNightmare = !isLocked && (title === '???' || title.toLowerCase().includes('nightmare'));
   const palette = isLocked ? CARD_PALETTES.unique : cardState && cardState !== 'normal' ? CARD_PALETTES[cardState] : null;
 
@@ -47,7 +49,7 @@ export default function QuizCard({ title, goldReward, goldRewardParts, xpReward,
   }, [shouldBlink, glowOpacity]);
 
   return (
-    <View>
+    <View style={compact ? { width: '48.5%' } : undefined}>
       {shouldBlink && (
         <Animated.View
           style={{
@@ -67,6 +69,7 @@ export default function QuizCard({ title, goldReward, goldRewardParts, xpReward,
       <TouchableOpacity
         style={[
           styles.card,
+          compact && styles.cardCompact,
           isLocked && { opacity: 0.6 },
           palette && { backgroundColor: palette.cardBg, borderColor: palette.cardBorder, borderWidth: 2 },
           style,
@@ -75,23 +78,18 @@ export default function QuizCard({ title, goldReward, goldRewardParts, xpReward,
         onPress={onPress}
         activeOpacity={isLocked ? 1 : 0.85}
       >
-      <View style={[styles.left, isNightmare && { backgroundColor: '#1a0000', borderColor: '#400', borderWidth: 1 }]}>
+      {compact && isLocked && <Image source={require('../../assets/avatars/lock.png')} style={styles.lockCorner} resizeMode="contain" />}
+      <View style={[styles.left, compact && styles.leftCompact, isNightmare && { backgroundColor: '#1a0000', borderColor: '#400', borderWidth: 1 }]}>
         {iconNode ? iconNode : <Text style={styles.emoji}>{emoji}</Text>}
       </View>
-      <View style={styles.body}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-            <Text style={[styles.title, isNightmare && { color: '#ff3333', textShadowColor: '#ff0000', textShadowRadius: 8, fontSize: 20, letterSpacing: 4 }]}>
+      <View style={[styles.body, compact && styles.bodyCompact]}>
+        <View style={{ flexDirection: compact ? 'column' : 'row', alignItems: compact ? 'flex-start' : 'center', justifyContent: 'space-between', gap: compact ? 3 : 0 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', flex: compact ? 0 : 1 }}>
+            <Text style={[styles.title, compact && { fontSize: 15 }, isNightmare && { color: '#ff3333', textShadowColor: '#ff0000', textShadowRadius: 8, fontSize: 20, letterSpacing: 4 }]}>
               {title}
             </Text>
-            {isLocked && (
-              <Image
-                source={require('../../assets/avatars/lock.png')}
-                style={{ width: 14, height: 14, marginLeft: 6 }}
-                resizeMode="contain"
-              />
-            )}
           </View>
+          {compact && !costBadge && <View style={styles.costBadgeSpacer} />}
           {!!costBadge && (
             <View style={styles.costBadge}>
               {typeof costBadge === 'string'
@@ -141,15 +139,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#1a1a2e',
     borderRadius: 16,
-    padding: 18,
+    padding: 12,
     marginVertical: 5,
     borderWidth: 1,
     borderColor: '#2a2a4e',
     gap: 14,
   },
+  cardCompact: { padding: 10, gap: 10 },
+  bodyCompact: { flex: 1 },
+  costBadgeSpacer: { height: 0 },
+  lockCorner: { position: 'absolute', top: 6, right: 6, width: 16, height: 16 },
+  leftCompact: { width: 50, height: 50, borderRadius: 12 },
   left: {
-    width: 62,
-    height: 62,
+    width: 54,
+    height: 54,
     borderRadius: 14,
     backgroundColor: '#0a0a2a',
     alignItems: 'center',
