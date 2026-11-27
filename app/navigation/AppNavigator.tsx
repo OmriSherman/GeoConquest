@@ -44,6 +44,8 @@ import MillionaireQuizScreen from '../screens/MillionaireQuizScreen';
 import NightmareQuizScreen from '../screens/NightmareQuizScreen';
 import GauntletScreen from '../screens/GauntletScreen';
 import BorderDrawQuizScreen from '../screens/BorderDrawQuizScreen';
+import CompassQuizScreen from '../screens/CompassQuizScreen';
+import DailyChallengeScreen from '../screens/DailyChallengeScreen';
 import QuizResultsScreen from '../screens/QuizResultsScreen';
 import ShopScreen from '../screens/ShopScreen';
 import GoldShopScreen from '../screens/GoldShopScreen';
@@ -141,6 +143,11 @@ function QuizNavigator() {
         name="BorderDrawQuiz"
         component={BorderDrawQuizScreen}
         options={{ title: t('nav.drawBorder') }}
+      />
+      <QuizStack.Screen
+        name="CompassQuiz"
+        component={CompassQuizScreen}
+        options={{ title: t('compass.title') }}
       />
       <QuizStack.Screen
         name="QuizResults"

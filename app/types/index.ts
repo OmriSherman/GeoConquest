@@ -74,7 +74,7 @@ export interface OwnedCountry {
 
 // ─── Quiz ─────────────────────────────────────────────────────────────────────
 
-export type QuizType = 'flag' | 'shape' | 'borders' | 'millionaire' | 'capitals' | 'nightmare' | 'trail' | 'gauntlet' | 'draw';
+export type QuizType = 'flag' | 'shape' | 'borders' | 'millionaire' | 'capitals' | 'nightmare' | 'trail' | 'gauntlet' | 'draw' | 'compass';
 
 export interface QuizResult {
   id: string;
@@ -153,6 +153,7 @@ export type QuizStackParamList = {
   QuizResults: {
     score: number;
     total: number;
+  CompassQuiz: undefined;
     goldEarned: number;
     quizType: QuizType;
     quizMode?: 'standard' | 'easy';
@@ -205,3 +206,4 @@ export const GOLD_REWARDS: Record<QuizType, number> = {
   gauntlet: 0,    // per-round gold is calculated dynamically in GauntletScreen
   draw: 0,        // per-question gold calculated dynamically based on drawing accuracy
 };
+  compass: 50,

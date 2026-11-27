@@ -137,6 +137,16 @@ export function playDingStreak(combo: number) {
   return playSfx(sources[safeCombo - 1]);
 }
 
+/** Compass Quiz: bright rising chime for a bullseye (within 5 deg) */
+export function playCompassBullseye() {
+  return playSfx(require('../assets/sfx/compass_bullseye.wav'));
+}
+
+/** Compass Quiz: soft single note for a near miss (10-30 deg) */
+export function playCompassClose() {
+  return playSfx(require('../assets/sfx/compass_close.wav'));
+}
+
 /** Wrong answer buzz */
 export function playWrong() {
   return playSfx(require('../assets/sfx/wrong.wav'));

@@ -33,11 +33,12 @@ const QUIZ_ICON_IMAGES: Record<string, any> = {
   '🗺️': require('../../assets/avatars/shape.png'),
   '🏛️': require('../../assets/avatars/building.png'),
   '🧩': require('../../assets/avatars/border.png'),
-  '🧭': require('../../assets/avatars/compass.png'),
+  '🧭': require('../../assets/avatars/ancient_map.png'), // Trail
   '💰': require('../../assets/avatars/gold_bag.png'),
   '✏️': require('../../assets/avatars/border_drawing_quiz.png'),
 };
 
+  '🐦': require('../../assets/avatars/compass.png'), // Compass Quiz
 
 const QUIZZES = [
   {
@@ -98,6 +99,14 @@ const QUIZZES = [
   },
 ];
 
+  {
+    screen: 'CompassQuiz' as const,
+    category: 'unique',
+    titleKey: 'compass.tile',
+    goldAmount: '16',
+    goldSuffix: '10',
+    emoji: '🐦',
+  },
 export default function QuizMenuScreen({ navigation }: Props) {
   const { ticketAdsRemaining, ticketAdReward } = useAuth();
   const { disabledUpgrades, unlockedItems, profile, purchaseTicket, purchaseTickets, maps, mapsNextRefillAt, mapsAdsUsedToday, deductMap, grantAdMap, syncMaps, devConquerorEnabled, setDevConquerorEnabled, devInfiniteMapsEnabled, setDevInfiniteMapsEnabled, devOwnAllItems, setDevOwnAllItems } = useAuth();
@@ -361,7 +370,7 @@ export default function QuizMenuScreen({ navigation }: Props) {
         {(() => {
         const renderQuiz = (quiz: (typeof QUIZZES)[number], index: number) => {
           let isLocked = false;
-          let lockReason: 'upgrade_capitals' | 'upgrade_borders' | 'upgrade_border_draw' | 'trail_level' | null = null;
+          let lockReason: 'upgrade_capitals' | 'upgrade_borders' | 'upgrade_border_draw' | 'trail_level' | 'compass_level' | null = null;
 
           if (quiz.screen === 'CapitalsQuiz') {
             isLocked = DEV_MODE ? previewQuizLocks : !unlockedItems.has('upgrade_capitals');
@@ -381,6 +390,9 @@ export default function QuizMenuScreen({ navigation }: Props) {
 
           // Map quiz screens to achievement IDs for highlighting
           const achievementIdForQuiz: Record<string, string> = {
+          } else if (quiz.screen === 'CompassQuiz') {
+            isLocked = DEV_MODE ? previewQuizLocks : playerLevel < cfg('level.compass');
+            if (isLocked) lockReason = 'compass_level';
             'FlagQuiz': 'flag_mastery_30s',
             'CapitalsQuiz': 'ground_invasion',
           };
@@ -408,6 +420,11 @@ export default function QuizMenuScreen({ navigation }: Props) {
                   <Text style={{ color: CARD_PALETTES.unique.badgeColor, fontSize: 12, fontWeight: '700' }}>Lvl 40</Text>
                 </View>
               ) : isLocked && lockReason === 'upgrade_border_draw' ? (
+              ) : lockReason === 'compass_level' ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Image source={require('../../assets/avatars/lock.png')} style={{ width: 12, height: 12 }} resizeMode="contain" />
+                  <Text style={{ color: CARD_PALETTES.unique.badgeColor, fontSize: 12, fontWeight: '700' }}>Lvl {cfg('level.compass')}</Text>
+                </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 14, height: 14 }} resizeMode="contain" /><Text style={{ color: '#FFD700', fontSize: 12, fontWeight: '700' }}>50,000</Text></View>
               ) : isLocked ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><Image source={require('../../assets/avatars/lock.png')} style={{ width: 12, height: 12 }} resizeMode="contain" /><Text style={{ color: CARD_PALETTES.unique.badgeColor, fontSize: 12, fontWeight: '700' }}>Quest</Text></View>
@@ -416,7 +433,13 @@ export default function QuizMenuScreen({ navigation }: Props) {
               shouldBlink={shouldBlink}
               onPress={async () => {
                 if (isLocked) {
-                  if (lockReason === 'trail_level') {
+                  if (lockReason === 'compass_level') {
+                    showAlert({
+                      variant: 'unique',
+                      title: t('compass.lockedTitle'),
+                      message: t('quizMenu.reachLevelBody', { level: cfg('level.compass'), quiz: t('compass.title'), current: playerLevel }),
+                    });
+                  } else if (lockReason === 'trail_level') {
                     showAlert({
                       variant: 'unique',
                       title: t('quizMenu.trailLocked'),

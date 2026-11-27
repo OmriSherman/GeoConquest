@@ -61,11 +61,12 @@ const SHARE_QUIZ_ICON_IMAGES: Record<string, any> = {
   shape: require('../../assets/avatars/shape.png'),
   capitals: require('../../assets/avatars/building.png'),
   borders: require('../../assets/avatars/border.png'),
-  trail: require('../../assets/avatars/compass.png'),
+  trail: require('../../assets/avatars/ancient_map.png'),
   millionaire: require('../../assets/avatars/gold_bag.png'),
   nightmare: require('../../assets/avatars/skull.png'),
   gauntlet: require('../../assets/avatars/crucible.png'),
 };
+  compass: require('../../assets/avatars/compass.png'),
 let ViewShot: any = FallbackView;
 let captureRef: ((ref: any, opts?: any) => Promise<string>) | null = null;
 try {
@@ -153,6 +154,7 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
     nightmare: t('nav.nightmareMode'),
     gauntlet: t('quiz.gauntlet'),
   };
+    compass: t('compass.title'),
 
   function buildShareMessage() {
     return `This is how much I scored in the quiz, think you can do better?\nGeoConquest - find us on ${STORE_NAME}\n${STORE_URL}`;
@@ -668,6 +670,7 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
     if (quizType === 'gauntlet') {
       const GAUNTLET_RATINGS: Record<string, { imageSource: any; label: string }> = {
         ETERNITY: { imageSource: require('../../assets/gauntlet/gauntlet_eternity.png'), label: 'Eternal Champion!'  },
+    else if (quizType === 'compass') navigation.replace('CompassQuiz' as any);
         OBLIVION: { imageSource: require('../../assets/gauntlet/gauntlet_oblivion.png'), label: 'Almost out'         },
         INFERNO:  { imageSource: require('../../assets/gauntlet/gauntlet_inferno.png'),  label: 'Fueled The Inferno' },
         HELL:     { imageSource: require('../../assets/gauntlet/gauntlet_hell.png'),     label: 'A Fresh Soul..'     },
