@@ -27,7 +27,7 @@ import { useAuth } from '../context/AuthContext';
 import EarningsStrip from '../components/EarningsStrip';
 import QuitConfirmModal from '../components/QuitConfirmModal';
 import { playCompassBullseye, playCompassClose, playDingStreak, playTick, playWrong } from '../lib/audio';
-import { XpAmount } from '../components/XpIcon';
+import { XpIcon } from '../components/XpIcon';
 import { addQuizTabGuard } from '../lib/quizTabGuard';
 import { cfg, serverRewardsFor } from '../lib/gameConfig';
 import { t } from '../lib/i18n';
@@ -465,10 +465,13 @@ export default function CompassQuizScreen({ navigation }: Props) {
             <View key={row.label} style={styles.tierRow}>
               <Text style={[styles.tierLabel, { color: row.color }]} numberOfLines={1}>{row.label}</Text>
               <Text style={styles.tierDeg}>{row.deg}</Text>
-              <View style={styles.tierReward}>
-                <Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 14, height: 14 }} resizeMode="contain" />
+              <View style={styles.tierCell}>
+                <View style={styles.tierIcon}><Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 16, height: 16 }} resizeMode="contain" /></View>
                 <Text style={styles.tierGold}>{Math.round(cfg('quiz.gold.compass') * row.w)}</Text>
-                <XpAmount amount={Math.round(cfg('quiz.xp.compass') * row.w)} textStyle={styles.tierXp} />
+              </View>
+              <View style={styles.tierCell}>
+                <View style={styles.tierIcon}><XpIcon size={12} /></View>
+                <Text style={styles.tierXp}>{Math.round(cfg('quiz.xp.compass') * row.w)}</Text>
               </View>
             </View>
           ))}
@@ -650,7 +653,9 @@ const styles = StyleSheet.create({
   tierRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, gap: 8 },
   tierLabel: { flex: 1, fontSize: 14, fontWeight: '700' },
   tierDeg: { color: '#888', fontSize: 13, width: 52, textAlign: 'center' },
-  tierReward: { flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 110, justifyContent: 'flex-end' },
+  // fixed-width cells so every row's icons and numbers line up in the same columns
+  tierCell: { width: 64, flexDirection: 'row', alignItems: 'center', gap: 4 },
+  tierIcon: { width: 18, height: 18, alignItems: 'center', justifyContent: 'center' },
   tierGold: { color: '#FFD700', fontSize: 14, fontWeight: 'bold' },
   tierXp: { color: '#b995ef', fontSize: 14, fontWeight: 'bold' },
   readyContainer: { flex: 1, backgroundColor: '#0a0a1a', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
