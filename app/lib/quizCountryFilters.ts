@@ -8,9 +8,12 @@ export { QUIZ_EXCLUDED_CCA2 };
 // or not at all in the silhouette quiz flow.
 export const SHAPE_QUESTION_EXCLUDED_CCA2 = new Set<string>([
   'GP', 'MQ', 'YT', 'RE', 'PM', 'BL', 'MF', 'CX', 'CC', 'HM', 'NF', 'CK',
-  'NU', 'TK', 'WF', 'AX', 'SJ', 'BV', 'TF', 'UM', 'GG', 'JE', 'IM', 'GI',
+  'NU', 'TK', 'WF', 'AX', 'BV', 'TF', 'UM', 'GG', 'JE', 'IM', 'GI',
   'FK', 'FJ', 'PS',
 ]);
+
+// Tiny but hand-drawn outlines that are fine for shape questions despite the area cutoff.
+const SHAPE_AREA_EXEMPT_CCA2 = new Set<string>(['VA']);
 
 export function isQuizEligibleCountry(country: Country): boolean {
   return isQuizEligibleCca2(country.cca2);
@@ -19,7 +22,7 @@ export function isQuizEligibleCountry(country: Country): boolean {
 export function isShapeQuizEligibleCountry(country: Country): boolean {
   return (
     isQuizEligibleCountry(country) &&
-    Number(country.area || 0) > 1000 &&
+    (Number(country.area || 0) > 1000 || SHAPE_AREA_EXEMPT_CCA2.has(country.cca2)) &&
     !SHAPE_QUESTION_EXCLUDED_CCA2.has(country.cca2) &&
     hasCountryShape(country.cca2)
   );

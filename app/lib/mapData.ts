@@ -1,5 +1,6 @@
 import { feature } from 'topojson-client';
 import { geoPath, geoMercator } from 'd3-geo';
+import { trimToMainland } from './mainland';
 
 // We import the huge JSON directly so it bundles offline
 import worldAtlas from '../assets/map/countries-50m.json';
@@ -26,11 +27,15 @@ export function getMapFeatures() {
 
     cachedFeatures = filteredFeatures.map((f: any) => {
         const svgPath = pathGenerator(f);
+        // Mainland-only outline: focus/zoom frames this, not the far-flung overseas parts.
+        const mainland = trimToMainland(String(f.id), f);
         return {
             name: f.properties.name,
             d: svgPath,
             bounds: pathGenerator.bounds(f),
             centroid: pathGenerator.centroid(f),
+            focusBounds: pathGenerator.bounds(mainland),
+            focusCentroid: pathGenerator.centroid(mainland),
             rawFeature: f
         };
     });

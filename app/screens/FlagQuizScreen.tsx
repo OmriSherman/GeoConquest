@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Animated,
   Image,
-  Modal,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -15,11 +14,11 @@ import * as Haptics from 'expo-haptics';
 import { useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { QuizStackParamList, QuizQuestion, Country, cca2ToFlagEmoji } from '../types';
-import { buildQuizQuestions, fetchCountries, getOfflineFlagCountries, getCca3ToCca2Map } from '../lib/countryData';
+import { buildQuizQuestions, fetchCountries, getOfflineFlagCountries } from '../lib/countryData';
 import { useGame } from '../context/GameContext';
 import AnswerButton from '../components/AnswerButton';
 import EarningsStrip from '../components/EarningsStrip';
-import WorldMapView from '../components/WorldMapView';
+import CountryLearnModal from '../components/CountryLearnModal';
 import { playDingStreak, playWrong } from '../lib/audio';
 import HeatStreakBadge from '../components/HeatStreakBadge';
 import { useAuth } from '../context/AuthContext';
@@ -440,78 +439,7 @@ export default function FlagQuizScreen({ navigation }: Props) {
             </View>
           </Animated.View>
 
-        {/* Country Info Modal — zoomed to country */}
-        <Modal
-          visible={showInfoModal}
-          transparent
-          animationType="slide"
-          onRequestClose={closeInfoAndContinue}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              {infoCountry && (
-                <>
-                  <View style={styles.modalHeader}>
-                    <Image source={{ uri: infoCountry.flagUrl }} style={styles.modalFlag} resizeMode="contain" />
-                    <Text style={styles.modalTitle}>{infoCountry.name}</Text>
-                  </View>
-
-                  {/* Zoomed map — centered on this country */}
-                  <WorldMapView
-                    ownedCountries={[infoCountry.cca2]}
-                    focusCountry={infoCountry.cca2}
-                    height={180}
-                    showNames={false}
-                  />
-
-                  {/* Facts */}
-                  <View style={styles.factsGrid}>
-                    <View style={styles.factItem}>
-                      <Text style={styles.factLabel}>{t('infoModal.capital')}</Text>
-                      <Text style={styles.factValue}>{infoCountry.capital || t('infoModal.na')}</Text>
-                    </View>
-                    <View style={styles.factItem}>
-                      <Text style={styles.factLabel}>{t('infoModal.region')}</Text>
-                      <Text style={styles.factValue}>{infoCountry.region}</Text>
-                    </View>
-                    <View style={styles.factItem}>
-                      <Text style={styles.factLabel}>{t('infoModal.population')}</Text>
-                      <Text style={styles.factValue}>{infoCountry.population.toLocaleString()}</Text>
-                    </View>
-                    <View style={styles.factItem}>
-                      <Text style={styles.factLabel}>{t('infoModal.area')}</Text>
-                      <Text style={styles.factValue}>{infoCountry.area.toLocaleString()} km²</Text>
-                    </View>
-                  </View>
-
-                  {/* Neighbors with flags */}
-                  <View style={styles.neighborsSection}>
-                    <Text style={styles.factLabel}>{t('infoModal.neighbors')}</Text>
-                    {infoCountry.borders.length > 0 ? (
-                      <View style={styles.neighborsRow}>
-                        {infoCountry.borders.map((cca3Code) => {
-                          const cca2 = getCca3ToCca2Map()[cca3Code] || '';
-                          const emoji = cca2 ? cca2ToFlagEmoji(cca2) : '🏳️';
-                          return (
-                            <Text key={cca3Code} style={styles.neighborFlag}>
-                              {emoji}
-                            </Text>
-                          );
-                        })}
-                      </View>
-                    ) : (
-                      <Text style={styles.factValue}>{t('infoModal.islandNation')}</Text>
-                    )}
-                  </View>
-
-                  <TouchableOpacity style={styles.closeButton} onPress={closeInfoAndContinue}>
-                    <Text style={styles.closeButtonText}>{t('infoModal.gotIt')}</Text>
-                  </TouchableOpacity>
-                </>
-              )}
-            </View>
-          </View>
-        </Modal>
+        <CountryLearnModal country={infoCountry} visible={showInfoModal} onClose={closeInfoAndContinue} />
 
         <QuitConfirmModal
           visible={showQuitModal}
@@ -637,60 +565,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 16,
   },
-  // Modal
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.85)',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  modalContent: {
-    backgroundColor: '#1a1a2e',
-    borderRadius: 20,
-    padding: 24,
-    gap: 14,
-    borderWidth: 1,
-    borderColor: '#2a2a4e',
-  },
-  modalHeader: { alignItems: 'center', gap: 8 },
-  modalFlag: { width: 72, height: 48, borderRadius: 6 },
-  modalTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
-  factsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  factItem: {
-    width: '47%',
-    backgroundColor: '#0a0a1a',
-    borderRadius: 10,
-    padding: 12,
-    gap: 4,
-  },
-  factLabel: { color: '#888', fontSize: 11, textTransform: 'uppercase' },
-  factValue: { color: '#fff', fontSize: 13, fontWeight: '600' },
-  neighborsSection: {
-    backgroundColor: '#0a0a1a',
-    borderRadius: 10,
-    padding: 12,
-    gap: 6,
-  },
-  neighborsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 4,
-  },
-  neighborFlag: {
-    fontSize: 24,
-  },
-  closeButton: {
-    backgroundColor: '#FFD700',
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  closeButtonText: { color: '#0a0a1a', fontWeight: 'bold', fontSize: 16 },
 
   backBtn: { color: '#555', fontSize: 16, fontWeight: 'bold', padding: 4 },
   pauseBtn: { flexDirection: 'row', gap: 3, alignItems: 'center', padding: 6 },

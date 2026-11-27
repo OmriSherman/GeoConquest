@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Animated,
   Image,
-  Modal,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -14,12 +13,12 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { QuizStackParamList, QuizQuestion, Country, cca2ToFlagEmoji } from '../types';
-import { buildCapitalsQuizQuestions, fetchCountries, getOfflineFullCountries, getCca3ToCca2Map } from '../lib/countryData';
+import { QuizStackParamList, QuizQuestion, Country } from '../types';
+import { buildCapitalsQuizQuestions, fetchCountries, getOfflineFullCountries } from '../lib/countryData';
 import { useGame } from '../context/GameContext';
 import AnswerButton from '../components/AnswerButton';
 import EarningsStrip from '../components/EarningsStrip';
-import WorldMapView from '../components/WorldMapView';
+import CountryLearnModal from '../components/CountryLearnModal';
 import { playDingStreak, playWrong, playTextToSpeech } from '../lib/audio';
 import HeatStreakBadge from '../components/HeatStreakBadge';
 import { useAuth } from '../context/AuthContext';
@@ -87,7 +86,6 @@ export default function CapitalsQuizScreen({ navigation }: Props) {
   const quizStartRef = useRef<number>(0);
   const elapsedIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [elapsedSec, setElapsedSec] = useState(0);
-  const [modalFlagError, setModalFlagError] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -284,7 +282,6 @@ export default function CapitalsQuizScreen({ navigation }: Props) {
     }
     const question = questionsRef.current[currentIndexRef.current];
     if (question) {
-      setModalFlagError(false);
       setInfoCountry(question.country);
       setShowInfoModal(true);
     }
@@ -461,78 +458,7 @@ export default function CapitalsQuizScreen({ navigation }: Props) {
             </View>
           </Animated.View>
 
-        <Modal
-          visible={showInfoModal}
-          transparent
-          animationType="slide"
-          onRequestClose={closeInfoAndContinue}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              {infoCountry && (
-                <>
-                  <View style={styles.modalHeader}>
-                    {infoCountry.flagUrl && !modalFlagError ? (
-                      <Image source={{ uri: infoCountry.flagUrl }} style={styles.modalFlag} resizeMode="contain" onError={() => setModalFlagError(true)} />
-                    ) : (
-                      <Text style={{ fontSize: 48 }}>{cca2ToFlagEmoji(infoCountry.cca2)}</Text>
-                    )}
-                    <Text style={styles.modalTitle}>{infoCountry.name}</Text>
-                  </View>
-
-                  <WorldMapView
-                    ownedCountries={[infoCountry.cca2]}
-                    focusCountry={infoCountry.cca2}
-                    height={180}
-                    showNames={false}
-                  />
-
-                  <View style={styles.factsGrid}>
-                    <View style={styles.factItem}>
-                      <Text style={styles.factLabel}>{t('infoModal.capital')}</Text>
-                      <Text style={styles.factValue}>{infoCountry.capital || t('infoModal.na')}</Text>
-                    </View>
-                    <View style={styles.factItem}>
-                      <Text style={styles.factLabel}>{t('infoModal.region')}</Text>
-                      <Text style={styles.factValue}>{infoCountry.region}</Text>
-                    </View>
-                    <View style={styles.factItem}>
-                      <Text style={styles.factLabel}>{t('infoModal.population')}</Text>
-                      <Text style={styles.factValue}>{infoCountry.population.toLocaleString()}</Text>
-                    </View>
-                    <View style={styles.factItem}>
-                      <Text style={styles.factLabel}>{t('infoModal.area')}</Text>
-                      <Text style={styles.factValue}>{infoCountry.area.toLocaleString()} km²</Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.neighborsSection}>
-                    <Text style={styles.factLabel}>{t('infoModal.neighbors')}</Text>
-                    {infoCountry.borders.length > 0 ? (
-                      <View style={styles.neighborsRow}>
-                        {infoCountry.borders.map((cca3Code) => {
-                          const cca2 = getCca3ToCca2Map()[cca3Code] || '';
-                          const emoji = cca2 ? cca2ToFlagEmoji(cca2) : '🏳️';
-                          return (
-                            <Text key={cca3Code} style={styles.neighborFlag}>
-                              {emoji}
-                            </Text>
-                          );
-                        })}
-                      </View>
-                    ) : (
-                      <Text style={styles.factValue}>{t('infoModal.islandNation')}</Text>
-                    )}
-                  </View>
-
-                  <TouchableOpacity style={styles.closeButton} onPress={closeInfoAndContinue}>
-                    <Text style={styles.closeButtonText}>{t('infoModal.gotIt')}</Text>
-                  </TouchableOpacity>
-                </>
-              )}
-            </View>
-          </View>
-        </Modal>
+        <CountryLearnModal country={infoCountry} visible={showInfoModal} onClose={closeInfoAndContinue} />
 
         <QuitConfirmModal
           visible={showQuitModal}

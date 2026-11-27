@@ -6,6 +6,7 @@ import Animated, {
   useSharedValue,
   useAnimatedProps,
   withTiming,
+  withDelay,
   Easing,
 } from 'react-native-reanimated';
 import { getMapFeatures } from '../lib/mapData';
@@ -25,6 +26,10 @@ interface WorldMapViewProps {
   focusScaleOverride?: number;
   trailPath?: string[]; // ordered cca2 list for drawing a visible route
   trailColor?: string;
+  focusDurationMs?: number; // zoom-in animation length (default FOCUS_ANIMATION_MS)
+  focusEasing?: (t: number) => number; // default: ease-out cubic
+  focusDelayMs?: number; // wait before the zoom-in starts
+  interactiveWhenFocused?: boolean; // keep pan/pinch enabled while focused on a country
 }
 
 const OWNED_COLORS = [
@@ -133,6 +138,10 @@ export default function WorldMapView({
   focusScaleOverride,
   trailPath = [],
   trailColor = '#6BCBFF',
+  focusDurationMs = FOCUS_ANIMATION_MS,
+  focusDelayMs = 0,
+  focusEasing = Easing.out(Easing.cubic),
+  interactiveWhenFocused = false,
 }: WorldMapViewProps) {
   const [loading, setLoading] = useState(true);
   const [nameToCca2Map, setNameToCca2Map] = useState<Record<string, string>>({});
@@ -231,8 +240,10 @@ export default function WorldMapView({
       if (focusCountry && zoomToFocusCountry) {
         const fIdx = featureCca2List.findIndex((cca2: string) => cca2 === focusCountry);
         const f = fIdx >= 0 ? (features || [])[fIdx] : undefined;
-        if (f && f.bounds && f.centroid && !Number.isNaN(f.centroid[0])) {
-          const [[xmin, ymin], [xmax, ymax]] = f.bounds;
+        const fBounds = f?.focusBounds ?? f?.bounds;
+        const fCentroid = f?.focusCentroid ?? f?.centroid;
+        if (f && fBounds && fCentroid && !Number.isNaN(fCentroid[0])) {
+          const [[xmin, ymin], [xmax, ymax]] = fBounds;
           const dx = xmax - xmin;
           const dy = ymax - ymin;
 
@@ -250,7 +261,7 @@ export default function WorldMapView({
             if (s < 1) s = 1;
           }
 
-          const [cx, cy] = f.centroid;
+          const [cx, cy] = fCentroid;
           let tx = s * (400 - cx);
           let ty = s * (300 - cy);
 
@@ -259,9 +270,10 @@ export default function WorldMapView({
           tx = Math.min(Math.max(tx, -boundX), boundX);
           ty = Math.min(Math.max(ty, -boundY), boundY);
 
-          scale.value = withTiming(s, { duration: FOCUS_ANIMATION_MS, easing: Easing.out(Easing.cubic) });
-          translateX.value = withTiming(tx, { duration: FOCUS_ANIMATION_MS, easing: Easing.out(Easing.cubic) });
-          translateY.value = withTiming(ty, { duration: FOCUS_ANIMATION_MS, easing: Easing.out(Easing.cubic) });
+          const zoomTo = (v: number) => withDelay(focusDelayMs, withTiming(v, { duration: focusDurationMs, easing: focusEasing }));
+          scale.value = zoomTo(s);
+          translateX.value = zoomTo(tx);
+          translateY.value = zoomTo(ty);
           savedScale.value = s;
           savedTranslateX.value = tx;
           savedTranslateY.value = ty;
@@ -297,7 +309,7 @@ export default function WorldMapView({
     }
   }, [resetKey]);
 
-  const canInteract = interactive && (!focusCountry || !zoomToFocusCountry);
+  const canInteract = interactive && (interactiveWhenFocused || !focusCountry || !zoomToFocusCountry);
 
   const pinch = Gesture.Pinch()
     .enabled(canInteract)

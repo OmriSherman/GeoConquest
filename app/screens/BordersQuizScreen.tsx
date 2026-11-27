@@ -21,6 +21,7 @@ import AvatarDisplay from '../components/AvatarDisplay';
 import AnswerButton from '../components/AnswerButton';
 import EarningsStrip from '../components/EarningsStrip';
 import BordersMapView from '../components/BordersMapView';
+import CountryLearnModal from '../components/CountryLearnModal';
 import { playDingStreak, playWrong } from '../lib/audio';
 import HeatStreakBadge from '../components/HeatStreakBadge';
 import ConfettiCannon from 'react-native-confetti-cannon';
@@ -59,6 +60,8 @@ export default function BordersQuizScreen({ navigation }: Props) {
   const [currentCombo, setCurrentCombo] = useState(0);
   const [showConfetti, setShowConfetti] = useState(false);
   const [answered, setAnswered] = useState(false);
+  const [showInfoModal, setShowInfoModal] = useState(false);
+  const [infoCountry, setInfoCountry] = useState<Country | null>(null);
   const [ready, setReady] = useState(false);
   const [difficulty, setDifficultyState] = useState<QuizDifficulty>('medium');
   const difficultyRef = useRef<QuizDifficulty>('medium');
@@ -210,12 +213,30 @@ export default function BordersQuizScreen({ navigation }: Props) {
   }
 
   function skipToNext() {
-    if (!answered || paused) return;
+    if (!answered || paused || showInfoModal) return;
     if (autoAdvanceTimer.current) {
       clearTimeout(autoAdvanceTimer.current);
       autoAdvanceTimer.current = null;
     }
     advanceQuestion();
+  }
+
+  function openCountryInfo() {
+    // Pause auto-advance while viewing info
+    if (autoAdvanceTimer.current) {
+      clearTimeout(autoAdvanceTimer.current);
+      autoAdvanceTimer.current = null;
+    }
+    const question = questionsRef.current[currentIndexRef.current];
+    if (question) {
+      setInfoCountry(question.country);
+      setShowInfoModal(true);
+    }
+  }
+
+  function closeInfoAndContinue() {
+    setShowInfoModal(false);
+    autoAdvanceTimer.current = setTimeout(advanceQuestion, 1500);
   }
 
   function advanceQuestion() {
@@ -371,6 +392,13 @@ export default function BordersQuizScreen({ navigation }: Props) {
                   neighborCodes={allActualNeighbors}
                   height={140}
                 />
+
+                {answered && (
+                  <TouchableOpacity style={styles.infoBadge} onPress={openCountryInfo}>
+                    <Text style={styles.infoBadgeIcon}>ℹ️</Text>
+                    <Text style={styles.infoBadgeText}>{t('quizCommon.learn')}</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
 
@@ -396,6 +424,8 @@ export default function BordersQuizScreen({ navigation }: Props) {
               )}
             </View>
           </Animated.View>
+      <CountryLearnModal country={infoCountry} visible={showInfoModal} onClose={closeInfoAndContinue} />
+
       <QuitConfirmModal
         visible={showQuitModal}
         onStay={() => { setShowQuitModal(false); onConfirmQuitRef.current = null; }}
@@ -444,6 +474,22 @@ const styles = StyleSheet.create({
   shapeContainer: { backgroundColor: '#1a1a2e', borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#2a2a4e', marginBottom: 8 },
   answers: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   answerGridButton: { width: '48%', minHeight: 84, marginVertical: 0, paddingHorizontal: 10 },
+  infoBadge: {
+    position: 'absolute',
+    bottom: 6,
+    right: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1a1a2e',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FFD700',
+    gap: 6,
+  },
+  infoBadgeIcon: { fontSize: 13 },
+  infoBadgeText: { color: '#FFD700', fontSize: 11, fontWeight: 'bold' },
   tapHint: { color: '#555', fontSize: 12, textAlign: 'center', marginTop: 16 },
 
   backBtn: { color: '#555', fontSize: 16, fontWeight: 'bold', padding: 4 },

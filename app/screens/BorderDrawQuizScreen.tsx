@@ -10,14 +10,14 @@ import {
   View,
 } from 'react-native';
 import Svg, { G, Path as SvgPath } from 'react-native-svg';
-import { geoMercator, geoPath } from 'd3-geo';
+import { geoBounds, geoMercator, geoPath } from 'd3-geo';
 import { mesh } from 'topojson-client';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 import { QuizStackParamList, Country, cca2ToFlagEmoji } from '../types';
 import { fetchCountries, getCca3ToCca2Map } from '../lib/countryData';
-import { hasCountryShape, A2_TO_NUM, ANTIMERIDIAN_IDS, getFeatureForNumericId, normalizeGeometry } from '../components/CountryShapeView';
+import { hasCountryShape, A2_TO_NUM, ANTIMERIDIAN_ROTATION, getMeshFeatureForNumericId } from '../components/CountryShapeView';
 import { useGame } from '../context/GameContext';
 import { useAuth } from '../context/AuthContext';
 import { DEV_MODE } from '../lib/devMode';
@@ -78,21 +78,27 @@ function countBorderParts(lines: number[][][]): number {
   return new Set(lines.map((_, i) => find(i))).size;
 }
 
+// Keep only shared-border lines that touch the mainland outlines (drops e.g. the
+// France-Brazil border, which lies in French Guiana).
+function mainlandBorderLines(lines: number[][][], featA: any, featB: any): number[][][] {
+  const boxes = [featA, featB].map((ft) => geoBounds(ft));
+  const near = (pt: number[], [[x0, y0], [x1, y1]]: number[][]) => (x0 <= x1 ? pt[0] >= x0 - 1 && pt[0] <= x1 + 1 : pt[0] >= x0 - 1 || pt[0] <= x1 + 1) && pt[1] >= y0 - 1 && pt[1] <= y1 + 1;
+  return lines.filter((line) => boxes.every((box) => line.some((pt) => near(pt, box))));
+}
+
 function buildCombinedData(cca2A: string, cca2B: string, cw: number, ch: number) {
   const numA = A2_TO_NUM[cca2A];
   const numB = A2_TO_NUM[cca2B];
   if (!numA || !numB) return null;
 
-  let featA = getFeatureForNumericId(numA);
-  let featB = getFeatureForNumericId(numB);
+  const featA = getMeshFeatureForNumericId(numA);
+  const featB = getMeshFeatureForNumericId(numB);
   if (!featA || !featB) return null;
 
-  if (ANTIMERIDIAN_IDS.has(numA)) featA = normalizeGeometry(featA);
-  if (ANTIMERIDIAN_IDS.has(numB)) featB = normalizeGeometry(featB);
 
   const combined = { type: 'FeatureCollection', features: [featA, featB] };
   const padding = 24;
-  const projection = geoMercator().fitExtent(
+  const projection = geoMercator().rotate([ANTIMERIDIAN_ROTATION[numA] ?? ANTIMERIDIAN_ROTATION[numB] ?? 0, 0]).fitExtent(
     [[padding, padding], [cw - padding, ch - padding]],
     combined as any,
   );
@@ -106,22 +112,22 @@ function buildCombinedData(cca2A: string, cca2B: string, cw: number, ch: number)
   });
 
   const borderPoints: [number, number][] = [];
-  const sharedGeoAny = sharedGeo as any;
-  const borderLines: number[][][] = sharedGeoAny?.type === 'LineString' ? [sharedGeoAny.coordinates]
-    : sharedGeoAny?.type === 'MultiLineString' ? sharedGeoAny.coordinates : [];
-  if (sharedGeoAny?.coordinates?.length) {
-    const flatten = (line: number[][]) => line.forEach((c) => {
+  const rawLines = sharedGeo as any;
+  const allLines: number[][][] = rawLines?.type === 'LineString' ? [rawLines.coordinates]
+    : rawLines?.type === 'MultiLineString' ? rawLines.coordinates : [];
+  const borderLines = mainlandBorderLines(allLines, featA, featB);
+  const sharedGeoAny = { type: 'MultiLineString', coordinates: borderLines };
+  for (const line of borderLines) {
+    for (const c of line) {
       const pt = projection(c as [number, number]);
       if (pt) borderPoints.push(pt as [number, number]);
-    });
-    if (sharedGeoAny.type === 'LineString') flatten(sharedGeoAny.coordinates);
-    else if (sharedGeoAny.type === 'MultiLineString') sharedGeoAny.coordinates.forEach(flatten);
+    }
   }
 
   return {
     pathA: pathGen(featA) ?? '',
     pathB: pathGen(featB) ?? '',
-    borderSvgPath: borderPoints.length ? (pathGen(sharedGeo as any) ?? null) : null,
+    borderSvgPath: borderPoints.length ? (pathGen(sharedGeoAny as any) ?? null) : null,
     borderPoints,
     borderParts: borderLines.length ? countBorderParts(borderLines) : 0,
   };
@@ -231,6 +237,8 @@ async function buildPairs(count: number): Promise<DrawPair[]> {
         return (aId === numA && bId === numB) || (aId === numB && bId === numA);
       });
       if (!shared?.coordinates?.length) continue;
+      const sharedLines = shared.coordinates as unknown as number[][][];
+      if (!mainlandBorderLines(sharedLines, getMeshFeatureForNumericId(numA), getMeshFeatureForNumericId(numB)).length) continue;
 
       used.add(key);
       pairs.push({ countryA: country, countryB: neighbor });

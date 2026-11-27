@@ -1,8 +1,10 @@
 import React, { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
-import { geoMercator, geoPath } from 'd3-geo';
+import { geoAzimuthalEquidistant, geoMercator, geoPath } from 'd3-geo';
 import { feature } from 'topojson-client';
+import { trimToMainland } from '../lib/mainland';
+import shapeOverrides from '../assets/map/shape-overrides.json';
 import worldAtlas from '../assets/map/countries-50m.json';
 
 interface CountryShapeViewProps {
@@ -16,25 +18,13 @@ export const A2_TO_NUM: Record<string, string> = {};
 for (const [num, a2] of Object.entries(NUM_TO_A2)) {
   A2_TO_NUM[a2] = num;
 }
-A2_TO_NUM.SJ = '578';
-A2_TO_NUM.XK = '688';
 
+const ANTARCTICA_ID = '010';
 const DEFAULT_HEIGHT = 180;
-export const ANTIMERIDIAN_IDS = new Set(['242', '296', '643', '840']);
-export const HARDCODED_FEATURES: Record<string, any> = {
-  '254': {
-    type: 'Feature',
-    properties: {},
-    geometry: {
-      type: 'Polygon',
-      coordinates: [[
-        [-54.5, 5.75], [-54.0, 5.95], [-52.3, 5.75], [-51.65, 5.25],
-        [-51.65, 4.2], [-52.2, 2.5], [-53.3, 2.15], [-54.4, 2.15],
-        [-54.5, 3.5], [-54.5, 5.75],
-      ]],
-    },
-  },
-};
+// Countries crossing the date line: centre the projection on them instead of cutting them in two.
+export const ANTIMERIDIAN_ROTATION: Record<string, number> = { '643': -105, '242': 180, '296': 180 };
+// Detailed 1:10m outlines (scripts/build-shape-overrides.cjs) for countries missing/rough in the 50m map.
+const DETAILED_FEATURES = shapeOverrides as Record<string, any>;
 
 export const atlasFeatures = (() => {
   const topo = worldAtlas as any;
@@ -43,12 +33,11 @@ export const atlasFeatures = (() => {
 })();
 
 const ATLAS_NUMERIC_IDS = new Set<string>(atlasFeatures.map((g: any) => String(g.id)));
-const HARDCODED_NUMERIC_IDS = new Set(Object.keys(HARDCODED_FEATURES));
 
 export function hasCountryShape(countryCode: string): boolean {
   const numericId = A2_TO_NUM[countryCode];
   if (!numericId) return false;
-  return ATLAS_NUMERIC_IDS.has(numericId) || HARDCODED_NUMERIC_IDS.has(numericId);
+  return ATLAS_NUMERIC_IDS.has(numericId) || numericId in DETAILED_FEATURES;
 }
 
 export default function CountryShapeView({
@@ -80,9 +69,10 @@ function buildShapePath(numericId: string, height: number, width: number): strin
   const target = getFeatureForNumericId(numericId);
   if (!target) return null;
 
-  const featureToRender = ANTIMERIDIAN_IDS.has(numericId) ? normalizeGeometry(target) : target;
+  const featureToRender = target;
   const padding = Math.max(8, Math.min(18, height * 0.1));
-  const projection = geoMercator().fitExtent(
+  // Antarctica is drawn from above the South Pole (like on its flag), not stretched flat.
+  const projection = (numericId === ANTARCTICA_ID ? geoAzimuthalEquidistant().rotate([0, 90]) : geoMercator().rotate([ANTIMERIDIAN_ROTATION[numericId] ?? 0, 0])).fitExtent(
     [[padding, padding], [width - padding, height - padding]],
     featureToRender as any,
   );
@@ -90,30 +80,27 @@ function buildShapePath(numericId: string, height: number, width: number): strin
   return pathGenerator(featureToRender as any);
 }
 
-export function getFeatureForNumericId(numericId: string): any | null {
+const mainlandCache = new Map<string, any>();
+
+// Full outline (every overseas part) - for the border mesh / world views.
+export function getFullFeatureForNumericId(numericId: string): any | null {
   if (!numericId) return null;
-  if (HARDCODED_FEATURES[numericId]) return HARDCODED_FEATURES[numericId];
   const targetNum = parseInt(numericId, 10);
   return atlasFeatures.find((f: any) => parseInt(String(f.id), 10) === targetNum) ?? null;
 }
 
-function normalizeRing(ring: number[][]) {
-  for (let i = 1; i < ring.length; i += 1) {
-    const delta = ring[i][0] - ring[i - 1][0];
-    if (delta > 180) ring[i][0] -= 360;
-    else if (delta < -180) ring[i][0] += 360;
+// Display outline: mainland only (overseas territories dropped).
+export function getFeatureForNumericId(numericId: string): any | null {
+  if (!mainlandCache.has(numericId)) {
+    const full = DETAILED_FEATURES[numericId] ?? getFullFeatureForNumericId(numericId);
+    mainlandCache.set(numericId, trimToMainland(numericId, full));
   }
+  return mainlandCache.get(numericId);
 }
 
-export function normalizeGeometry(targetFeature: any) {
-  const type = targetFeature.geometry.type;
-  const coords = JSON.parse(JSON.stringify(targetFeature.geometry.coordinates));
-  if (type === 'Polygon') coords.forEach(normalizeRing);
-  else if (type === 'MultiPolygon') coords.forEach((polygon: number[][][]) => polygon.forEach(normalizeRing));
-  return {
-    ...targetFeature,
-    geometry: { type, coordinates: coords },
-  };
+// Same mainland outline but from the 50m map, matching the shared-border mesh.
+export function getMeshFeatureForNumericId(numericId: string): any | null {
+  return trimToMainland(numericId, getFullFeatureForNumericId(numericId));
 }
 
 const styles = StyleSheet.create({
