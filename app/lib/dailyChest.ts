@@ -1,4 +1,5 @@
 import type { ImageSourcePropType } from 'react-native';
+import { cfg } from './gameConfig';
 
 export type ChestRewardKind = 'gold' | 'tickets' | 'xp_potion' | 'gold_potion' | 'avatar';
 export type PotionKind = 'xp_potion' | 'gold_potion';
@@ -27,12 +28,12 @@ export interface Potion {
   boost_percent?: number;
 }
 export const CHEST_TIERS = [
-  { name: 'Wooden', day: 1, color: '#DDA66D', gold: 250, tickets: 1, duration: 2, odds: [55, 35, 5, 5, 0], closed: require('../../assets/avatars/wooden_closed.png'), open: require('../../assets/avatars/wooden_open.png') },
-  { name: 'Bronze', day: 4, color: '#F6AF63', gold: 400, tickets: 2, duration: 3, odds: [45, 40, 8, 7, 0], closed: require('../../assets/avatars/bronze_closed.png'), open: require('../../assets/avatars/bronze_open.png') },
-  { name: 'Silver', day: 8, color: '#A9CDFF', gold: 500, tickets: 3, duration: 3, odds: [35, 35, 15, 12, 3], closed: require('../../assets/avatars/silver_closed.png'), open: require('../../assets/avatars/silver_open.png') },
-  { name: 'Gold', day: 12, color: '#FFD86A', gold: 600, tickets: 4, duration: 4, odds: [30, 30, 18, 18, 4], closed: require('../../assets/avatars/gold_closed.png'), open: require('../../assets/avatars/gold_open.png') },
-  { name: 'Royal', day: 16, color: '#D4ABFF', gold: 800, tickets: 6, duration: 5, odds: [30, 30, 18, 18, 4], closed: require('../../assets/avatars/royal_closed.png'), open: require('../../assets/avatars/royal_open.png') },
-  { name: 'Legendary', day: 20, color: '#FFE69A', gold: 1000, tickets: 8, duration: 5, odds: [30, 30, 17, 17, 6], closed: require('../../assets/avatars/legendary_closed.png'), open: require('../../assets/avatars/legendary_open.png') },
+  { name: 'Wooden', day: 1, color: '#DDA66D', get gold() { return cfg('chest.t1.gold', 250); }, get tickets() { return cfg('chest.t1.tickets', 1); }, get duration() { return cfg('chest.t1.duration', 2); }, get odds() { return [cfg('chest.t1.odds_gold', 55), cfg('chest.t1.odds_tickets', 35), cfg('chest.t1.odds_xp_potion', 5), cfg('chest.t1.odds_gold_potion', 5), cfg('chest.t1.odds_avatar', 0)]; }, closed: require('../../assets/avatars/wooden_closed.png'), open: require('../../assets/avatars/wooden_open.png') },
+  { name: 'Bronze', day: 4, color: '#F6AF63', get gold() { return cfg('chest.t2.gold', 400); }, get tickets() { return cfg('chest.t2.tickets', 2); }, get duration() { return cfg('chest.t2.duration', 3); }, get odds() { return [cfg('chest.t2.odds_gold', 45), cfg('chest.t2.odds_tickets', 40), cfg('chest.t2.odds_xp_potion', 8), cfg('chest.t2.odds_gold_potion', 7), cfg('chest.t2.odds_avatar', 0)]; }, closed: require('../../assets/avatars/bronze_closed.png'), open: require('../../assets/avatars/bronze_open.png') },
+  { name: 'Silver', day: 8, color: '#A9CDFF', get gold() { return cfg('chest.t3.gold', 500); }, get tickets() { return cfg('chest.t3.tickets', 3); }, get duration() { return cfg('chest.t3.duration', 3); }, get odds() { return [cfg('chest.t3.odds_gold', 35), cfg('chest.t3.odds_tickets', 35), cfg('chest.t3.odds_xp_potion', 15), cfg('chest.t3.odds_gold_potion', 12), cfg('chest.t3.odds_avatar', 3)]; }, closed: require('../../assets/avatars/silver_closed.png'), open: require('../../assets/avatars/silver_open.png') },
+  { name: 'Gold', day: 12, color: '#FFD86A', get gold() { return cfg('chest.t4.gold', 600); }, get tickets() { return cfg('chest.t4.tickets', 4); }, get duration() { return cfg('chest.t4.duration', 4); }, get odds() { return [cfg('chest.t4.odds_gold', 30), cfg('chest.t4.odds_tickets', 30), cfg('chest.t4.odds_xp_potion', 18), cfg('chest.t4.odds_gold_potion', 18), cfg('chest.t4.odds_avatar', 4)]; }, closed: require('../../assets/avatars/gold_closed.png'), open: require('../../assets/avatars/gold_open.png') },
+  { name: 'Royal', day: 16, color: '#D4ABFF', get gold() { return cfg('chest.t5.gold', 800); }, get tickets() { return cfg('chest.t5.tickets', 6); }, get duration() { return cfg('chest.t5.duration', 5); }, get odds() { return [cfg('chest.t5.odds_gold', 30), cfg('chest.t5.odds_tickets', 30), cfg('chest.t5.odds_xp_potion', 18), cfg('chest.t5.odds_gold_potion', 18), cfg('chest.t5.odds_avatar', 4)]; }, closed: require('../../assets/avatars/royal_closed.png'), open: require('../../assets/avatars/royal_open.png') },
+  { name: 'Legendary', day: 20, color: '#FFE69A', get gold() { return cfg('chest.t6.gold', 1000); }, get tickets() { return cfg('chest.t6.tickets', 8); }, get duration() { return cfg('chest.t6.duration', 5); }, get odds() { return [cfg('chest.t6.odds_gold', 30), cfg('chest.t6.odds_tickets', 30), cfg('chest.t6.odds_xp_potion', 17), cfg('chest.t6.odds_gold_potion', 17), cfg('chest.t6.odds_avatar', 6)]; }, closed: require('../../assets/avatars/legendary_closed.png'), open: require('../../assets/avatars/legendary_open.png') },
 ] as const;
 
 export const CHEST_AVATARS = [

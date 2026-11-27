@@ -1,4 +1,5 @@
 import type { ImageSourcePropType } from 'react-native';
+import { cfg } from './gameConfig';
 
 export type MythicRewardKind = 'gold' | 'xp' | 'xp_potion' | 'gold_potion' | 'avatar';
 export interface MythicReward {
@@ -18,13 +19,13 @@ export interface MythicChestState {
   mythic_dust: number;
 }
 export const MYTHIC_DROP_RATES = [
-  { key: 'gold_25000', label: '25,000 Gold', rate: 56 },
-  { key: 'gold_75000', label: '75,000 Gold', rate: 10 },
-  { key: 'gold_150000', label: '150,000 Gold', rate: 5 },
-  { key: 'xp', label: '20,000 XP', rate: 3 },
-  { key: 'xp_potion', label: 'Mythic XP Potion · 10 quizzes', rate: 12 },
-  { key: 'gold_potion', label: 'Mythic Gold Potion · 10 quizzes', rate: 12 },
-  { key: 'avatar', label: 'Unique Mythic Avatar', rate: 2 },
+  { key: 'gold_25000', label: '25,000 Gold', get rate() { return cfg('mythic.odds.gold_25000'); } },
+  { key: 'gold_75000', label: '75,000 Gold', get rate() { return cfg('mythic.odds.gold_75000'); } },
+  { key: 'gold_150000', label: '150,000 Gold', get rate() { return cfg('mythic.odds.gold_150000'); } },
+  { key: 'xp', label: '20,000 XP', get rate() { return cfg('mythic.odds.xp'); } },
+  { key: 'xp_potion', label: 'Mythic XP Potion · 10 quizzes', get rate() { return cfg('mythic.odds.xp_potion'); } },
+  { key: 'gold_potion', label: 'Mythic Gold Potion · 10 quizzes', get rate() { return cfg('mythic.odds.gold_potion'); } },
+  { key: 'avatar', label: 'Unique Mythic Avatar', get rate() { return cfg('mythic.odds.avatar'); } },
 ] as const;
 export const MYTHIC_AVATARS = [
   { id: 'png_worldbreaker_empress', name: 'Worldbreaker Empress', image: require('../../assets/avatars/worldbreaker_empress.png') },

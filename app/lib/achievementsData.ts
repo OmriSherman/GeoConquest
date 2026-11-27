@@ -1,3 +1,4 @@
+import { cfg } from './gameConfig';
 import { CUSTOM_AVATARS } from './avatarData';
 
 export interface AchievementRewardItem {
@@ -56,7 +57,7 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
         description: 'Reach Level 10.',
         icon: 'png_star',
         rewardGold: 1000,
-        getProgress: (stats) => [Math.min(stats.playerLevel ?? 1, 10), 10],
+        getProgress: (stats) => { const t = cfg(`quest.level_10.target`, 10); return [Math.min(stats.playerLevel ?? 1, t), t]; },
     },
     {
         id: 'level_25',
@@ -65,7 +66,7 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
         icon: 'png_star2',
         rewardGold: 2500,
         rewardTickets: 1,
-        getProgress: (stats) => [Math.min(stats.playerLevel ?? 1, 25), 25],
+        getProgress: (stats) => { const t = cfg(`quest.level_25.target`, 25); return [Math.min(stats.playerLevel ?? 1, t), t]; },
     },
     {
         id: 'level_30',
@@ -75,7 +76,7 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
         isPremium: true,
         rewardGold: 5000,
         rewardTickets: 5,
-        getProgress: (stats) => [Math.min(stats.playerLevel ?? 1, 30), 30],
+        getProgress: (stats) => { const t = cfg(`quest.level_30.target`, 30); return [Math.min(stats.playerLevel ?? 1, t), t]; },
     },
     {
         id: 'level_50',
@@ -83,7 +84,7 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
         description: 'Reach Level 50.',
         icon: 'png_diamond',
         rewardGold: 5000,
-        getProgress: (stats) => [Math.min(stats.playerLevel ?? 1, 50), 50],
+        getProgress: (stats) => { const t = cfg(`quest.level_50.target`, 50); return [Math.min(stats.playerLevel ?? 1, t), t]; },
     },
     {
         id: 'level_80',
@@ -92,7 +93,7 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
         icon: 'png_commando',
         rewardGold: 8000,
         rewardTickets: 5,
-        getProgress: (stats) => [Math.min(stats.playerLevel ?? 1, 80), 80],
+        getProgress: (stats) => { const t = cfg(`quest.level_80.target`, 80); return [Math.min(stats.playerLevel ?? 1, t), t]; },
     },
     {
         id: 'level_100',
@@ -101,7 +102,7 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
         icon: 'png_sun',
         rewardGold: 10000,
         rewardTickets: 10,
-        getProgress: (stats) => [Math.min(stats.playerLevel ?? 1, 100), 100],
+        getProgress: (stats) => { const t = cfg(`quest.level_100.target`, 100); return [Math.min(stats.playerLevel ?? 1, t), t]; },
     },
     // ─── Countries ────────────────────────────────────────────────────────────
 
@@ -111,7 +112,7 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
         description: 'Claim your very first country on the map.',
         icon: 'png_flags',
         rewardGold: 100,
-        getProgress: (stats) => [Math.min(stats.ownedCount, 1), 1],
+        getProgress: (stats) => { const t = cfg(`quest.first_blood.target`, 1); return [Math.min(stats.ownedCount, t), t]; },
     },
     {
         id: 'empire_5',
@@ -119,7 +120,7 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
         description: 'Claim 5 different countries.',
         icon: 'png_shape',
         rewardGold: 500,
-        getProgress: (stats) => [Math.min(stats.ownedCount, 5), 5],
+        getProgress: (stats) => { const t = cfg(`quest.empire_5.target`, 5); return [Math.min(stats.ownedCount, t), t]; },
     },
     {
         id: 'empire_10',
@@ -128,7 +129,7 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
         icon: 'png_castle',
         rewardGold: 1000,
         rewardItem: { type: 'avatar', itemId: 'png_rotten_crown', label: 'Rotten Crown' },
-        getProgress: (stats) => [Math.min(stats.ownedCount, 10), 10],
+        getProgress: (stats) => { const t = cfg(`quest.empire_10.target`, 10); return [Math.min(stats.ownedCount, t), t]; },
     },
     {
         id: 'empire_25',
@@ -137,7 +138,7 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
         icon: 'png_globe',
         rewardGold: 2500,
         rewardTickets: 1,
-        getProgress: (stats) => [Math.min(stats.ownedCount, 25), 25],
+        getProgress: (stats) => { const t = cfg(`quest.empire_25.target`, 25); return [Math.min(stats.ownedCount, t), t]; },
     },
     {
         id: 'empire_50',
@@ -147,7 +148,7 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
         rewardGold: 1000,
         rewardTickets: 1,
         rewardItem: { type: 'avatar', itemId: 'png_meme_relic_frog', label: 'Chillin' },
-        getProgress: (stats) => [Math.min(stats.ownedCount, 50), 50],
+        getProgress: (stats) => { const t = cfg(`quest.empire_50.target`, 50); return [Math.min(stats.ownedCount, t), t]; },
     },
 
     // ─── Login Streak ─────────────────────────────────────────────────────────
@@ -159,7 +160,7 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
         icon: 'png_calendar',
         rewardGold: 25000,
         rewardTickets: 2,
-        getProgress: (stats) => [Math.min(stats.loginStreak, 20), 20],
+        getProgress: (stats) => { const t = cfg(`quest.streak_20.target`, 20); return [Math.min(stats.loginStreak, t), t]; },
     },
 
     // ─── Territory ────────────────────────────────────────────────────────────
@@ -170,7 +171,7 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
         description: 'Control over 1M sq km.',
         icon: 'png_ruler',
         rewardGold: 1500,
-        getProgress: (stats) => [Math.min(stats.areaSqKm, 1_000_000), 1_000_000],
+        getProgress: (stats) => { const t = cfg(`quest.area_1m.target`, 1_000_000); return [Math.min(stats.areaSqKm, t), t]; },
     },
     {
         id: 'area_10m',
@@ -179,7 +180,7 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
         icon: 'png_mountain',
         rewardGold: 2000,
         rewardTickets: 2,
-        getProgress: (stats) => [Math.min(stats.areaSqKm, 10_000_000), 10_000_000],
+        getProgress: (stats) => { const t = cfg(`quest.area_10m.target`, 10_000_000); return [Math.min(stats.areaSqKm, t), t]; },
     },
     {
         id: 'area_100m',
@@ -188,7 +189,7 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
         icon: 'png_galaxy',
         rewardGold: 10000,
         rewardTickets: 3,
-        getProgress: (stats) => [Math.min(stats.areaSqKm, 100_000_000), 100_000_000],
+        getProgress: (stats) => { const t = cfg(`quest.area_100m.target`, 100_000_000); return [Math.min(stats.areaSqKm, t), t]; },
     },
 
     // ─── Continent Quests (Premium) ───────────────────────────────────────────
@@ -292,7 +293,7 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
         icon: 'png_open_scroll',
         rewardGold: 1000,
         rewardTickets: 1,
-        getProgress: (stats) => [Math.min(stats.quizCount ?? 0, 10), 10],
+        getProgress: (stats) => { const t = cfg(`quest.quiz_10.target`, 10); return [Math.min(stats.quizCount ?? 0, t), t]; },
     },
     {
         id: 'quiz_50',
@@ -301,7 +302,7 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
         icon: 'png_compass',
         rewardGold: 2500,
         rewardTickets: 3,
-        getProgress: (stats) => [Math.min(stats.quizCount ?? 0, 50), 50],
+        getProgress: (stats) => { const t = cfg(`quest.quiz_50.target`, 50); return [Math.min(stats.quizCount ?? 0, t), t]; },
     },
     {
         id: 'excellence_20',
@@ -310,7 +311,7 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
         icon: 'png_hourglass',
         rewardGold: 5000,
         rewardTickets: 2,
-        getProgress: (stats) => [Math.min(stats.excellentScoreCount ?? 0, 20), 20],
+        getProgress: (stats) => { const t = cfg(`quest.excellence_20.target`, 20); return [Math.min(stats.excellentScoreCount ?? 0, t), t]; },
     },
     {
         id: 'trail_blazer_50',
@@ -319,7 +320,7 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
         icon: 'png_caravel',
         rewardGold: 3000,
         rewardTickets: 1,
-        getProgress: (stats) => [Math.min(stats.trailBestScore ?? 0, 30), 30],
+        getProgress: (stats) => { const t = cfg(`quest.trail_blazer_50.target`, 30); return [Math.min(stats.trailBestScore ?? 0, t), t]; },
     },
     {
         id: 'gauntlet_ascendant',
@@ -329,7 +330,7 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
         rewardGold: 10000,
         rewardTickets: 5,
         rewardItem: { type: 'avatar', itemId: 'png_doom_paladin', label: 'Doom Paladin' },
-        getProgress: (stats) => [Math.min(stats.gauntletBestScore ?? 0, 100), 100],
+        getProgress: (stats) => { const t = cfg(`quest.gauntlet_ascendant.target`, 100); return [Math.min(stats.gauntletBestScore ?? 0, t), t]; },
     },
     {
         id: 'perfect_accuracy_15',
@@ -338,7 +339,7 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
         icon: 'png_sextant',
         rewardGold: 7000,
         rewardTickets: 3,
-        getProgress: (stats) => [Math.min(stats.perfectAccuracyCount ?? 0, 15), 15],
+        getProgress: (stats) => { const t = cfg(`quest.perfect_accuracy_15.target`, 15); return [Math.min(stats.perfectAccuracyCount ?? 0, t), t]; },
     },
     {
         id: 'game_master',
@@ -356,7 +357,7 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
         rewardGold: 10000,
         rewardTickets: 3,
         rewardItem: { type: 'avatar', itemId: 'png_void_eye', label: 'Void Eye' },
-        getProgress: (stats) => [Math.min(stats.dailyFirstPlaceWins ?? 0, 5), 5],
+        getProgress: (stats) => { const t = cfg(`quest.daily_champion_5.target`, 5); return [Math.min(stats.dailyFirstPlaceWins ?? 0, t), t]; },
     },
 
     // ─── Collection ───────────────────────────────────────────────────────────
@@ -368,7 +369,7 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
         icon: 'png_theater_mask',
         rewardGold: 3000,
         rewardTickets: 1,
-        getProgress: (stats) => [Math.min(stats.ownedAvatarCount ?? 0, 10), 10],
+        getProgress: (stats) => { const t = cfg(`quest.avatar_collector_10.target`, 10); return [Math.min(stats.ownedAvatarCount ?? 0, t), t]; },
     },
     {
         id: 'max_tier_avatar',
@@ -397,7 +398,7 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
             { type: 'avatar', itemId: 'png_divine_high_king', label: 'Divine High King' },
             { type: 'avatar', itemId: 'png_divine_high_queen', label: 'Divine High Queen' },
         ],
-        getProgress: (stats) => [Math.min(stats.ownedCount, 250), 250],
+        getProgress: (stats) => { const t = cfg(`quest.complete_the_world.target`, 250); return [Math.min(stats.ownedCount, t), t]; },
     },
     {
         // Hidden as ??? until the user owns the Dark Scroll upgrade
@@ -449,7 +450,7 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
         rewardGold: 25000,
         rewardTickets: 15,
         rewardItem: { type: 'avatar', itemId: 'png_void_herald', label: 'Void Herald' },
-        getProgress: (stats) => [Math.min(stats.playerLevel ?? 1, 150), 150],
+        getProgress: (stats) => { const t = cfg(`quest.level_150.target`, 150); return [Math.min(stats.playerLevel ?? 1, t), t]; },
     },
     {
         id: 'level_200',
@@ -460,7 +461,7 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
         rewardGold: 50000,
         rewardTickets: 20,
         rewardItem: { type: 'avatar', itemId: 'png_atlas_titan', label: 'Atlas Titan' },
-        getProgress: (stats) => [Math.min(stats.playerLevel ?? 1, 200), 200],
+        getProgress: (stats) => { const t = cfg(`quest.level_200.target`, 200); return [Math.min(stats.playerLevel ?? 1, t), t]; },
     },
     {
         id: 'level_250',
@@ -471,7 +472,7 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
         rewardGold: 100000,
         rewardTickets: 25,
         rewardItem: { type: 'avatar', itemId: 'png_eternal_emperor', label: 'Eternal Emperor' },
-        getProgress: (stats) => [Math.min(stats.playerLevel ?? 1, 250), 250],
+        getProgress: (stats) => { const t = cfg(`quest.level_250.target`, 250); return [Math.min(stats.playerLevel ?? 1, t), t]; },
     },
     {
         id: 'level_300',
@@ -482,6 +483,22 @@ export const ACHIEVEMENTS_DATA: Achievement[] = [
         rewardGold: 250000,
         rewardTickets: 30,
         rewardItem: { type: 'avatar', itemId: 'png_void_ascendant', label: 'Void Ascendant' },
-        getProgress: (stats) => [Math.min(stats.playerLevel ?? 1, 300), 300],
+        getProgress: (stats) => { const t = cfg(`quest.level_300.target`, 300); return [Math.min(stats.playerLevel ?? 1, t), t]; },
     },
 ];
+
+// Rewards (and numeric targets, above) come from game_config (dashboard); the literals are fallbacks.
+// Descriptions that mention the default target follow the configured one.
+for (const a of ACHIEVEMENTS_DATA) {
+    const gold = a.rewardGold, tickets = a.rewardTickets, desc = a.description;
+    Object.defineProperty(a, 'rewardGold', { get: () => cfg(`quest.${a.id}.gold`, gold), enumerable: true });
+    if (tickets !== undefined) Object.defineProperty(a, 'rewardTickets', { get: () => cfg(`quest.${a.id}.tickets`, tickets), enumerable: true });
+    const base = (desc.match(/[\d,]+/g) ?? []).map(n => Number(n.replace(/,/g, '')))[0];
+    if (base !== undefined) {
+        const key = `quest.${a.id}.target`;
+        Object.defineProperty(a, 'description', { get: () => {
+            const t = cfg(key, base);
+            return t === base ? desc : desc.replace(base.toLocaleString('en-US'), t.toLocaleString('en-US')).replace(String(base), String(t));
+        }, enumerable: true });
+    }
+}

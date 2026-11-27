@@ -5,6 +5,7 @@ import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { supabase } from '../lib/supabase';
+import { cfg, isMissingRpc } from '../lib/gameConfig';
 import { Profile } from '../types';
 import type { ChestState } from '../lib/dailyChest';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -792,10 +793,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function claimAchievement(achievementId: string, rewardGold: number, rewardItems?: { type: 'avatar' | 'flag' | 'item'; itemId: string }[], rewardTickets?: number) {
     if (!profile) return;
 
-    const { data, error } = await supabase.rpc('claim_achievement', {
-      p_achievement_id: achievementId,
-      p_reward_amount: rewardGold,
-    });
+    // claim_quest: server decides gold + tickets (from game_config) and verifies the quest. Old DB -> claim_achievement.
+    let serverGrantedTickets = false;
+    let { data, error } = await supabase.rpc('claim_quest', { p_achievement_id: achievementId });
+    if (error && isMissingRpc(error)) {
+      ({ data, error } = await supabase.rpc('claim_achievement', {
+        p_achievement_id: achievementId,
+        p_reward_amount: rewardGold,
+      }));
+    } else if (!error) {
+      serverGrantedTickets = true;
+    }
 
     const alreadyClaimed = !!error?.message?.includes('already claimed');
 
@@ -805,7 +813,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Only update gold balance if not already claimed (gold was already granted)
     if (!alreadyClaimed && data && data.length > 0) {
-      setProfile((prev) => prev ? { ...prev, gold_balance: data[0].new_balance } : prev);
+      setProfile((prev) => prev ? { ...prev, gold_balance: data[0].new_balance, ...(data[0].new_tickets != null ? { tickets: data[0].new_tickets } : {}) } : prev);
     }
 
     // Unlock reward items if provided — always attempt, insert is idempotent (23505 = already owned)
@@ -823,7 +831,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (grantedAvatar) setPendingAvatarNotification(true);
 
     // Grant ticket rewards — skip if already claimed (tickets were already granted)
-    if (!alreadyClaimed && rewardTickets && rewardTickets > 0) {
+    if (!alreadyClaimed && !serverGrantedTickets && rewardTickets && rewardTickets > 0) {
       await applyProfileCurrencyDelta(0, rewardTickets);
     }
 
@@ -939,16 +947,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await applyProfileCurrencyDelta(0, amount);
   }
 
-  async function purchaseTickets(amount: number, cost: number) {
+  // Server prices the ticket purchase (purchase_tickets); the client-side `cost` is only a pre-check and the
+  // fallback for databases where the 5b migration has not been run yet.
+  async function purchaseTicketsFromServer(amount: number, cost: number) {
     if (!profile || DEV_MODE) return;
     if ((profile.gold_balance ?? 0) < cost) throw new Error('Not enough gold.');
-    await applyProfileCurrencyDelta(-cost, amount);
+    const { data, error } = await supabase.rpc('purchase_tickets', { p_amount: amount });
+    if (error) {
+      if (isMissingRpc(error)) { await applyProfileCurrencyDelta(-cost, amount); return; }
+      throw new Error(/insufficient gold/i.test(error.message) ? 'Not enough gold.' : error.message);
+    }
+    const row = Array.isArray(data) ? data[0] : data;
+    await syncProfileCurrencyState(profile.id, Number((row as any)?.new_gold ?? 0), Number((row as any)?.new_tickets ?? 0));
+  }
+
+  async function purchaseTickets(amount: number, cost: number) {
+    await purchaseTicketsFromServer(amount, cost);
   }
 
   async function purchaseTicket(cost: number) {
-    if (!profile || DEV_MODE) return;
-    if ((profile.gold_balance ?? 0) < cost) throw new Error('Not enough gold.');
-    await applyProfileCurrencyDelta(-cost, 1);
+    await purchaseTicketsFromServer(1, cost);
   }
 
   async function ticketAdReward(claim = false): Promise<number> {
@@ -979,14 +997,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!profile) throw new Error('Not authenticated');
 
     try {
-      // Call RPC to activate subscription
-      const { data, error } = await supabase.rpc('activate_conqueror_subscription', {
-        p_user_id: profile.id,
-        p_plan: plan,
-      });
+      if (cfg('feature.rc_webhook') === 1) {
+        // The RevenueCat webhook grants Conqueror on the server; wait for it (usually a couple of seconds).
+        let active = false;
+        for (let i = 0; i < 10 && !active; i++) {
+          const { data: row } = await supabase.from('profiles').select('is_conquerer').eq('id', profile.id).single();
+          active = !!(row as any)?.is_conquerer;
+          if (!active) await new Promise(resolve => setTimeout(resolve, 1500));
+        }
+        if (!active) throw new Error('Your purchase went through, but activation is taking longer than usual. Reopen the app in a minute and Conqueror will be active.');
+      } else {
+        // Legacy path (until feature.rc_webhook = 1): the client asks the server to activate.
+        const { data, error } = await supabase.rpc('activate_conqueror_subscription', {
+          p_user_id: profile.id,
+          p_plan: plan,
+        });
 
-      if (error) throw error;
-      if (!data?.success) throw new Error(data?.error ?? 'Failed to activate subscription');
+        if (error) throw error;
+        if (!data?.success) throw new Error(data?.error ?? 'Failed to activate subscription');
+      }
 
       const { data: freshProfile } = await supabase
         .from('profiles')

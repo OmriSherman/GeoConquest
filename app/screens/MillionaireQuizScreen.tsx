@@ -249,6 +249,7 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
     navigation.replace('QuizResults', {
       score: failedIndex, // number of correct answers
       total: 15,
+      serverExtra: { outcome: 'loss' },
       goldEarned: prize,
       quizType: 'millionaire',
       elapsedSeconds: Math.floor((Date.now() - quizStartRef.current) / 1000),
@@ -546,6 +547,7 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
     navigation.replace('QuizResults', {
       score: currentIndexRef.current + 1,
       total: 15,
+      serverExtra: { outcome: 'walk' },
       goldEarned: prize,
       quizType: 'millionaire',
       elapsedSeconds: Math.floor((Date.now() - quizStartRef.current) / 1000),
@@ -566,6 +568,7 @@ export default function MillionaireQuizScreen({ navigation }: Props) {
     navigation.replace('QuizResults', {
       score: 15,
       total: 15,
+      serverExtra: { outcome: 'win' },
       goldEarned: MILLIONAIRE_GOLD_LADDER[14],
       quizType: 'millionaire',
       elapsedSeconds: Math.floor((Date.now() - quizStartRef.current) / 1000),

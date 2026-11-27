@@ -19,6 +19,7 @@ import AnalogCountdownClock from '../components/AnalogCountdownClock';
 import { t } from '../lib/i18n';
 import { DEV_MODE } from '../lib/devMode';
 import { CARD_PALETTES } from '../lib/cardStates';
+import { cfg, useGameConfig } from '../lib/gameConfig';
 
 const MAX_MAPS = 5;
 const MAPS_REFILL_SECONDS = 3600;
@@ -36,9 +37,9 @@ const QUIZ_ICON_IMAGES: Record<string, any> = {
   '🧭': require('../../assets/avatars/ancient_map.png'), // Trail
   '💰': require('../../assets/avatars/gold_bag.png'),
   '✏️': require('../../assets/avatars/border_drawing_quiz.png'),
+  '🐦': require('../../assets/avatars/compass.png'), // Compass Quiz
 };
 
-  '🐦': require('../../assets/avatars/compass.png'), // Compass Quiz
 
 const QUIZZES = [
   {
@@ -97,8 +98,6 @@ const QUIZZES = [
     goldSuffix: 'drawAccuracy',
     emoji: '✏️',
   },
-];
-
   {
     screen: 'CompassQuiz' as const,
     category: 'unique',
@@ -107,8 +106,11 @@ const QUIZZES = [
     goldSuffix: '10',
     emoji: '🐦',
   },
+];
+
 export default function QuizMenuScreen({ navigation }: Props) {
   const { ticketAdsRemaining, ticketAdReward } = useAuth();
+  useGameConfig();
   const { disabledUpgrades, unlockedItems, profile, purchaseTicket, purchaseTickets, maps, mapsNextRefillAt, mapsAdsUsedToday, deductMap, grantAdMap, syncMaps, devConquerorEnabled, setDevConquerorEnabled, devInfiniteMapsEnabled, setDevInfiniteMapsEnabled, devOwnAllItems, setDevOwnAllItems } = useAuth();
   const { showAlert } = useAlert();
   const { showToast } = useToast();
@@ -382,17 +384,17 @@ export default function QuizMenuScreen({ navigation }: Props) {
             isLocked = DEV_MODE ? previewQuizLocks : !unlockedItems.has('upgrade_border_draw');
             if (isLocked) lockReason = 'upgrade_border_draw';
           } else if (quiz.screen === 'TrailQuiz') {
-            isLocked = DEV_MODE ? previewQuizLocks : playerLevel < 40;
+            isLocked = DEV_MODE ? previewQuizLocks : playerLevel < cfg('level.trail', 40);
             if (isLocked) lockReason = 'trail_level';
+          } else if (quiz.screen === 'CompassQuiz') {
+            isLocked = DEV_MODE ? previewQuizLocks : playerLevel < cfg('level.compass');
+            if (isLocked) lockReason = 'compass_level';
           }
 
           const isMillionaire = quiz.screen === 'MillionaireQuiz';
 
           // Map quiz screens to achievement IDs for highlighting
           const achievementIdForQuiz: Record<string, string> = {
-          } else if (quiz.screen === 'CompassQuiz') {
-            isLocked = DEV_MODE ? previewQuizLocks : playerLevel < cfg('level.compass');
-            if (isLocked) lockReason = 'compass_level';
             'FlagQuiz': 'flag_mastery_30s',
             'CapitalsQuiz': 'ground_invasion',
           };
@@ -414,17 +416,17 @@ export default function QuizMenuScreen({ navigation }: Props) {
                   <Image source={require('../../assets/avatars/raffle_ticket.png')} style={{ width: 13, height: 13 }} resizeMode="contain" />
                   <Text style={{ color: '#aaa', fontSize: 12 }}>1 ticket</Text>
                 </View>
-              ) : lockReason === 'trail_level' ? (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                  <Image source={require('../../assets/avatars/lock.png')} style={{ width: 12, height: 12 }} resizeMode="contain" />
-                  <Text style={{ color: CARD_PALETTES.unique.badgeColor, fontSize: 12, fontWeight: '700' }}>Lvl 40</Text>
-                </View>
-              ) : isLocked && lockReason === 'upgrade_border_draw' ? (
               ) : lockReason === 'compass_level' ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                   <Image source={require('../../assets/avatars/lock.png')} style={{ width: 12, height: 12 }} resizeMode="contain" />
                   <Text style={{ color: CARD_PALETTES.unique.badgeColor, fontSize: 12, fontWeight: '700' }}>Lvl {cfg('level.compass')}</Text>
                 </View>
+              ) : lockReason === 'trail_level' ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Image source={require('../../assets/avatars/lock.png')} style={{ width: 12, height: 12 }} resizeMode="contain" />
+                  <Text style={{ color: CARD_PALETTES.unique.badgeColor, fontSize: 12, fontWeight: '700' }}>Lvl {cfg('level.trail', 40)}</Text>
+                </View>
+              ) : isLocked && lockReason === 'upgrade_border_draw' ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><Image source={require('../../assets/avatars/gold_coin.png')} style={{ width: 14, height: 14 }} resizeMode="contain" /><Text style={{ color: '#FFD700', fontSize: 12, fontWeight: '700' }}>50,000</Text></View>
               ) : isLocked ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><Image source={require('../../assets/avatars/lock.png')} style={{ width: 12, height: 12 }} resizeMode="contain" /><Text style={{ color: CARD_PALETTES.unique.badgeColor, fontSize: 12, fontWeight: '700' }}>Quest</Text></View>
@@ -499,7 +501,7 @@ export default function QuizMenuScreen({ navigation }: Props) {
 
         <Text style={styles.quizCategoryTitle}>{t('quizMenu.legendaryQuizzes')}</Text>
         {(() => {
-          const gauntletLocked = DEV_MODE ? previewQuizLocks : playerLevel < 60;
+          const gauntletLocked = DEV_MODE ? previewQuizLocks : playerLevel < cfg('level.gauntlet', 60);
           return (
             <QuizCard
               title={t('quiz.gauntlet')}
@@ -507,7 +509,7 @@ export default function QuizMenuScreen({ navigation }: Props) {
               isLocked={gauntletLocked}
               cardState={gauntletLocked ? 'unique' : undefined}
               costBadge={gauntletLocked
-                ? <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><Image source={require('../../assets/avatars/lock.png')} style={{ width: 12, height: 12 }} resizeMode="contain" /><Text style={{ color: CARD_PALETTES.unique.badgeColor, fontSize: 12, fontWeight: '700' }}>Lvl 60</Text></View>
+                ? <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><Image source={require('../../assets/avatars/lock.png')} style={{ width: 12, height: 12 }} resizeMode="contain" /><Text style={{ color: CARD_PALETTES.unique.badgeColor, fontSize: 12, fontWeight: '700' }}>Lvl {cfg('level.gauntlet', 60)}</Text></View>
                 : <Text style={{ color: '#ff6b35', fontSize: 11, fontWeight: '800', letterSpacing: 1 }}>{t('quizMenu.endgame')}</Text>
               }
               style={{ borderColor: '#ff6b35', borderWidth: 1.5 }}
@@ -516,7 +518,7 @@ export default function QuizMenuScreen({ navigation }: Props) {
                   showAlert({
                     variant: 'unique',
                     title: t('quizMenu.gauntletLocked'),
-                    message: `Reach Level 60 to unlock The Gauntlet.\n\nCurrent level: ${playerLevel}`,
+                    message: `Reach Level ${cfg('level.gauntlet', 60)} to unlock The Gauntlet.\n\nCurrent level: ${playerLevel}`,
                   });
                   return;
                 }

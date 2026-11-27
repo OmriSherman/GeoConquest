@@ -20,6 +20,7 @@ import {
   playGauntletFail,
 } from '../lib/audio';
 import { recordQuizCompletion } from './AchievementsScreen';
+import { cfg, serverRewardsFor } from '../lib/gameConfig';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
 import { useAlert } from '../context/AlertContext';
@@ -65,8 +66,8 @@ const SHARE_QUIZ_ICON_IMAGES: Record<string, any> = {
   millionaire: require('../../assets/avatars/gold_bag.png'),
   nightmare: require('../../assets/avatars/skull.png'),
   gauntlet: require('../../assets/avatars/crucible.png'),
-};
   compass: require('../../assets/avatars/compass.png'),
+};
 let ViewShot: any = FallbackView;
 let captureRef: ((ref: any, opts?: any) => Promise<string>) | null = null;
 try {
@@ -93,7 +94,7 @@ function achIconNode(key: string | undefined, fallbackKey: string) {
 }
 
 export default function QuizResultsScreen({ navigation, route }: Props) {
-  const { score, total, goldEarned, quizType, elapsedSeconds, tierAccent, tierLabel, tierBg, rewardMultiplier = 1, millionairePowerUpsUsed, xpOverride, penaltyPercent, difficulty } = route.params;
+  const { score, total, goldEarned, quizType, elapsedSeconds, tierAccent, tierLabel, tierBg, rewardMultiplier = 1, comboExtra = 0, serverExtra, millionairePowerUpsUsed, xpOverride, penaltyPercent, difficulty } = route.params;
   const percentage = Math.round((score / total) * 100);
   const { showToast } = useToast();
   const { user, addXP, addGold, profile, refreshProfile, incrementQuizCount, nextQuizBoostActive, setNextQuizBoostActive, consumeNextQuizBoost, refundMap, maps, deductMap, mapsNextRefillAt, mapsAdsUsedToday, grantAdMap, unlockedItems, devInfiniteMapsEnabled } = useAuth();
@@ -153,8 +154,8 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
     millionaire: t('nav.millionaireQuiz'),
     nightmare: t('nav.nightmareMode'),
     gauntlet: t('quiz.gauntlet'),
-  };
     compass: t('compass.title'),
+  };
 
   function buildShareMessage() {
     return `This is how much I scored in the quiz, think you can do better?\nGeoConquest - find us on ${STORE_NAME}\n${STORE_URL}`;
@@ -434,21 +435,53 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
         } catch { /* silent — refund is a bonus */ }
       }
 
-      const xp = xpOverride !== undefined ? xpOverride : Math.round(calcQuizXP(quizType, score, total, newlyCompletedNightmare) * rewardMultiplier);
+      let xp = xpOverride !== undefined ? xpOverride : Math.round(calcQuizXP(quizType, score, total, newlyCompletedNightmare) * rewardMultiplier);
       const isBoostEligibleQuiz = ['flag', 'shape', 'capitals', 'borders', 'trail'].includes(quizType);
       const shouldApplyBoost = isBoostEligibleQuiz && nextQuizBoostActive;
       const conquerorMultiplier = isConqueror ? 2 : 1;
-      const baseEffectiveXp = (shouldApplyBoost ? xp * 2 : xp) * conquerorMultiplier;
+      let baseEffectiveXp = (shouldApplyBoost ? xp * 2 : xp) * conquerorMultiplier;
       let effectiveXp = baseEffectiveXp;
       let potionGoldBonus = 0;
 
       const quizResultUserId = user?.id ?? profile?.id;
-      if (quizResultUserId && DEV_MODE) {
+
+      // Server-settled path (5c): the server computes gold/XP/potions/level-up gold and credits them in one call.
+      let settled: any = null;
+      const useServer = !DEV_MODE && !!quizResultUserId && serverRewardsFor(quizType)
+        && !(quizType === 'nightmare' && penaltyPercent !== undefined); // the Nightmare loss is settled by nightmare_loss()
+      if (useServer) {
+        const res = await supabase.rpc('submit_quiz_result', {
+          p_key: route.key, p_quiz_type: quizType, p_difficulty: difficulty ?? null,
+          p_score: score, p_total: total, p_combo_extra: comboExtra,
+          p_elapsed: Math.max(0, Math.floor(elapsedSeconds ?? 0)), p_boost: shouldApplyBoost, p_extra: serverExtra ?? {},
+        });
+        if (!res.error && res.data) {
+          settled = res.data;
+          xp = Number(settled.xp);
+          baseEffectiveXp = Number(settled.xp_credited);
+          effectiveXp = baseEffectiveXp;
+        } else {
+          const message = t('results.syncFailed');
+          setPotionSyncError(message);
+          showToast({ title: t('results.syncUnavailable'), message });
+          console.warn('[QuizResults] submit_quiz_result failed:', res.error?.code, res.error?.message);
+        }
+      }
+
+      if (settled) {
+        setPotionsUsed((settled.potions_used ?? []) as PotionEffect[]);
+        const potionXp = Number(settled.potion_xp ?? 0);
+        potionGoldBonus = Number(settled.potion_gold ?? 0);
+        effectiveXp += potionXp;
+        if (!settled.duplicate && (potionXp > 0 || potionGoldBonus > 0)) {
+          showToast({ title: t('results.potionBoostApplied'), message: `+${potionXp} XP · +${potionGoldBonus} gold` });
+        }
+      } else if (quizResultUserId && DEV_MODE) {
         const used = await consumePotionPreview(quizResultUserId, route.key, xp, goldEarned);
         setPotionsUsed(used);
         effectiveXp += used.filter(p => p.kind === 'xp_potion').reduce((sum, p) => sum + (p.bonus ?? 0), 0);
         potionGoldBonus = used.filter(p => p.kind === 'gold_potion').reduce((sum, p) => sum + (p.bonus ?? 0), 0);
-      } else if (quizResultUserId) {
+      } else if (quizResultUserId && !useServer) {
         const payload = {
           user_id: quizResultUserId, quiz_type: quizType, score,
           gold_earned: goldEarned, total_questions: total,
@@ -488,14 +521,19 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
         }
       }
 
+      // Daily Quests: remember how long the quiz took (for the speed quest). Harmless if the migration isn't run yet.
+      if (quizResultUserId && !DEV_MODE) {
+        void supabase.rpc('record_quiz_stats', { p_key: route.key, p_elapsed: Math.max(0, Math.floor(elapsedSeconds ?? 0)) }).then(() => {}, () => {});
+      }
+
       let levelUpGoldBonus = 0;
       if (xp > 0) {
         const currentXp = profile?.xp ?? 0;
-        const beforeLevel = getLevelInfo(currentXp).level;
-        const afterLevel = getLevelInfo(currentXp + effectiveXp).level;
+        const beforeLevel = settled ? Number(settled.level_before) : getLevelInfo(currentXp).level;
+        const afterLevel = settled ? Number(settled.level_after) : getLevelInfo(currentXp + effectiveXp).level;
         if (afterLevel > beforeLevel) {
-          levelUpGoldBonus = afterLevel * 20;
-          await addGold(levelUpGoldBonus);
+          levelUpGoldBonus = settled ? Number(settled.level_up_gold) : afterLevel * cfg('xp.levelup_gold_per_level', 20);
+          if (!settled) await addGold(levelUpGoldBonus);
           const LEVEL_QUEST_THRESHOLDS = [10, 25, 30, 50, 80, 100];
           for (const threshold of LEVEL_QUEST_THRESHOLDS) {
             if (beforeLevel < threshold && afterLevel >= threshold) {
@@ -507,7 +545,7 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
         }
 
         setXpEarned(effectiveXp);
-        await addXP(baseEffectiveXp); // Potion XP was credited atomically with the result.
+        if (!settled) await addXP(baseEffectiveXp); // Potion XP was credited atomically with the result.
         const accuracy = score / total;
         setXpTier(accuracy === 1 ? 2 : accuracy > 0.85 ? 1.5 : 1);
       }
@@ -515,8 +553,8 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
       let boostGoldBonus = 0;
       if (shouldApplyBoost) {
         if (goldEarned > 0) {
-          await addGold(goldEarned);
-          boostGoldBonus = goldEarned;
+          if (!settled) await addGold(goldEarned);
+          boostGoldBonus = settled ? Number(settled.boost_gold) : goldEarned;
         }
         // XP already doubled via effectiveXp above — no extra addXP needed here
         await consumeNextQuizBoost();
@@ -530,19 +568,19 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
       // Conqueror 2× gold bonus (additive on top of base; boost gold is separate)
       let conquerorGoldBonus = 0;
       if (isConqueror && goldEarned > 0 && quizType !== 'millionaire') {
-        await addGold(goldEarned);
-        conquerorGoldBonus = goldEarned;
+        if (!settled) await addGold(goldEarned);
+        conquerorGoldBonus = settled ? Number(settled.conqueror_gold) : goldEarned;
       }
 
-      const quizGoldDelta = goldEarned + boostGoldBonus + conquerorGoldBonus + potionGoldBonus;
+      const quizGoldDelta = (settled ? Number(settled.gold) : goldEarned) + boostGoldBonus + conquerorGoldBonus + potionGoldBonus;
       const totalGoldDelta = quizGoldDelta + levelUpGoldBonus;
 
-      if (quizType === 'millionaire' && goldEarned > 0) {
+      if (quizType === 'millionaire' && goldEarned > 0 && !settled) {
         await addGold(goldEarned);
       }
 
       setDisplayGoldGain(quizGoldDelta > 0 ? quizGoldDelta : 0);
-      if (!DEV_MODE && (potionGoldBonus > 0 || effectiveXp > baseEffectiveXp)) {
+      if (!DEV_MODE && (settled || potionGoldBonus > 0 || effectiveXp > baseEffectiveXp)) {
         await refreshProfile().catch(() => {});
       }
 
@@ -632,6 +670,7 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
     else if (quizType === 'nightmare') navigation.replace('NightmareQuiz' as any);
     else if (quizType === 'gauntlet') navigation.replace('Gauntlet' as any);
     else if (quizType === 'draw') navigation.replace('BorderDrawQuiz' as any);
+    else if (quizType === 'compass') navigation.replace('CompassQuiz' as any);
   }
 
   async function handleWatchAdForMap() {
@@ -670,7 +709,6 @@ export default function QuizResultsScreen({ navigation, route }: Props) {
     if (quizType === 'gauntlet') {
       const GAUNTLET_RATINGS: Record<string, { imageSource: any; label: string }> = {
         ETERNITY: { imageSource: require('../../assets/gauntlet/gauntlet_eternity.png'), label: 'Eternal Champion!'  },
-    else if (quizType === 'compass') navigation.replace('CompassQuiz' as any);
         OBLIVION: { imageSource: require('../../assets/gauntlet/gauntlet_oblivion.png'), label: 'Almost out'         },
         INFERNO:  { imageSource: require('../../assets/gauntlet/gauntlet_inferno.png'),  label: 'Fueled The Inferno' },
         HELL:     { imageSource: require('../../assets/gauntlet/gauntlet_hell.png'),     label: 'A Fresh Soul..'     },

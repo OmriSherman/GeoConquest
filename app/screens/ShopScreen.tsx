@@ -33,6 +33,7 @@ import { CARD_PALETTES, resolveCardState } from '../lib/cardStates';
 import { useToast } from '../context/ToastContext';
 import { useAlert } from '../context/AlertContext';
 import { t } from '../lib/i18n';
+import { cfg, useGameConfig } from '../lib/gameConfig';
 import { getDisplayFlagEmoji } from '../lib/flagDisplay';
 import { DEV_MODE, DEV_UNLOCKED_ITEM_IDS } from '../lib/devMode';
 import { purchasePotionPreview } from '../lib/potionPreview';
@@ -100,7 +101,7 @@ const SHOP_FLAGS: Array<{ id: string; label: string; price: number; isPremium: b
     .map(f => ({
       id: f.emoji,
       label: f.label,
-      price: f.category === 'country' ? 1000 : f.price,
+      price: cfg(`avatar.price.${f.emoji}`, f.category === 'country' ? 1000 : f.price),
       isPremium: f.category === 'country' ? true : f.isPremium,
       isSvg: false,
       category: f.category,
@@ -129,6 +130,7 @@ const SHOP_LOCAL_FLAG_SOURCES: Record<string, ImageSourcePropType> = {
 
 export default function ShopScreen() {
   const { refreshProfile, devOwnAllItems, effectiveMaxTurns, selectExpedition } = useAuth();
+  useGameConfig();
   const { ticketAdsRemaining, ticketAdReward } = useAuth();
   const { isOwned, canAfford, purchaseCountry, bulkPurchaseCountries, goldBalance, ownedCountries } = useGame();
   const { profile, setUsername, purchaseAvatarItem, purchaseQuizUpgrade, disabledUpgrades, toggleUpgrade, purchaseTicket, purchaseTickets, refreshQuestStatus, pendingAvatarNotification, clearAvatarNotification } = useAuth();
@@ -528,7 +530,7 @@ export default function ShopScreen() {
       return;
     }
 
-    const cost = 2000;
+    const cost = cfg('shop.upgrade.capitals');
     if (goldBalance < cost) {
       showNotEnoughGold(cost);
       return;
@@ -566,7 +568,7 @@ export default function ShopScreen() {
       return;
     }
 
-    const cost = 2000;
+    const cost = cfg('shop.upgrade.borders');
     if (goldBalance < cost) {
       showNotEnoughGold(cost);
       return;
@@ -612,7 +614,7 @@ export default function ShopScreen() {
     if (!profile) return;
     if (unlockedItems.has('upgrade_nightmare')) return;
 
-    const cost = 66666;
+    const cost = cfg('shop.upgrade.nightmare');
     if (goldBalance < cost) {
       showNotEnoughGold(cost);
       return;
@@ -636,10 +638,10 @@ export default function ShopScreen() {
 
   async function handleBuyInfiniteMaps() {
     if (!profile) return;
-    if (profile.is_conquerer || playerLevel < 100) return;
+    if (profile.is_conquerer || playerLevel < cfg('level.infinite_maps', 100)) return;
     if (unlockedItems.has('upgrade_infinite_maps')) return;
 
-    const cost = 50000;
+    const cost = cfg('shop.upgrade.infinite_maps');
     if (goldBalance < cost) {
       showNotEnoughGold(cost, <Image source={require('../../assets/avatars/ancient_map.png')} style={{ width: 40, height: 40 }} resizeMode="contain" />, t('shop.infiniteMaps'));
       return;
@@ -660,11 +662,11 @@ export default function ShopScreen() {
     }
   }
 
-  const TICKET_COST = 500;
+  const TICKET_COST = cfg('shop.ticket.price');
 
   async function handleBuyTicketPack() {
     if (!profile) return;
-    const PACK_COST = 2200;
+    const PACK_COST = cfg('shop.ticket_pack.price');
     if (goldBalance < PACK_COST) {
       showNotEnoughGold(PACK_COST, undefined, t('shop.ticketPack'));
       return;
@@ -746,7 +748,7 @@ export default function ShopScreen() {
     if (!profile) return;
     if (unlockedItems.has('upgrade_millionaire_skip')) return;
 
-    const cost = 30000;
+    const cost = cfg('shop.upgrade.millionaire_skip');
     if (goldBalance < cost) {
       showNotEnoughGold(cost);
       return;
@@ -769,13 +771,13 @@ export default function ShopScreen() {
 
   async function handleBuyBorderDraw() {
     if (!profile || actionLoading || unlockedItems.has('upgrade_border_draw')) return;
-    if (goldBalance < 50000) {
-      showNotEnoughGold(50000, undefined, t('quiz.draw'));
+    if (goldBalance < cfg('shop.upgrade.border_draw')) {
+      showNotEnoughGold(cfg('shop.upgrade.border_draw'), undefined, t('quiz.draw'));
       return;
     }
     setActionLoading(true);
     try {
-      await purchaseAvatarItem('flag', 'upgrade_border_draw', 50000);
+      await purchaseAvatarItem('flag', 'upgrade_border_draw', cfg('shop.upgrade.border_draw'));
       setUnlockedItems(prev => new Set(prev).add('upgrade_border_draw'));
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       playPurchasedItem();
@@ -1479,7 +1481,7 @@ export default function ShopScreen() {
                   <View style={styles.goldBadge}>
                     <View style={styles.goldRow}>
                       <Image source={require('../../assets/avatars/gold_coin.png')} style={styles.goldCoinSmall} resizeMode="contain" />
-                      <Text style={styles.goldText}>2000</Text>
+                      <Text style={styles.goldText}>{cfg('shop.upgrade.capitals')}</Text>
                     </View>
                   </View>
                 ) : (
@@ -1519,7 +1521,7 @@ export default function ShopScreen() {
                   <View style={styles.goldBadge}>
                     <View style={styles.goldRow}>
                       <Image source={require('../../assets/avatars/gold_coin.png')} style={styles.goldCoinSmall} resizeMode="contain" />
-                      <Text style={styles.goldText}>2000</Text>
+                      <Text style={styles.goldText}>{cfg('shop.upgrade.borders')}</Text>
                     </View>
                   </View>
                 ) : (
@@ -1548,7 +1550,7 @@ export default function ShopScreen() {
               style={[styles.upgradeCard, (profile?.max_quiz_turns || 10) >= 20 && styles.upgradeCardOwned]}
               onPress={() => {
                 if ((profile?.max_quiz_turns || 10) >= 20) return; // do not trigger buy if owned
-                handleBuyUpgrade(20, 2000);
+                handleBuyUpgrade(20, cfg('shop.quiz_turns.20'));
               }}
               disabled={actionLoading || (profile?.max_quiz_turns || 10) >= 20}
               activeOpacity={0.8}
@@ -1568,7 +1570,7 @@ export default function ShopScreen() {
                 <View style={styles.goldBadge}>
                   <View style={styles.goldRow}>
                     <Image source={require('../../assets/avatars/gold_coin.png')} style={styles.goldCoinSmall} resizeMode="contain" />
-                    <Text style={styles.goldText}>2000</Text>
+                    <Text style={styles.goldText}>{cfg('shop.quiz_turns.20')}</Text>
                   </View>
                 </View>
               )}
@@ -1577,7 +1579,7 @@ export default function ShopScreen() {
 
           {(() => {
             const isOwned = (profile?.max_quiz_turns || 10) >= 30;
-            const cs = resolveCardState({ isUnlocked: isOwned, requiredLevel: 25, playerLevel });
+            const cs = resolveCardState({ isUnlocked: isOwned, requiredLevel: cfg('level.expedition30', 25), playerLevel });
             const cp = CARD_PALETTES[cs.primaryState];
             const bp = CARD_PALETTES[cs.badgeState];
             return (
@@ -1585,11 +1587,11 @@ export default function ShopScreen() {
                 style={[styles.upgradeCard, isOwned ? styles.upgradeCardOwned : { backgroundColor: cp.cardBg, borderColor: cp.cardBorder, opacity: cs.states.length > 0 ? 0.8 : 1 }]}
                 onPress={() => {
                   if (cs.isLevelLocked) {
-                    showLevelAlert({ requiredLevel: 25, itemName: t('shop.level3Expedition') });
+                    showLevelAlert({ requiredLevel: cfg('level.expedition30', 25), itemName: t('shop.level3Expedition') });
                     return;
                   }
                   if (isOwned) return;
-                  handleBuyUpgrade(30, 5000);
+                  handleBuyUpgrade(30, cfg('shop.quiz_turns.30'));
                 }}
                 disabled={actionLoading || isOwned}
                 activeOpacity={0.8}
@@ -1614,7 +1616,7 @@ export default function ShopScreen() {
                   <View style={styles.goldBadge}>
                     <View style={styles.goldRow}>
                       <Image source={require('../../assets/avatars/gold_coin.png')} style={styles.goldCoinSmall} resizeMode="contain" />
-                      <Text style={styles.goldText}>5000</Text>
+                      <Text style={styles.goldText}>{cfg('shop.quiz_turns.30')}</Text>
                     </View>
                   </View>
                 )}
@@ -1651,7 +1653,7 @@ export default function ShopScreen() {
                 <View style={styles.goldBadge}>
                   <View style={styles.goldRow}>
                     <Image source={require('../../assets/avatars/gold_coin.png')} style={styles.goldCoinSmall} resizeMode="contain" />
-                    <Text style={styles.goldText}>30000</Text>
+                    <Text style={styles.goldText}>{cfg('shop.upgrade.millionaire_skip')}</Text>
                   </View>
                 </View>
               )}
@@ -1661,7 +1663,7 @@ export default function ShopScreen() {
           {/* Dark Scroll (after Millionaire Swap) */}
           {(() => {
             const isOwned = unlockedItems.has('upgrade_nightmare');
-            const cs = resolveCardState({ isUnlocked: isOwned, requiredLevel: 33, playerLevel });
+            const cs = resolveCardState({ isUnlocked: isOwned, requiredLevel: cfg('level.dark_scroll', 33), playerLevel });
             const cp = CARD_PALETTES[cs.primaryState];
             const bp = CARD_PALETTES[cs.badgeState];
             return (
@@ -1669,7 +1671,7 @@ export default function ShopScreen() {
                 style={[styles.upgradeCard, isOwned ? styles.upgradeCardOwned : { backgroundColor: cp.cardBg, borderColor: cp.cardBorder, opacity: cs.states.length > 0 ? 0.8 : 1 }]}
                 onPress={() => {
                   if (cs.isLevelLocked) {
-                    showLevelAlert({ requiredLevel: 33, itemName: t('shop.darkScroll') });
+                    showLevelAlert({ requiredLevel: cfg('level.dark_scroll', 33), itemName: t('shop.darkScroll') });
                     return;
                   }
                   if (isOwned) return;
@@ -1701,7 +1703,7 @@ export default function ShopScreen() {
                   <View style={styles.goldBadge}>
                     <View style={styles.goldRow}>
                       <Image source={require('../../assets/avatars/gold_coin.png')} style={styles.goldCoinSmall} resizeMode="contain" />
-                      <Text style={styles.goldText}>66666</Text>
+                      <Text style={styles.goldText}>{cfg('shop.upgrade.nightmare')}</Text>
                     </View>
                   </View>
                 )}
@@ -1712,7 +1714,7 @@ export default function ShopScreen() {
           {/* Infinite Maps */}
           {!profile?.is_conquerer && (() => {
             const isOwned = unlockedItems.has('upgrade_infinite_maps');
-            const cs = resolveCardState({ isUnlocked: isOwned, requiredLevel: 100, playerLevel });
+            const cs = resolveCardState({ isUnlocked: isOwned, requiredLevel: cfg('level.infinite_maps', 100), playerLevel });
             const cp = CARD_PALETTES[cs.primaryState];
             const bp = CARD_PALETTES[cs.badgeState];
             return (
@@ -1720,7 +1722,7 @@ export default function ShopScreen() {
                 style={[styles.upgradeCard, isOwned ? styles.upgradeCardOwned : { backgroundColor: cp.cardBg, borderColor: cp.cardBorder, opacity: cs.states.length > 0 ? 0.8 : 1 }]}
                 onPress={() => {
                   if (cs.isLevelLocked) {
-                    showLevelAlert({ requiredLevel: 100, itemName: t('shop.infiniteMaps') });
+                    showLevelAlert({ requiredLevel: cfg('level.infinite_maps', 100), itemName: t('shop.infiniteMaps') });
                     return;
                   }
                   if (isOwned) return;
@@ -1741,7 +1743,7 @@ export default function ShopScreen() {
                 ) : cs.isLevelLocked ? (
                   <View style={[styles.upgradeBadge, { backgroundColor: bp.badgeBg, borderColor: bp.badgeBorder, flexDirection: 'row', alignItems: 'center', gap: 5 }]}>
                     <Image source={require('../../assets/avatars/lock.png')} style={{ width: 12, height: 12 }} resizeMode="contain" />
-                    <Text style={[styles.upgradeBadgeText, { color: bp.badgeColor }]}>Lvl 100</Text>
+                    <Text style={[styles.upgradeBadgeText, { color: bp.badgeColor }]}>Lvl {cfg('level.infinite_maps', 100)}</Text>
                   </View>
                 ) : (
                   <View style={styles.goldBadge}>

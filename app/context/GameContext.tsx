@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
+import { isMissingRpc } from '../lib/gameConfig';
 import { Country, getCountryPrice } from '../types';
 import { useAuth } from './AuthContext';
 import { ACHIEVEMENTS_DATA } from '../lib/achievementsData';
@@ -40,7 +41,7 @@ const GameContext = createContext<GameContextValue | null>(null);
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
 export function GameProvider({ children }: { children: React.ReactNode }) {
-  const { user, profile, addGold: updateGoldBalance } = useAuth();
+  const { user, profile, addGold: updateGoldBalance, refreshProfile } = useAuth();
   const goldBalance = profile?.gold_balance ?? 0;
 
   const [ownedCountries, setOwnedCountries] = useState<string[]>([]);
@@ -152,6 +153,20 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         throw new Error('Country already owned');
       }
 
+      // Server prices the purchase (purchase_country) and takes the gold + records ownership in one transaction.
+      const rpc = await supabase.rpc('purchase_country', { p_country_code: country.cca2, p_cost: price });
+      if (!rpc.error) {
+        await refreshProfile().catch(() => {});
+        setOwnedCountries(prev => {
+          if (prev.includes(country.cca2)) return prev;
+          const next = [...prev, country.cca2];
+          AsyncStorage.setItem(OWNED_KEY(user.id), JSON.stringify(next)).catch(() => {});
+          return next;
+        });
+        return;
+      }
+      if (!isMissingRpc(rpc.error)) throw new Error(/insufficient gold/i.test(rpc.error.message) ? 'Not enough gold' : rpc.error.message);
+
       await updateGoldBalance(-price);
 
       const purchaseRes = await supabase
@@ -174,7 +189,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         return next;
       });
     },
-    [user, profile, ownedCountries, updateGoldBalance]
+    [user, profile, ownedCountries, updateGoldBalance, refreshProfile]
   );
 
   const bulkPurchaseCountries = useCallback(
@@ -198,6 +213,19 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       if (toBuy.length === 0) throw new Error('Not enough gold to buy any country');
 
       const totalCost = toBuy.reduce((sum, c) => sum + getCountryPrice(c.area), 0);
+
+      const bulk = await supabase.rpc('purchase_countries', { p_codes: toBuy.map(c => c.cca2) });
+      if (!bulk.error) {
+        const res = bulk.data as { count: number; total: number };
+        await refreshProfile().catch(() => {});
+        setOwnedCountries(prev => {
+          const next = [...prev, ...toBuy.map(c => c.cca2).filter(code => !prev.includes(code))];
+          AsyncStorage.setItem(OWNED_KEY(user.id), JSON.stringify(next)).catch(() => {});
+          return next;
+        });
+        return { count: Number(res?.count ?? toBuy.length), totalCost: Number(res?.total ?? totalCost) };
+      }
+      if (!isMissingRpc(bulk.error)) throw new Error(/insufficient gold/i.test(bulk.error.message) ? 'Not enough gold' : bulk.error.message);
 
       await updateGoldBalance(-totalCost);
 

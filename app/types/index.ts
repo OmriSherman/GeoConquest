@@ -1,3 +1,5 @@
+import { cfg } from '../lib/gameConfig';
+
 // ─── User & Auth ─────────────────────────────────────────────────────────────
 
 export interface Profile {
@@ -60,9 +62,9 @@ export function cca2ToFlagEmoji(cca2: string): string {
   return String.fromCodePoint(...codePoints);
 }
 
-/** Price to purchase a country = max(20, ceil(area / 100)) gold */
+/** Price to purchase a country = max(min, ceil(area * factor)) gold; both numbers come from game_config. */
 export function getCountryPrice(area: number): number {
-  return Math.max(20, Math.ceil(area / 100));
+  return Math.max(cfg('shop.country.min'), Math.ceil(area * cfg('shop.country.area_factor')));
 }
 
 export interface OwnedCountry {
@@ -150,15 +152,17 @@ export type QuizStackParamList = {
   NightmareQuiz: undefined;
   Gauntlet: undefined;
   BorderDrawQuiz: undefined;
+  CompassQuiz: undefined;
   QuizResults: {
     score: number;
     total: number;
-  CompassQuiz: undefined;
     goldEarned: number;
     quizType: QuizType;
     quizMode?: 'standard' | 'easy';
     elapsedSeconds?: number;
     rewardMultiplier?: number;
+    serverExtra?: Record<string, number | string>; // mode facts the server needs (trail lives, millionaire outcome, draw ratings, ...)
+    comboExtra?: number; // sum over correct answers of (streak - 1); the server uses it for the combo bonus
     tierAccent?: string;
     tierLabel?: string;
     tierBg?: string;
@@ -205,5 +209,5 @@ export const GOLD_REWARDS: Record<QuizType, number> = {
   nightmare: 50000,
   gauntlet: 0,    // per-round gold is calculated dynamically in GauntletScreen
   draw: 0,        // per-question gold calculated dynamically based on drawing accuracy
-};
   compass: 50,
+};

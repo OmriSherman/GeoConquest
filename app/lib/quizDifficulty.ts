@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Country } from '../types';
+import { cfg } from './gameConfig';
 import { getCountryDifficulty, getSmartDistractors } from './questionDifficulty';
 
 // Easy / Medium / Hard for Flags, Shapes, Capitals and Borders.
@@ -8,8 +9,12 @@ import { getCountryDifficulty, getSmartDistractors } from './questionDifficulty'
 export type QuizDifficulty = 'easy' | 'medium' | 'hard';
 export const DIFFICULTIES: QuizDifficulty[] = ['easy', 'medium', 'hard'];
 
-// ponytail: constants for now; move to the Economy config (dashboard) when it exists.
-export const DIFFICULTY_MULTIPLIER: Record<QuizDifficulty, number> = { easy: 0.75, medium: 1, hard: 1.25 };
+// Multipliers come from game_config (dashboard); built-in fallbacks live in gameConfig.ts.
+export const DIFFICULTY_MULTIPLIER: Record<QuizDifficulty, number> = {
+  get easy() { return cfg('quiz.mult.easy'); },
+  get medium() { return cfg('quiz.mult.medium'); },
+  get hard() { return cfg('quiz.mult.hard'); },
+};
 
 // getSmartDistractors levels: 1-3 random, 4-6 same region, 7-10 same region + similar size
 const DISTRACTOR_LEVEL: Record<QuizDifficulty, number> = { easy: 1, medium: 5, hard: 8 };

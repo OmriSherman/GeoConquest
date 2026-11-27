@@ -29,8 +29,8 @@ import { t } from '../lib/i18n';
 import DifficultyPicker from '../components/DifficultyPicker';
 import { DIFFICULTY_MULTIPLIER, QuizDifficulty, difficultyHooks, loadDifficulty, saveDifficulty } from '../lib/quizDifficulty';
 import { addQuizTabGuard } from '../lib/quizTabGuard';
+import { cfg, serverQuizRewards } from '../lib/gameConfig';
 
-const GOLD_PER_CORRECT = 18;
 const AUTO_ADVANCE_DELAY_MS = 2500;
 const ANSWER_COLORS = ['#4FC3F7', '#F44336', '#FFD700', '#4CAF50', '#FF9800', '#B388FF'];
 
@@ -81,6 +81,7 @@ export default function CapitalsQuizScreen({ navigation }: Props) {
   const scoreRef = useRef(0);
   const goldRef = useRef(0);
   const comboRef = useRef(0);
+  const comboExtraRef = useRef(0);
   const questionsRef = useRef<QuizQuestion[]>([]);
   const autoAdvanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const quizStartRef = useRef<number>(0);
@@ -199,19 +200,20 @@ export default function CapitalsQuizScreen({ navigation }: Props) {
 
     if (isCorrect) {
       comboRef.current += 1;
+      comboExtraRef.current += comboRef.current - 1;
       setCurrentCombo(comboRef.current);
       playDingStreak(comboRef.current);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
       scoreRef.current += 1;
-      const totalEarned = Math.round(GOLD_PER_CORRECT * DIFFICULTY_MULTIPLIER[difficultyRef.current] * (1 + (comboRef.current - 1) * 0.1));
+      const totalEarned = Math.round(cfg('quiz.gold.capitals') * DIFFICULTY_MULTIPLIER[difficultyRef.current] * (1 + (comboRef.current - 1) * 0.1));
       
       goldRef.current += totalEarned;
       setScore(scoreRef.current);
       setGoldEarned(goldRef.current);
       setGoldDelta(totalEarned);
       setAnimTrigger(prev => prev + 1);
-      addGold(totalEarned);
+      if (!serverQuizRewards()) addGold(totalEarned); // with server rewards, gold is settled once on the results screen
     } else {
       comboRef.current = 0;
       setCurrentCombo(0);
@@ -251,6 +253,7 @@ export default function CapitalsQuizScreen({ navigation }: Props) {
         goldEarned: goldRef.current,
         quizType: 'capitals',
         rewardMultiplier: DIFFICULTY_MULTIPLIER[difficultyRef.current],
+        comboExtra: comboExtraRef.current,
         difficulty: difficultyRef.current,
         elapsedSeconds: Math.floor((Date.now() - quizStartRef.current) / 1000),
       });
@@ -332,7 +335,7 @@ export default function CapitalsQuizScreen({ navigation }: Props) {
         <Image source={require('../../assets/avatars/building.png')} style={{ width: 80, height: 80, marginBottom: 20 }} resizeMode="contain" />
         <Text style={styles.readyTitle}>{t('nav.capitalsQuiz').toUpperCase()}</Text>
         <Text style={styles.readySubtitle}>{t('capitalsQuiz.subtitle')}</Text>
-        <DifficultyPicker quiz="capitals" baseGold={GOLD_PER_CORRECT} value={difficulty} onChange={selectDifficulty} disabled={building} />
+        <DifficultyPicker quiz="capitals" baseGold={cfg('quiz.gold.capitals')} value={difficulty} onChange={selectDifficulty} disabled={building} />
         <TouchableOpacity
           style={[styles.readyBtn, building && { opacity: 0.5 }]}
           disabled={building}

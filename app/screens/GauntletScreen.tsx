@@ -31,6 +31,7 @@ import TierBackground, { TierLabel } from '../components/TierBackground';
 import { t } from '../lib/i18n';
 import { filterQuizCountries } from '../lib/quizCountryFilters';
 import { addQuizTabGuard } from '../lib/quizTabGuard';
+import { serverRewardsFor } from '../lib/gameConfig';
 
 type Props = {
   navigation: StackNavigationProp<QuizStackParamList, 'Gauntlet'>;
@@ -852,7 +853,7 @@ export default function GauntletScreen({ navigation }: Props) {
       }
 
       totalGoldEarnedRef.current += reward;
-      addGold(reward);
+      if (!serverRewardsFor('gauntlet')) addGold(reward);
 
       const nextDelay = wasTierChange ? 2900 : isMilestone ? 1600 : (newScore >= 25 ? 500 : newScore >= 10 ? 650 : 800);
       queueNextRound(nextDelay);
@@ -896,6 +897,7 @@ export default function GauntletScreen({ navigation }: Props) {
       tierAccent: getTier(final).accent,
       tierLabel: getTier(final).label,
       tierBg: getTier(final).bg,
+      serverExtra: {},
     });
   }
 

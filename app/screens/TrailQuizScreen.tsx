@@ -25,8 +25,8 @@ import QuitConfirmModal from '../components/QuitConfirmModal';
 import EarningsStrip from '../components/EarningsStrip';
 import { t } from '../lib/i18n';
 import { addQuizTabGuard } from '../lib/quizTabGuard';
+import { cfg, serverRewardsFor } from '../lib/gameConfig';
 
-const GOLD_PER_CORRECT = 20;
 const ANSWER_COLORS = ['#4FC3F7', '#F44336', '#FFD700', '#4CAF50'];
 const MAX_LIVES = 3;
 const AUTO_ADVANCE_DELAY_MS = 2200;
@@ -330,14 +330,14 @@ export default function TrailQuizScreen({ navigation }: Props) {
       playDingStreak(comboRef.current);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
       scoreRef.current += 1;
-      const earned = GOLD_PER_CORRECT;
+      const earned = cfg('quiz.gold.trail');
       goldRef.current += earned;
       setScore(scoreRef.current);
       setGoldEarned(goldRef.current);
       setGoldDelta(earned);
       setAnimTrigger(prev => prev + 1);
       setLongestTrail(prev => Math.max(prev, comboRef.current));
-      addGold(earned);
+      if (!serverRewardsFor('trail')) addGold(earned);
     } else {
       comboRef.current = 0;
       setCurrentCombo(0);
@@ -375,7 +375,7 @@ export default function TrailQuizScreen({ navigation }: Props) {
       const multiplier = trailRewardMultiplier(livesRef.current);
       const baseGold = goldRef.current;
       const bonusGold = Math.round(baseGold * (multiplier - 1));
-      if (bonusGold > 0) addGold(bonusGold);
+      if (bonusGold > 0 && !serverRewardsFor('trail')) addGold(bonusGold);
       allowLeaveRef.current = true;
       navigation.replace('QuizResults', {
         score: scoreRef.current,
@@ -384,6 +384,7 @@ export default function TrailQuizScreen({ navigation }: Props) {
         quizType: 'trail',
         elapsedSeconds: Math.floor((Date.now() - quizStartRef.current) / 1000),
         rewardMultiplier: multiplier,
+        serverExtra: { lives: livesRef.current },
       });
       return;
     }

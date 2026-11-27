@@ -1,4 +1,5 @@
 import { QuizType } from '../types';
+import { cfg } from './gameConfig';
 
 // ─── Level Curve ──────────────────────────────────────────────────────────────
 // xpToNextLevel(n) = round(100 * n^0.807)  — polynomial, naturally flattens
@@ -31,12 +32,14 @@ export function getLevelInfo(totalXP: number): {
 
 // ─── XP Per Correct Answer ───────────────────────────────────────────────────
 
+// Values come from game_config (dashboard); getters keep `XP_PER_CORRECT[quiz]` call sites unchanged.
 export const XP_PER_CORRECT: Partial<Record<QuizType, number>> = {
-  flag: 5,
-  shape: 7,
-  capitals: 12,
-  borders: 15,
-  trail: 16,
+  get flag() { return cfg('quiz.xp.flag'); },
+  get shape() { return cfg('quiz.xp.shape'); },
+  get capitals() { return cfg('quiz.xp.capitals'); },
+  get borders() { return cfg('quiz.xp.borders'); },
+  get trail() { return cfg('quiz.xp.trail'); },
+  get compass() { return cfg('quiz.xp.compass'); },
 };
 
 /**
@@ -56,16 +59,16 @@ export function calcQuizXP(
   isFirstNightmareWin: boolean,
 ): number {
   if (quizType === 'nightmare') {
-    return isFirstNightmareWin ? 20000 : 0;
+    return isFirstNightmareWin ? cfg('xp.nightmare_first_win', 20000) : 0;
   }
 
   if (quizType === 'gauntlet') {
-    return score * 25;
+    return score * cfg('xp.gauntlet_per_correct', 25);
   }
 
   if (quizType === 'millionaire') {
     if (score < total) return 0;
-    return 1000;
+    return cfg('xp.millionaire_win', 1000);
   }
 
   const xpPerCorrect = XP_PER_CORRECT[quizType] ?? 5;
@@ -73,8 +76,8 @@ export function calcQuizXP(
   const accuracy = total > 0 ? score / total : 0;
 
   let multiplier = 1.0;
-  if (accuracy === 1.0) multiplier = 2.0;
-  else if (accuracy > 0.85) multiplier = 1.5;
+  if (accuracy === 1.0) multiplier = cfg('xp.accuracy_bonus_100', 2);
+  else if (accuracy > 0.85) multiplier = cfg('xp.accuracy_bonus_85', 1.5);
 
   return Math.round(base * multiplier);
 }

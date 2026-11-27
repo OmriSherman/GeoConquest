@@ -15,6 +15,7 @@ import { getAllCustomAvatarImageSources } from './app/lib/customAvatars';
 import { initRevenueCat } from './app/lib/revenueCat';
 import { initI18n, isLocaleRTL, useLocale } from './app/lib/i18n';
 import { initAudio } from './app/lib/audio';
+import { startGameConfig } from './app/lib/gameConfig';
 
 // Tells Supabase Auth to continuously refresh the session automatically
 // if the app is in the foreground. When this is added, you will continue
@@ -47,6 +48,10 @@ export default function App() {
 
   useEffect(() => {
     initRevenueCat();
+  }, []);
+
+  useEffect(() => {
+    startGameConfig();
   }, []);
 
   useEffect(() => {

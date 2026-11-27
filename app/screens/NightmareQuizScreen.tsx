@@ -30,18 +30,18 @@ import QuitConfirmModal from '../components/QuitConfirmModal';
 import CountryShapeView from '../components/CountryShapeView';
 import { playDing, playWrong, playTick, playTextToSpeech, playDiceRoll, playMillionaireSwap, playGoldLoss } from '../lib/audio';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '../lib/supabase';
 import * as Speech from 'expo-speech';
 import { filterQuizCountries } from '../lib/quizCountryFilters';
 import { t } from '../lib/i18n';
 import { addQuizTabGuard } from '../lib/quizTabGuard';
+import { cfg, serverRewardsFor } from '../lib/gameConfig';
 
 
 const AUTO_ADVANCE_DELAY_MS = 2500;
 const BASE_TIMER = 11;
 const MIN_TIMER = 5;
 const TOTAL_QUESTIONS = 10;
-const PRIZE_GOLD = 50000;
-const REPEAT_PRIZE_GOLD = 2000;
 
 type Curse = 'none' | 'blind' | 'shuffle' | 'rush' | 'phantom';
 const ALL_CURSES: Curse[] = ['blind', 'shuffle', 'rush', 'phantom'];
@@ -56,7 +56,7 @@ type Props = {
 type AnswerState = 'default' | 'correct' | 'wrong' | 'disabled' | 'phantom';
 
 export default function NightmareQuizScreen({ navigation }: Props) {
-  const { addGold, profile } = useAuth();
+  const { addGold, profile, refreshProfile } = useAuth();
 
   const [allCountries, setAllCountries] = useState<Country[]>([]);
   const [questions, setQuestions] = useState<MillionaireQuestion[]>([]);
@@ -81,7 +81,7 @@ export default function NightmareQuizScreen({ navigation }: Props) {
 
   // Game-over / win state
   const [showWin, setShowWin] = useState(false);
-  const [winPrize, setWinPrize] = useState(PRIZE_GOLD);
+  const [winPrize, setWinPrize] = useState(cfg('nightmare.prize', 50000));
   const [confettiActive, setConfettiActive] = useState(false);
   const [ready, setReady] = useState(false);
   const [paused, setPaused] = useState(false);
@@ -231,8 +231,16 @@ export default function NightmareQuizScreen({ navigation }: Props) {
   async function endGameWithLoss() {
     if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current);
     const gold = Math.max(0, profile?.gold_balance ?? 0);
-    const pct = 1 + Math.floor(Math.random() * 10);
-    const toll = Math.floor((gold * pct) / 100);
+    // Server rolls the penalty and takes the gold (nightmare_loss); old databases fall back to a local roll.
+    let pct = 1 + Math.floor(Math.random() * 10);
+    let toll = Math.floor((gold * pct) / 100);
+    let serverTookToll = false;
+    const loss = await supabase.rpc('nightmare_loss');
+    if (!loss.error && loss.data) {
+      pct = Number((loss.data as any).pct);
+      toll = Number((loss.data as any).toll);
+      serverTookToll = true;
+    }
 
     // 1s fade to black, 1s fade in of just the cube, then it rolls through many numbers and lands
     const wait = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
@@ -263,7 +271,8 @@ export default function NightmareQuizScreen({ navigation }: Props) {
     void playGoldLoss();
     await wait(1800);
 
-    if (toll > 0) await addGold(-toll);
+    if (serverTookToll) await refreshProfile().catch(() => {});
+    else if (toll > 0) await addGold(-toll);
     allowLeaveRef.current = true;
     navigation.replace('QuizResults', {
       score: currentIndexRef.current,
@@ -454,9 +463,9 @@ export default function NightmareQuizScreen({ navigation }: Props) {
 
       // Final question — win!
       if (idx === TOTAL_QUESTIONS - 1) {
-        const prize = wasAlreadyCompletedRef.current ? REPEAT_PRIZE_GOLD : PRIZE_GOLD;
+        const prize = wasAlreadyCompletedRef.current ? cfg('nightmare.repeat_prize', 2000) : cfg('nightmare.prize', 50000);
         setWinPrize(prize);
-        await addGold(prize);
+        if (!serverRewardsFor('nightmare')) await addGold(prize);
         setConfettiActive(true);
         setShowWin(true);
         return;
@@ -500,10 +509,11 @@ export default function NightmareQuizScreen({ navigation }: Props) {
     navigation.replace('QuizResults', {
       score: TOTAL_QUESTIONS,
       total: TOTAL_QUESTIONS,
-      goldEarned: wasAlreadyCompletedRef.current ? REPEAT_PRIZE_GOLD : PRIZE_GOLD,
+      goldEarned: wasAlreadyCompletedRef.current ? cfg('nightmare.repeat_prize', 2000) : cfg('nightmare.prize', 50000),
       quizType: 'nightmare',
       elapsedSeconds: Math.floor((Date.now() - quizStartRef.current) / 1000),
       xpOverride: wasAlreadyCompletedRef.current ? 0 : undefined,
+      serverExtra: { outcome: 'win' },
     });
   }
 

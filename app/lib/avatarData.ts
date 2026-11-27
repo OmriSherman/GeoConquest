@@ -1,3 +1,4 @@
+import { cfg } from './gameConfig';
 import { CHEST_AVATARS } from './dailyChest';
 // ─── Avatar Characters ────────────────────────────────────────────────────────
 
@@ -545,6 +546,18 @@ const BAD_WORDS = [
     'murder', 'terrorism', 'terrorist', 'bomb', 'isis', 'anus', 'butthole',
     'testicle', 'wanker', 'twat', 'bollocks', 'arsehole',
 ];
+
+// Prices and level gates come from game_config (dashboard); the literals above are the offline fallbacks.
+for (const a of [...CUSTOM_AVATARS, ...CUSTOM_FLAGS] as { key: string; price: number; requiresLevel?: number }[]) {
+    const price = a.price, level = a.requiresLevel;
+    Object.defineProperty(a, 'price', { get: () => cfg(`avatar.price.${a.key}`, price), enumerable: true });
+    if (level !== undefined) Object.defineProperty(a, 'requiresLevel', { get: () => cfg(`avatar.level.${a.key}`, level), enumerable: true });
+}
+
+for (const f of FLAG_OPTIONS) {
+    const price = f.price;
+    Object.defineProperty(f, 'price', { get: () => cfg(`avatar.price.${f.emoji}`, price), enumerable: true });
+}
 
 export function containsProfanity(text: string): boolean {
     const lower = text.toLowerCase().replace(/[^a-z]/g, '');

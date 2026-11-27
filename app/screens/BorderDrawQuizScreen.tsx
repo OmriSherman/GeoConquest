@@ -26,6 +26,7 @@ import { filterQuizCountries } from '../lib/quizCountryFilters';
 import { playDing, playWrong } from '../lib/audio';
 import AvatarDisplay from '../components/AvatarDisplay';
 import QuitConfirmModal from '../components/QuitConfirmModal';
+import { serverRewardsFor } from '../lib/gameConfig';
 
 const IMG_GOLD_COIN = require('../../assets/avatars/gold_coin.png');
 const IMG_GOLD_MEDAL = require('../../assets/avatars/gold_medal.png');
@@ -270,6 +271,7 @@ export default function BorderDrawQuizScreen({ navigation }: Props) {
   const [canvasHeight, setCanvasHeight] = useState(CANVAS_HEIGHT);
   const [totalGold, setTotalGold] = useState(0);
   const [totalXP, setTotalXP] = useState(0);
+  const ratingCountsRef = useRef<Record<string, number>>({ perfect: 0, great: 0, good: 0, close: 0, miss: 0 });
   const [goldRatings, setGoldRatings] = useState(0); // questions rated top-3 tier
   const ratingScale = useRef(new Animated.Value(0)).current;
   const allowLeaveRef = useRef(false);
@@ -423,7 +425,8 @@ export default function BorderDrawQuizScreen({ navigation }: Props) {
     setTotalGold((g) => g + gold);
     setTotalXP((x) => x + xp);
     if (r === 'perfect' || r === 'great' || r === 'good') setGoldRatings((n) => n + 1);
-    addGold(gold);
+    ratingCountsRef.current[r] = (ratingCountsRef.current[r] ?? 0) + 1;
+    if (!serverRewardsFor('draw')) addGold(gold);
 
     Haptics.impactAsync(r === 'miss' ? Haptics.ImpactFeedbackStyle.Light : Haptics.ImpactFeedbackStyle.Heavy);
     if (r === 'miss') {
@@ -445,6 +448,7 @@ export default function BorderDrawQuizScreen({ navigation }: Props) {
         goldEarned: totalGold,
         quizType: 'draw',
         xpOverride: totalXP,
+        serverExtra: { ...ratingCountsRef.current },
         elapsedSeconds: Math.floor((Date.now() - quizStartRef.current) / 1000),
       });
       return;
